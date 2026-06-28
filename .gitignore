@@ -1,0 +1,5 @@
+/bonpreu
+/dist/
+mercadona-cli/
+*.har
+*.test
