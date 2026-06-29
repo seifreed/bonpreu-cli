@@ -1,0 +1,53 @@
+name: CI
+
+# Enforces on every push/PR what `make check` runs locally, plus the two security
+# gates that were previously manual-only: the full golangci-lint set (incl. gosec)
+# and govulncheck (Go vulnerability DB). Keeps the audited-clean state from
+# regressing silently. No untrusted github.event inputs are used in any run step.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: CI only needs to read the repo.
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # fmt + vet + test + build (default and -tags browserlogin).
+      - run: make check
+
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # Pinned for reproducibility; matches the config's `version: "2"`.
+      - run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+      - run: $(go env GOPATH)/bin/golangci-lint run ./cmd/... ./internal/...
+
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - run: $(go env GOPATH)/bin/govulncheck ./...

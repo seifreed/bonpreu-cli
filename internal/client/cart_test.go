@@ -1,0 +1,41 @@
+package client
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestApplyQuantityEmptyItemsFetchesCart(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"items":[]}`))
+	}))
+	defer srv.Close()
+	if _, err := testClient(srv).ApplyQuantity(nil); err != nil {
+		t.Fatalf("empty ApplyQuantity should fetch the cart: %v", err)
+	}
+}
+
+func TestCSRFTokenMissing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`<html>no token</html>`))
+	}))
+	defer srv.Close()
+	if _, err := testClient(srv).csrfToken(); err == nil {
+		t.Error("expected error when CSRF token absent")
+	}
+}
+
+func TestApplyQuantityPostError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" { // csrf fetch succeeds
+			w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError) // apply-quantity fails
+	}))
+	defer srv.Close()
+	if _, err := testClient(srv).ApplyQuantity([]CartItem{{ProductID: "p", Quantity: 1}}); err == nil {
+		t.Error("apply-quantity 500 should error")
+	}
+}

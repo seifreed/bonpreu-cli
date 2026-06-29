@@ -1,0 +1,203 @@
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/seifreed/bonpreu-cli/internal/client"
+)
+
+// cmdCart dispatches the cart subcommands. The cart leg needs an imported browser
+// session (import-har). Writes resolve the short retailer id to the API's product
+// UUID via an anonymous product lookup, then POST apply-quantity (delta-based:
+// +adds, -removes), the same call the web app's +/- buttons make.
+func cmdCart(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: bonpreu cart <get|add|set|clear>")
+	}
+	switch args[0] {
+	case "get":
+		return cartGet(args[1:])
+	case "add":
+		return cartWrite(args[1:], false)
+	case "set":
+		return cartWrite(args[1:], true)
+	case "clear":
+		return cartClear(args[1:])
+	default:
+		return fmt.Errorf("unknown cart subcommand %q (want get|add|set|clear)", args[0])
+	}
+}
+
+func authedClient(cf *common) (*client.Client, error) {
+	cl := newClient(cf)
+	if !cl.LoadAuth() {
+		return nil, fmt.Errorf("not authenticated — run `bonpreu import-har --file <har>` first")
+	}
+	// A stored cookie that lacks the session markers (global_sid + aws-waf-token) is
+	// anonymous — set-cookie warns about it but still saves it. Reject it here with a
+	// clear message instead of letting cart/checkout hit the API and surface a raw
+	// HTTP 400/403. (whoami goes through this gate too; an expired-but-well-formed
+	// session still passes here and is caught by its live CheckAuth.)
+	if !client.CookieLooksAuthed(cl.Cookie) {
+		return nil, fmt.Errorf("the stored cookie looks anonymous (no global_sid + aws-waf-token) — re-import a logged-in session with `bonpreu import-har --file <har>`")
+	}
+	return cl, nil
+}
+
+func cartGet(args []string) error {
+	fs, cf := newCommonFlags("cart get")
+	parseFlags(fs, args)
+	cl, err := authedClient(cf)
+	if err != nil {
+		return err
+	}
+	cart, err := cl.GetCart()
+	if err != nil {
+		return err
+	}
+	if done, err := emitStructured(cf, cart.Raw); done {
+		return err
+	}
+	if len(cart.Lines) == 0 {
+		fmt.Println("(cistella buida)")
+		return nil
+	}
+	for _, l := range cart.Lines {
+		fmt.Printf("  %s — %s × %s€ = %s€\n", l.ProductID, fmtQty(l.Quantity), l.FinalPrice.Amount, l.TotalPrices.FinalPrice.Amount)
+	}
+	if cart.Total.Amount != "" {
+		fmt.Printf("  total: %s€\n", cart.Total.Amount)
+	}
+	return nil
+}
+
+// cartWrite implements `cart add <id> <qty>` (delta +qty) and `cart set <id> <qty>`
+// (delta = target − current). Quantities are priced first so --max can refuse
+// before any write.
+func cartWrite(args []string, set bool) error {
+	verb := "add"
+	if set {
+		verb = "set"
+	}
+	fs, cf := newCommonFlags("cart write")
+	maxEUR := fs.Float64("max", 0, "refuse if the added line would exceed this many €")
+	parseFlags(fs, args)
+	if fs.NArg() < 2 {
+		return fmt.Errorf("usage: bonpreu cart %s <id> <qty>", verb)
+	}
+	retailerID := fs.Arg(0)
+	qty, err := parsePositiveQty(fs.Arg(1), set)
+	if err != nil {
+		return err
+	}
+	cl, err := authedClient(cf)
+	if err != nil {
+		return err
+	}
+	// Resolve the short id to the product UUID (anonymous, verifiable) and price it.
+	pd, err := cl.Product(retailerID)
+	if err != nil {
+		return fmt.Errorf("resolve product %s: %w", retailerID, err)
+	}
+
+	delta := qty
+	if set {
+		cur, qerr := currentQty(cl, pd.ProductID)
+		if qerr != nil {
+			return fmt.Errorf("read current cart quantity: %w", qerr)
+		}
+		delta = qty - cur
+		if delta == 0 {
+			fmt.Fprintln(os.Stderr, "already at target quantity; nothing to do")
+			return nil
+		}
+	}
+	if delta > 0 {
+		if err := guardLineAdd(*maxEUR, pd, delta); err != nil {
+			return err
+		}
+	}
+
+	cart, err := cl.ApplyQuantity([]client.CartItem{{ProductID: pd.ProductID, Quantity: delta}})
+	if err != nil {
+		return err
+	}
+	if done, err := emitStructured(cf, cart.Raw); done {
+		return err
+	}
+	fmt.Printf("ok — %s [%s] %s (Δ%+g) — %s\n", verb, retailerID, fmtQty(qty), delta, pd.Name)
+	return nil
+}
+
+func cartClear(args []string) error {
+	fs, cf := newCommonFlags("cart clear")
+	parseFlags(fs, args)
+	cl, err := authedClient(cf)
+	if err != nil {
+		return err
+	}
+	cart, err := cl.GetCart()
+	if err != nil {
+		return err
+	}
+	if len(cart.Lines) == 0 {
+		fmt.Fprintln(os.Stderr, "cart already empty")
+		return nil
+	}
+	items := make([]client.CartItem, 0, len(cart.Lines))
+	for _, l := range cart.Lines {
+		items = append(items, client.CartItem{ProductID: l.ProductID, Quantity: -l.Quantity})
+	}
+	if _, err := cl.ApplyQuantity(items); err != nil {
+		return err
+	}
+	fmt.Printf("ok — removed %d line(s)\n", len(items))
+	return nil
+}
+
+// currentQty returns the quantity of a product already in the active cart (0 if
+// absent). A read failure is returned, not swallowed: `cart set` derives its
+// delta from this, so a silent 0 would over-add the full target quantity.
+func currentQty(cl *client.Client, productID string) (float64, error) {
+	cart, err := cl.GetCart()
+	if err != nil {
+		return 0, err
+	}
+	for _, l := range cart.Lines {
+		if l.ProductID == productID {
+			return l.Quantity, nil
+		}
+	}
+	return 0, nil
+}
+
+// guardLineAdd enforces --max against the price of the quantity being added.
+func guardLineAdd(flagMax float64, pd *client.ProductDetail, qty float64) error {
+	maxEUR, err := resolveMax(flagMax)
+	if err != nil {
+		return err
+	}
+	cents, perr := priceCents(pd.Price.Amount)
+	if perr != nil {
+		// Unpriceable line: don't block. But if a limit is set, say so — silently
+		// skipping the spending guard would defeat the --max safety contract.
+		if maxEUR > 0 {
+			stderrLogf("could not price %q (%v) — --max not enforced on this line", pd.Name, perr)
+		}
+		return nil
+	}
+	line := float64(lineCents(cents, qty)) / 100
+	return checkBudget(line, maxEUR, "cart line")
+}
+
+func parsePositiveQty(s string, allowZero bool) (float64, error) {
+	bl, err := parseBasketLine("x " + s)
+	if err != nil {
+		return 0, err
+	}
+	if bl.qty == 0 && !allowZero {
+		return 0, fmt.Errorf("qty must be > 0 for add (use `cart set <id> 0` to remove)")
+	}
+	return bl.qty, nil
+}

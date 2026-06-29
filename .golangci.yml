@@ -1,0 +1,50 @@
+version: "2"
+
+# gosimple is part of staticcheck in golangci-lint v2 (its S1xxx checks run under
+# the staticcheck linter), so enabling staticcheck covers the gosimple checks.
+linters:
+  enable:
+    - staticcheck
+    - govet
+    - errcheck
+    - gosec
+    - revive
+    - ineffassign
+    - unused
+    - gocritic
+  settings:
+    errcheck:
+      # Closing a response body / connection / read-only file on a cleanup path
+      # yields an error nothing can act on. These are the only excluded functions.
+      exclude-functions:
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (net.Conn).Close
+        - (*os.File).Close
+        # Writing to a ResponseWriter only happens in test HTTP stubs here (this
+        # is a client/CLI, not a server); that write error is unactionable.
+        - (net/http.ResponseWriter).Write
+    gosec:
+      excludes:
+        # G304: this is a CLI whose job is to read files the user names on the
+        # command line (--file, basket lists, config) — a "tainted path" is the
+        # intended input, not an injection.
+        - G304
+        # G404: math/rand is used only for backoff jitter, never for anything
+        # security-sensitive, so a weak RNG is correct (and faster) here.
+        - G404
+        # G104: redundant with errcheck (already enabled); the only unhandled
+        # errors are cleanup Close() calls on error paths, excluded above.
+        - G104
+  exclusions:
+    paths:
+      - mercadona-cli # vendored reference project (separate module), not ours
+    rules:
+      # gosec audits the shipped binary's code, not test scaffolding. The httptest
+      # stub servers deliberately echo request input into responses (G705) and write
+      # fixtures under a temp dir derived from an env var (G703) — intentional test
+      # patterns, not vulnerabilities. Scope gosec to non-test code; every other
+      # linter (errcheck, revive, staticcheck, …) still runs on tests.
+      - path: _test\.go
+        linters:
+          - gosec
