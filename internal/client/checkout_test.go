@@ -68,8 +68,37 @@ func TestReserveSlotPostsSelectedSlotAndRegion(t *testing.T) {
 
 func TestReserveSlotRejectsMissingIDs(t *testing.T) {
 	cl := &Client{BaseURL: "https://example.invalid"}
-	if _, err := cl.ReserveSlot("region-1", "address-2", " ", ""); err == nil {
-		t.Fatal("ReserveSlot should reject a missing slot before making a request")
+	for _, tc := range []struct {
+		name                  string
+		region, address, slot string
+	}{
+		{name: "region", address: "address-2", slot: "slot-3"},
+		{name: "address", region: "region-1", slot: "slot-3"},
+		{name: "slot", region: "region-1", address: "address-2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := cl.ReserveSlot(tc.region, tc.address, tc.slot, ""); err == nil {
+				t.Fatalf("ReserveSlot should reject missing %s before making a request", tc.name)
+			}
+		})
+	}
+}
+
+func TestReserveSlotWrapsUncertainPostError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			w.Write([]byte(`"session":{"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}}`))
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	_, err := testClient(srv).ReserveSlot("region-1", "address-2", "slot-3", "")
+	if err == nil || !strings.Contains(err.Error(), "outcome is uncertain") {
+		t.Fatalf("ReserveSlot error = %v, want uncertain outcome", err)
+	}
+	if status, ok := HTTPStatus(err); !ok || status != http.StatusInternalServerError {
+		t.Fatalf("HTTPStatus(%v) = %d, %v; want 500, true", err, status, ok)
 	}
 }
 

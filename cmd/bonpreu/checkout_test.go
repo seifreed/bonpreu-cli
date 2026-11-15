@@ -166,7 +166,7 @@ func TestCheckoutReserveAPIError(t *testing.T) {
 	_, err := capture(t, func() error {
 		return cmdCheckout([]string{"reserve", "--address", "address-1", "--slot", "slot-1"})
 	})
-	if err == nil || !strings.Contains(err.Error(), "HTTP 500") {
+	if err == nil || !strings.Contains(err.Error(), "HTTP 500") || !strings.Contains(err.Error(), "outcome is uncertain") {
 		t.Fatalf("reserve API error = %v", err)
 	}
 }

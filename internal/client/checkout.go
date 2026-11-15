@@ -62,5 +62,8 @@ func (c *Client) ReserveSlot(regionID, deliveryDestinationID, slotID, externalAd
 	err = c.doJSONHeaders(http.MethodPost, c.BaseURL+"/api/ecomslots/v1/slots/reservation", body, &raw, map[string]string{
 		"x-csrf-token": csrf,
 	})
-	return raw, err
+	if err != nil {
+		return nil, fmt.Errorf("delivery slot reservation outcome is uncertain; inspect checkout before retrying: %w", err)
+	}
+	return raw, nil
 }
