@@ -21,3 +21,23 @@ func TestDiagnosticLoggerJSONAndLevel(t *testing.T) {
 		t.Fatalf("info should be filtered at warn level: %q", out.String())
 	}
 }
+
+func TestDiagnosticLoggerLevelsAndTextFormat(t *testing.T) {
+	for _, level := range []string{"debug", "info", "warning", "error", "unknown"} {
+		t.Run(level, func(t *testing.T) {
+			t.Setenv("BONPREU_LOG_LEVEL", level)
+			t.Setenv("BONPREU_LOG_FORMAT", "text")
+			var out bytes.Buffer
+			newLogger(&out).Info("startup", "service", "bonpreu", "component", "cli")
+			if level == "error" || level == "warning" {
+				if out.Len() != 0 {
+					t.Fatalf("info was not filtered at %s: %q", level, out.String())
+				}
+				return
+			}
+			if !strings.Contains(out.String(), `msg=startup`) || !strings.Contains(out.String(), `service=bonpreu`) {
+				t.Fatalf("expected text fields, got %q", out.String())
+			}
+		})
+	}
+}
