@@ -84,14 +84,17 @@ const (
 )
 
 // pageSize clamps a requested count to what the API accepts (1..300).
-func pageSize(limit int) int {
-	if limit <= 0 {
-		return defaultPageMax
+func pageSize(limit int) (int, error) {
+	if limit < 0 {
+		return 0, fmt.Errorf("limit must be non-negative, got %d", limit)
+	}
+	if limit == 0 {
+		return defaultPageMax, nil
 	}
 	if limit > apiMaxPageSize {
-		return apiMaxPageSize
+		return apiMaxPageSize, nil
 	}
-	return limit
+	return limit, nil
 }
 
 // setListParams writes the listing knobs shared by search and category queries:
@@ -106,7 +109,10 @@ func setListParams(q url.Values, n int) {
 // many products get fully decorated (priced); 0 uses the default. Counts above
 // the API's 300 ceiling are clamped to 300.
 func (c *Client) Search(term string, limit int) (*ProductPage, error) {
-	n := pageSize(limit)
+	n, err := pageSize(limit)
+	if err != nil {
+		return nil, err
+	}
 	// Truncate to searchTermMax *characters* (runes), not bytes — a byte cut would
 	// split a multibyte rune (accented Catalan/Spanish terms) into invalid UTF-8.
 	if r := []rune(term); len(r) > searchTermMax {
@@ -127,7 +133,10 @@ func (c *Client) Search(term string, limit int) (*ProductPage, error) {
 // retailer category code from Categories (e.g. "0301") or the category UUID
 // (the categoryId field) — UUIDs are detected and queried accordingly.
 func (c *Client) CategoryProducts(id string, limit int) (*ProductPage, error) {
-	n := pageSize(limit)
+	n, err := pageSize(limit)
+	if err != nil {
+		return nil, err
+	}
 	q := url.Values{}
 	if isCategoryUUID(id) {
 		q.Set("category", id)

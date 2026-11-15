@@ -4,16 +4,42 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"unicode/utf8"
 )
 
 func TestPageSizeClamp(t *testing.T) {
-	cases := map[int]int{0: defaultPageMax, -5: defaultPageMax, 10: 10, 300: 300, 301: 300, 5000: 300}
+	cases := map[int]int{0: defaultPageMax, 10: 10, 300: 300, 301: 300, 5000: 300}
 	for in, want := range cases {
-		if got := pageSize(in); got != want {
+		if got, err := pageSize(in); err != nil || got != want {
 			t.Errorf("pageSize(%d) = %d, want %d", in, got, want)
 		}
+	}
+	if _, err := pageSize(-5); err == nil {
+		t.Fatal("negative page size should fail")
+	}
+}
+
+func TestCatalogMethodsRejectNegativeLimitsBeforeNetwork(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	cl := New()
+	cl.BaseURL = srv.URL
+	cl.HTTP = srv.Client()
+
+	if _, err := cl.Search("milk", -1); err == nil {
+		t.Fatal("search should reject a negative limit")
+	}
+	if _, err := cl.CategoryProducts("0301", -1); err == nil {
+		t.Fatal("category products should reject a negative limit")
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("invalid limits made %d network requests, want none", got)
 	}
 }
 
