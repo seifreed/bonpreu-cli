@@ -46,6 +46,8 @@ func TestCheckoutStatusRejectsMissingOrNullGroup(t *testing.T) {
 	}{
 		{name: "missing", body: `{"totals":{"itemPriceAfterPromos":{"amount":"40.00"}}}`},
 		{name: "null", body: `{"activeCheckoutGroup":null,"totals":{"itemPriceAfterPromos":{"amount":"40.00"}}}`},
+		{name: "missing readiness", body: `{"activeCheckoutGroup":{},"totals":{"itemPriceAfterPromos":{"amount":"40.00"}}}`},
+		{name: "null readiness", body: `{"activeCheckoutGroup":{"canCheckout":null},"totals":{"itemPriceAfterPromos":{"amount":"40.00"}}}`},
 		{name: "wrong field type", body: `{"activeCheckoutGroup":{"canCheckout":"yes"}}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

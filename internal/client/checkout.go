@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -31,6 +32,10 @@ func (c *Client) CheckoutStatus() (*CheckoutGroup, Money, json.RawMessage, error
 			err = fmt.Errorf("expected an object")
 		}
 		return nil, Money{}, nil, fmt.Errorf("decode active cart response: invalid activeCheckoutGroup: %w", err)
+	}
+	canCheckout, ok := fields["canCheckout"]
+	if !ok || bytes.Equal(bytes.TrimSpace(canCheckout), []byte("null")) {
+		return nil, Money{}, nil, fmt.Errorf("decode active cart response: invalid activeCheckoutGroup: missing or null canCheckout")
 	}
 	var group CheckoutGroup
 	if err := json.Unmarshal(s.ACG, &group); err != nil {
