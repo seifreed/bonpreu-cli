@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/big"
 	"os"
 	"strconv"
 	"strings"
@@ -104,18 +105,24 @@ func priceCents(s string) (int64, error) {
 	if s == "" {
 		return 0, fmt.Errorf("empty price")
 	}
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0, fmt.Errorf("unparseable price %q", s)
-	}
-	if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
+	v, parseErr := strconv.ParseFloat(s, 64)
+	if parseErr == nil && (math.IsNaN(v) || math.IsInf(v, 0) || v < 0) {
 		return 0, fmt.Errorf("invalid price %q (want a finite, non-negative amount)", s)
 	}
-	cents := math.Round(v * 100)
-	if math.IsInf(cents, 0) || cents >= float64(math.MaxInt64) {
+	amount, ok := new(big.Rat).SetString(s)
+	if parseErr != nil || !ok {
+		return 0, fmt.Errorf("unparseable price %q", s)
+	}
+	amount.Mul(amount, big.NewRat(100, 1))
+	cents, remainder := new(big.Int), new(big.Int)
+	cents.QuoRem(amount.Num(), amount.Denom(), remainder)
+	if remainder.Lsh(remainder, 1).Cmp(amount.Denom()) >= 0 {
+		cents.Add(cents, big.NewInt(1))
+	}
+	if !cents.IsInt64() {
 		return 0, fmt.Errorf("price %q exceeds the supported range", s)
 	}
-	return int64(cents), nil
+	return cents.Int64(), nil
 }
 
 // lineCents returns a line subtotal in whole cents: unit-price cents × qty,

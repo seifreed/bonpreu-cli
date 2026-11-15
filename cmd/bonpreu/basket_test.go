@@ -9,7 +9,11 @@ import (
 )
 
 func TestPriceCents(t *testing.T) {
-	cases := map[string]int64{"1.69": 169, "8.55": 855, "0.96": 96, "10": 1000, "0": 0}
+	cases := map[string]int64{
+		"1.69": 169, "8.55": 855, "0.96": 96, "10": 1000, "0": 0,
+		"1.005": 101, "9.995": 1000, "1e-2": 1, "0x1p+0": 100,
+		"1_000.00": 100000, "92233720368547758.07": math.MaxInt64,
+	}
 	for in, want := range cases {
 		got, err := priceCents(in)
 		if err != nil || got != want {
