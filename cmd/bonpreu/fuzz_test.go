@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 // Fuzz the parsers that consume user-supplied list files (-f basket/term files) and
 // API price strings. None may panic on adversarial input — a crash would be a DoS
@@ -12,7 +15,7 @@ func FuzzParseBasketLine(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, s string) {
 		bl, err := parseBasketLine(s)
-		if err == nil && (bl.qty < 0 || bl.qty != bl.qty) { // NaN != NaN
+		if err == nil && (bl.qty < 0 || math.IsNaN(bl.qty) || math.IsInf(bl.qty, 0)) {
 			t.Fatalf("parseBasketLine(%q) accepted a bad qty %v", s, bl.qty)
 		}
 	})
@@ -22,8 +25,11 @@ func FuzzPriceCents(f *testing.F) {
 	for _, s := range []string{"", "0", "1.69", "-1.05", "abc", "1e308", "NaN", "  10  ", "1,69"} {
 		f.Add(s)
 	}
-	f.Fuzz(func(_ *testing.T, s string) {
-		_, _ = priceCents(s) // may error, must not panic
+	f.Fuzz(func(t *testing.T, s string) {
+		cents, err := priceCents(s)
+		if err == nil && cents < 0 {
+			t.Fatalf("priceCents(%q) accepted a negative price: %d cents", s, cents)
+		}
 	})
 }
 
