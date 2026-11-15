@@ -207,6 +207,19 @@ func cartWrite(args []string, set bool) error {
 }
 
 func cartUpdateLimitError(raw json.RawMessage, productID string) error {
+	var shape map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &shape); err != nil {
+		return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: %w", err)
+	}
+	if shape == nil {
+		return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: empty result")
+	}
+	_, hasItems := shape["items"]
+	_, hasLimited := shape["limitedItems"]
+	_, hasUnavailable := shape["unavailableData"]
+	if !hasItems && !hasLimited && !hasUnavailable {
+		return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: missing result fields")
+	}
 	var result struct {
 		LimitedItems []struct {
 			ProductID string `json:"productId"`
