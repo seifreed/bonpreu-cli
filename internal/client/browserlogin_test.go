@@ -111,6 +111,27 @@ func TestLoginViaBrowserCapturesBonpreuCookies(t *testing.T) {
 	}
 }
 
+func TestLoginViaBrowserRejectsUntrustedURLsBeforeLaunching(t *testing.T) {
+	for _, loginURL := range []string{
+		"http://www.bonpreuesclat.cat/",
+		"https://attacker.example/",
+		"https://user@www.bonpreuesclat.cat/",
+		"https://www.bonpreuesclat.cat:8443/",
+	} {
+		t.Run(loginURL, func(t *testing.T) {
+			executor := &browserLoginExecutor{}
+			useBrowserLoginFakes(t, executor)
+			loginSleep = func(context.Context, time.Duration) error { return context.Canceled }
+			if _, err := LoginViaBrowser(loginURL); err == nil || !strings.Contains(err.Error(), "HTTPS Bonpreu host") {
+				t.Fatalf("LoginViaBrowser(%q) error = %v; want untrusted URL rejection", loginURL, err)
+			}
+			if executor.navigationURL != "" {
+				t.Fatalf("untrusted URL reached browser navigation: %q", executor.navigationURL)
+			}
+		})
+	}
+}
+
 func TestLoginViaBrowserNavigationErrors(t *testing.T) {
 	for _, tc := range []struct {
 		name string

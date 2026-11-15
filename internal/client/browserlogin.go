@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -37,6 +38,12 @@ var (
 // appears — no DevTools, no HAR. Compiled only with `-tags browserlogin`; needs
 // Chrome installed at runtime.
 func LoginViaBrowser(loginURL string) (Session, error) {
+	u, err := url.Parse(loginURL)
+	if err != nil || !strings.EqualFold(u.Scheme, "https") || !isBonpreuHost(u.Hostname()) ||
+		u.User != nil || (u.Port() != "" && u.Port() != "443") {
+		return Session{}, fmt.Errorf("browser login requires an HTTPS Bonpreu host")
+	}
+
 	// Tie everything to a signal-aware context: Ctrl-C cancels it, which tears the
 	// chromedp browser down cleanly instead of leaking an orphaned Chrome (Go's
 	// default signal exit skips the deferred cancels).
@@ -53,7 +60,7 @@ func LoginViaBrowser(loginURL string) (Session, error) {
 	// chromedp.Navigate) returns as soon as navigation starts rather than blocking
 	// on it — so the prompt and the window appear right away.
 	fmt.Fprintln(os.Stderr, "→ obrint el navegador… inicia sessió a la finestra; capturaré la sessió automàticament")
-	err := runBrowserActions(ctx, network.Enable(), chromedp.ActionFunc(func(ctx context.Context) error {
+	err = runBrowserActions(ctx, network.Enable(), chromedp.ActionFunc(func(ctx context.Context) error {
 		_, _, errText, _, err := page.Navigate(loginURL).Do(ctx)
 		if err != nil {
 			return err
