@@ -144,7 +144,7 @@ func centsStr(c int64) string {
 }
 
 func fmtQty(q float64) string {
-	if q == math.Trunc(q) {
+	if q == math.Trunc(q) && q >= math.MinInt64 && q < float64(math.MaxInt64) {
 		return strconv.FormatInt(int64(q), 10)
 	}
 	return strconv.FormatFloat(q, 'g', -1, 64)

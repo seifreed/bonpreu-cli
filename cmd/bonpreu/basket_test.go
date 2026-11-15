@@ -55,6 +55,12 @@ func TestCentsStr(t *testing.T) {
 	}
 }
 
+func TestFmtQtyLargeInteger(t *testing.T) {
+	if got := fmtQty(1e20); got != "1e+20" {
+		t.Fatalf("fmtQty(1e20) = %q; want exact finite representation", got)
+	}
+}
+
 func TestParseBasketLine(t *testing.T) {
 	bl, err := parseBasketLine("00944 2")
 	if err != nil || bl.id != "00944" || bl.qty != 2 {
