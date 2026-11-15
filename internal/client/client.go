@@ -227,8 +227,10 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 			}
 		}
 	})
+	started := time.Now()
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
+		c.logHTTPResult(req, 0, 0, started, err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -236,19 +238,43 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// On a non-2xx, surface whatever body we managed to read as error context
 		// (best effort) — the status is the actionable signal, not the read error.
-		return nil, &APIError{
+		apiErr := &APIError{
 			Status:     resp.StatusCode,
 			Body:       string(data),
 			RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
 		}
+		c.logHTTPResult(req, resp.StatusCode, len(data), started, apiErr)
+		return nil, apiErr
 	}
 	// A 2xx whose body read failed mid-stream must not pass as success: the JSON
 	// decoders would mostly catch the truncation, but GetText (HTML scrape) has no
 	// decode step and would silently parse a partial page. Propagate it.
 	if readErr != nil {
+		c.logHTTPResult(req, resp.StatusCode, len(data), started, readErr)
 		return nil, fmt.Errorf("read response body from %s: %w", req.URL, readErr)
 	}
+	c.logHTTPResult(req, resp.StatusCode, len(data), started, nil)
 	return data, nil
+}
+
+func (c *Client) logHTTPResult(req *http.Request, status, responseBytes int, started time.Time, err error) {
+	if c.Logger == nil {
+		return
+	}
+	attrs := []any{
+		"event_name", "http.response", "component", "client",
+		"http.request.method", req.Method, "duration_ms", time.Since(started).Milliseconds(),
+		"response_bytes", responseBytes,
+	}
+	if status != 0 {
+		attrs = append(attrs, "http.response.status_code", status)
+	}
+	if err != nil {
+		attrs = append(attrs, "outcome", "error", "error_type", fmt.Sprintf("%T", err))
+	} else {
+		attrs = append(attrs, "outcome", "success")
+	}
+	c.Logger.Debug("HTTP request completed", attrs...)
 }
 
 // doOnce performs a single API request against BaseURL, decoding a 2xx JSON body

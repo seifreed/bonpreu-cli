@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -82,6 +83,61 @@ func TestDoReturnsSuccessfulResponseReadError(t *testing.T) {
 	}
 	if _, err := cl.do(req); err == nil || !strings.Contains(err.Error(), "read response body") {
 		t.Fatalf("successful response read error = %v", err)
+	}
+}
+
+func TestHTTPDebugEventHasSafeRequestContext(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "private response payload")
+	}))
+	defer srv.Close()
+
+	var logs bytes.Buffer
+	cl := testClient(srv)
+	cl.Logger = slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/search?term=private-query", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Cookie", "session=private-cookie")
+	if _, err := cl.do(req); err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{`"event_name":"http.response"`, `"http.request.method":"GET"`, `"http.response.status_code":200`, `"duration_ms":`, `"response_bytes":`, `"outcome":"success"`} {
+		if !strings.Contains(logs.String(), field) {
+			t.Errorf("HTTP event missing %s: %q", field, logs.String())
+		}
+	}
+	for _, secret := range []string{"private-query", "private-cookie", "private response payload", srv.URL} {
+		if strings.Contains(logs.String(), secret) {
+			t.Errorf("HTTP event leaked %q: %q", secret, logs.String())
+		}
+	}
+}
+
+func TestHTTPDebugEventRedactsTransportError(t *testing.T) {
+	var logs bytes.Buffer
+	cl := New()
+	cl.Logger = slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	cl.HTTP = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("private transport detail")
+	})}
+	req, err := http.NewRequest(http.MethodGet, "https://example.invalid/path?secret=value", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.do(req); err == nil {
+		t.Fatal("expected transport failure")
+	}
+	for _, field := range []string{`"event_name":"http.response"`, `"outcome":"error"`, `"error_type":"*url.Error"`} {
+		if !strings.Contains(logs.String(), field) {
+			t.Errorf("HTTP error event missing %s: %q", field, logs.String())
+		}
+	}
+	for _, secret := range []string{"private transport detail", "secret=value", "example.invalid"} {
+		if strings.Contains(logs.String(), secret) {
+			t.Errorf("HTTP error event leaked %q: %q", secret, logs.String())
+		}
 	}
 }
 
