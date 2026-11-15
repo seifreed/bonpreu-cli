@@ -22,6 +22,12 @@ const (
 	loginTimeout   = 5 * time.Minute
 )
 
+var (
+	runBrowserActions = chromedp.Run
+	loginNow          = time.Now
+	loginSleep        = sleepCtx
+)
+
 // LoginViaBrowser opens a visible Chrome window at loginURL, lets the user log in
 // by hand (captcha / SSO and all), and captures the session cookie the moment it
 // appears — no DevTools, no HAR. Compiled only with `-tags browserlogin`; needs
@@ -43,7 +49,7 @@ func LoginViaBrowser(loginURL string) (Session, error) {
 	// chromedp.Navigate) returns as soon as navigation starts rather than blocking
 	// on it — so the prompt and the window appear right away.
 	fmt.Fprintln(os.Stderr, "→ obrint el navegador… inicia sessió a la finestra; capturaré la sessió automàticament")
-	err := chromedp.Run(ctx, network.Enable(), chromedp.ActionFunc(func(ctx context.Context) error {
+	err := runBrowserActions(ctx, network.Enable(), chromedp.ActionFunc(func(ctx context.Context) error {
 		_, _, errText, _, err := page.Navigate(loginURL).Do(ctx)
 		if err != nil {
 			return err
@@ -56,16 +62,16 @@ func LoginViaBrowser(loginURL string) (Session, error) {
 	if err != nil {
 		return Session{}, fmt.Errorf("open browser (is Chrome installed?): %w", err)
 	}
-	deadline := time.Now().Add(loginTimeout)
+	deadline := loginNow().Add(loginTimeout)
 	for {
 		cookie, err := readBonpreuCookies(ctx, loginURL)
 		if err == nil && CookieLooksAuthed(cookie) {
 			return Session{Cookie: cookie}, nil
 		}
-		if time.Now().After(deadline) {
+		if loginNow().After(deadline) {
 			return Session{}, fmt.Errorf("timed out waiting for login (%s) — the session cookie never appeared", loginTimeout)
 		}
-		if err := sleepCtx(ctx, loginPollEvery); err != nil {
+		if err := loginSleep(ctx, loginPollEvery); err != nil {
 			return Session{}, fmt.Errorf("login aborted (Ctrl-C or browser closed) before the session appeared")
 		}
 	}
@@ -75,7 +81,7 @@ func LoginViaBrowser(loginURL string) (Session, error) {
 // Bonpreu-domain ones into a Cookie header (reusing buildCookieHeader).
 func readBonpreuCookies(ctx context.Context, url string) (string, error) {
 	var cks []*network.Cookie
-	err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+	err := runBrowserActions(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		c, err := network.GetCookies().WithURLs([]string{url}).Do(ctx)
 		cks = c
 		return err

@@ -7,12 +7,17 @@ import (
 	"github.com/seifreed/bonpreu-cli/internal/client"
 )
 
+var (
+	readLoginBrowser = client.CookiesFromBrowser
+	openLoginBrowser = client.LoginViaBrowser
+)
+
 // cmdLogin bridges a browser login to the CLI's session cache without DevTools.
 // `login --from-browser <name>` lifts the cookie from a browser's cookie store;
 // bare `login` opens a browser for a fresh login and captures the session (only
 // in builds with -tags browserlogin). Both end at saveAndVerify.
 func cmdLogin(args []string) error {
-	return cmdLoginWith(args, client.CookiesFromBrowser, client.LoginViaBrowser)
+	return cmdLoginWith(args, readLoginBrowser, openLoginBrowser)
 }
 
 func cmdLoginWith(args []string, readBrowser func(string) (client.Session, error), openBrowser func(string) (client.Session, error)) error {

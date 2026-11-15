@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -95,22 +96,24 @@ func TestCmdLoginSelectsBrowserSource(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			events = nil
 			fromCalled, openCalled := false, false
+			oldRead, oldOpen := readLoginBrowser, openLoginBrowser
+			readLoginBrowser = func(browser string) (client.Session, error) {
+				fromCalled = true
+				if browser != "firefox" {
+					t.Errorf("browser = %q, want firefox", browser)
+				}
+				return client.Session{Cookie: tc.want, RegionID: "r1"}, nil
+			}
+			openLoginBrowser = func(url string) (client.Session, error) {
+				openCalled = true
+				if url != srv.URL+"/" {
+					t.Errorf("login URL = %q", url)
+				}
+				return client.Session{Cookie: tc.want, RegionID: "r1"}, nil
+			}
+			t.Cleanup(func() { readLoginBrowser, openLoginBrowser = oldRead, oldOpen })
 			out, err := capture(t, func() error {
-				return cmdLoginWith(tc.args,
-					func(browser string) (client.Session, error) {
-						fromCalled = true
-						if browser != "firefox" {
-							t.Errorf("browser = %q, want firefox", browser)
-						}
-						return client.Session{Cookie: tc.want, RegionID: "r1"}, nil
-					},
-					func(url string) (client.Session, error) {
-						openCalled = true
-						if url != srv.URL+"/" {
-							t.Errorf("login URL = %q", url)
-						}
-						return client.Session{Cookie: tc.want, RegionID: "r1"}, nil
-					})
+				return cmdLogin(tc.args)
 			})
 			if err != nil || !strings.Contains(out, "authenticated") {
 				t.Fatalf("login output = %q, err %v", out, err)
@@ -125,5 +128,25 @@ func TestCmdLoginSelectsBrowserSource(t *testing.T) {
 				t.Fatalf("saved session cookie = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestRunLoginLogsBrowserOpenFailure(t *testing.T) {
+	t.Setenv("BONPREU_BASE_URL", "https://login.example")
+	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	t.Setenv("BONPREU_LOG_FORMAT", "json")
+	oldOpen := openLoginBrowser
+	defer func() { openLoginBrowser = oldOpen }()
+	called := false
+	openLoginBrowser = func(url string) (client.Session, error) {
+		called = true
+		if url != "https://login.example/" {
+			t.Errorf("login URL = %q", url)
+		}
+		return client.Session{}, errors.New("browser unavailable")
+	}
+	code, logs := runWithStderr(t, []string{"login"})
+	if !called || code != 1 || !strings.Contains(logs, `"event_name":"command.failed"`) || !strings.Contains(logs, `"operation":"login"`) {
+		t.Fatalf("login open failure called=%v exit=%d logs=%q", called, code, logs)
 	}
 }

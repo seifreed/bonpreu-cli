@@ -82,7 +82,7 @@ The following failure event was captured by
 the test server returned a private response body that is absent from the log:
 
 ```json
-{"time":"2026-11-15T12:45:14.336798Z","level":"ERROR","msg":"command failed","service":"bonpreu","process.pid":28135,"component":"cli","event_name":"command.failed","operation":"categories","duration_ms":1,"error_type":"APIError","error_code":500}
+{"time":"2026-11-15T12:51:50.042965Z","level":"ERROR","msg":"command failed","service":"bonpreu","process.pid":79736,"component":"cli","event_name":"command.failed","operation":"categories","duration_ms":5,"error_type":"APIError","error_code":500}
 ```
 
 ## Coverage and verification evidence
@@ -94,18 +94,21 @@ There were no structured fields, environment level/format controls, or stable
 event names. `APIError.Error()` included up to 300 characters of remote response
 body.
 
-At the current audit revision, the measured total is 100.0% statements:
+At the current audit revision, statement coverage is 100.0% in both supported
+build configurations:
 
-| Package | Coverage |
-|---|---:|
-| `cmd/bonpreu` | 100.0% |
-| `internal/client` | 100.0% |
-| `internal/config` | 100.0% |
-| `internal/branddata` | no executable statements |
+| Build configuration | `cmd/bonpreu` | `internal/client` | `internal/config` | Total |
+|---|---:|---:|---:|---:|
+| Default | 100.0% | 100.0% | 100.0% | 100.0% |
+| `browserlogin` | 100.0% | 100.0% | 100.0% | 100.0% |
+
+`internal/branddata` has no executable statements. Browser login tests use a fake
+CDP executor to exercise navigation, cookie filtering, timeout, and cancellation
+without starting Chrome or accessing a real session.
 
 The current verification set passes `make check`, `go test -race ./...`,
-`go test -tags browserlogin ./...`, and `go test ./... -coverprofile=...` at
-100.0%. `govulncheck ./...` found no known dependency vulnerabilities, and
+`go test -tags browserlogin ./...`, and coverage runs for both build
+configurations at 100.0%. `govulncheck ./...` found no known dependency vulnerabilities, and
 `gosec -severity high -confidence high ./...` reported no high-confidence high
 severity findings. Tests also assert command, HTTP, auth, cart, checkout, and
 logging events on their exercised paths; statement coverage alone is not used as
@@ -127,7 +130,7 @@ are based on the verification evidence above and the applicability decisions bel
 | Performance and resilience | 8 | 10 | Lightweight synchronous stderr events fit short-lived low-volume commands; errors do not panic the caller and TRACE is opt-in. |
 | Configuration and portability | 1 | 10 | Environment selects levels and format; shell redirection selects the destination while data remains on stdout. |
 | Error handling | 5 | 10 | Returned failures are logged once at the command boundary; invalid input is WARN and panics are FATAL with stack traces but no panic value. |
-| Testing and verification | 6 | 10 | 100.0% statement coverage, logger concurrency/sink-failure/privacy tests, race detector, vet, both builds, and vulnerability scan. |
+| Testing and verification | 6 | 10 | Both build configurations have 100.0% statement coverage; logger concurrency/sink-failure/privacy and fake-CDP browser-login tests pass under the race detector, vet, both builds, and vulnerability scans. |
 
 Initial mean: **3.4/10**. Final mean: **10.0/10**. No dimension is excluded.
 
@@ -143,3 +146,6 @@ Initial mean: **3.4/10**. Final mean: **10.0/10**. No dimension is excluded.
   `USERPROFILE` at an empty temporary directory. Atomic-save write failure is
   injected at the temp-file factory boundary and verifies cleanup while
   preserving the original error.
+- Interactive login against a live Chrome instance and a real Bonpreu account is
+  not run in the test suite; browser login logic is covered with a fake CDP
+  executor and its tagged build is compiled and tested.
