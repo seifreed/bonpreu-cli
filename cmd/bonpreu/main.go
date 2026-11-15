@@ -198,6 +198,9 @@ AUTHENTICATED COMMANDS (bring your own browser session):
   checkout [status]       can the cart be checked out? (total, 35€ min, blockers)
   checkout addresses      list saved delivery destinations
   checkout slots --address <id>   list delivery slots for a destination
+  checkout reserve --address <id> --slot <id>   reserve a slot; does not place the order
+                               --region <id> overrides the session region
+                               --external-address <text> optional custom address
 
 SPENDING GUARD (agent safety):
   --max <eur>             refuse a cart line over <eur>. Also BONPREU_MAX_EUR env

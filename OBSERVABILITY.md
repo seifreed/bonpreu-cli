@@ -51,6 +51,7 @@ Events currently emitted:
 | `cart.clear.already_empty` | INFO | no-op clear |
 | `cart.clear.completed` | INFO | number of lines removed; no product identities |
 | `checkout.status.checked` | INFO | ready state and number of blocking restrictions; no totals or address data |
+| `checkout.slot.reserved` | INFO | reservation outcome; no address, slot, or region identifiers |
 | `catalog.brand_crawl.progress` | DEBUG | category index/total and distinct brand count |
 | `catalog.brand_crawl.completed` | INFO | total brand count |
 

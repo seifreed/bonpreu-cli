@@ -2,7 +2,10 @@ package client
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"net/url"
+	"strings"
 )
 
 // CheckoutGroup is the active cart's checkout-readiness view: whether the basket
@@ -37,4 +40,27 @@ func (c *Client) Addresses() (json.RawMessage, error) {
 // malformed request URL.
 func (c *Client) Slots(deliveryDestinationID string) (json.RawMessage, error) {
 	return c.getRaw(c.BaseURL + "/api/ecomslots/v1/web/slots-offering?deliveryDestinationId=" + url.QueryEscape(deliveryDestinationID))
+}
+
+// ReserveSlot selects a delivery slot for the active cart. It does not place an
+// order; the website performs payment authentication and final validation later.
+func (c *Client) ReserveSlot(regionID, deliveryDestinationID, slotID, externalAddress string) (json.RawMessage, error) {
+	if strings.TrimSpace(regionID) == "" || strings.TrimSpace(deliveryDestinationID) == "" || strings.TrimSpace(slotID) == "" {
+		return nil, fmt.Errorf("region, delivery destination, and slot IDs are required")
+	}
+	body := struct {
+		RegionID              string `json:"regionId"`
+		SlotID                string `json:"slotId"`
+		DeliveryDestinationID string `json:"deliveryDestinationId"`
+		ExternalAddress       string `json:"externalAddress,omitempty"`
+	}{regionID, slotID, deliveryDestinationID, externalAddress}
+	csrf, err := c.csrfToken()
+	if err != nil {
+		return nil, err
+	}
+	var raw json.RawMessage
+	err = c.doJSONHeaders(http.MethodPost, c.BaseURL+"/api/ecomslots/v1/slots/reservation", body, &raw, map[string]string{
+		"x-csrf-token": csrf,
+	})
+	return raw, err
 }

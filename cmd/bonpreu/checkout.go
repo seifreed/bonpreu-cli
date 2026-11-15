@@ -7,9 +7,8 @@ import (
 	"github.com/seifreed/bonpreu-cli/internal/client"
 )
 
-// cmdCheckout dispatches the checkout subcommands. These are read-only: they
-// inspect checkout readiness, list delivery addresses, and list slots. Placing an
-// order is intentionally not implemented (irreversible; see README).
+// cmdCheckout dispatches checkout inspection and slot-reservation commands.
+// Placing an order is intentionally not implemented (see README).
 func cmdCheckout(args []string) error {
 	if len(args) == 0 {
 		return checkoutStatus(nil)
@@ -21,10 +20,42 @@ func cmdCheckout(args []string) error {
 		return checkoutAddresses(args[1:])
 	case "slots":
 		return checkoutSlots(args[1:])
+	case "reserve":
+		return checkoutReserve(args[1:])
 	default:
 		// No subcommand → treat as `status` with flags.
 		return checkoutStatus(args)
 	}
+}
+
+func checkoutReserve(args []string) error {
+	fs, cf := newCommonFlags("checkout reserve")
+	address := fs.String("address", "", "delivery destination id (from `checkout addresses`)")
+	slot := fs.String("slot", "", "delivery slot id (from `checkout slots`)")
+	region := fs.String("region", "", "delivery region id (defaults to the authenticated session)")
+	externalAddress := fs.String("external-address", "", "optional custom delivery address")
+	parseFlags(fs, args)
+	if strings.TrimSpace(*address) == "" || strings.TrimSpace(*slot) == "" {
+		return fmt.Errorf("usage: bonpreu checkout reserve --address <id> --slot <id> [--region <id>]")
+	}
+	cl, err := authedClient(cf)
+	if err != nil {
+		return err
+	}
+	regionID := firstNonEmpty(*region, cl.RegionID)
+	if strings.TrimSpace(regionID) == "" {
+		return fmt.Errorf("missing delivery region — pass --region or save region_id in the authenticated session/config")
+	}
+	if _, err := cl.ReserveSlot(regionID, *address, *slot, *externalAddress); err != nil {
+		return err
+	}
+	stderrInfo("checkout.slot.reserved", "delivery slot reserved", "operation", cf.operation)
+	result := map[string]any{"reserved": true, "delivery_destination_id": *address, "slot_id": *slot}
+	if done, err := emitStructured(cf, result); done {
+		return err
+	}
+	fmt.Printf("franja %s reservada para la dirección %s\n", terminalText(*slot), terminalText(*address))
+	return nil
 }
 
 // checkoutStatus reports whether the active cart can be checked out, and if not,

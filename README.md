@@ -200,10 +200,11 @@ bonpreu whoami                           # verify the session is accepted
 | `bonpreu checkout [status]` | Checkout readiness: total, 35€ minimum, blockers |
 | `bonpreu checkout addresses` | List saved delivery destinations (`--json`) |
 | `bonpreu checkout slots --address <id>` | List delivery slots for a destination |
+| `bonpreu checkout reserve --address <id> --slot <id>` | Reserve a delivery slot for the active cart; region comes from the session or `--region` |
 
 Cart writes resolve the short retailer id to the API's product UUID, then `POST …/apply-quantity` — the same delta-based call the website's quantity buttons make (the CLI fetches the required `X-CSRF-TOKEN` itself). `whoami` is a real check: it hits an endpoint that returns `401` for anonymous callers.
 
-> **No order placement.** `checkout` is read-only — it reports readiness, not a `submit`. Placing an order is irreversible and is intentionally left out; book a slot and pay in the browser.
+> **No order placement.** Status, addresses, and slot listings are read-only; `checkout reserve` selects a delivery slot for the active cart. It does not submit the order or start payment authentication. Final order validation and payment remain in the browser.
 
 ### Spending Guard (agent safety)
 
@@ -249,7 +250,7 @@ This repo bundles a Claude Code skill, **`bonpreu-shop`** (`.claude/skills/bonpr
 2. Resolves each item to a real Bonpreu product with `batch`/`search`.
 3. Shows the plan with a code-computed total.
 4. After your OK, fills the cart with a hard `--max` spending cap.
-5. Reports checkout readiness (35€ minimum) — you book a slot and pay in the browser.
+5. Reports checkout readiness (35€ minimum) — you can list and reserve a delivery slot, then validate the order and pay in the browser.
 
 The vision step lives in the agent, not the binary — so any provider drives the same clean primitives, no LLM SDKs baked into the CLI. Install it where your Claude reads skills (symlink or copy `.claude/skills/bonpreu-shop` into `~/.claude/skills/`); build the CLI first.
 
@@ -291,7 +292,7 @@ The brand catalogue ships **in the repo/binary** (`internal/branddata/brands.jso
 
 The anonymous **read core** — `search`, `batch`, `total`, `product`, `categories`, `brands` — is implemented and **verified live** against the production site (uTLS clears the AWS WAF on every read), including `--cheapest` ranking, `[brands]` preferences, and `[offers]` flagging.
 
-The **authenticated leg** — `login --from-browser` / `login` / `import-har` / `set-cookie`, `whoami`, `cart` (get/add/set/clear) with the `--max` guard, and read-only `checkout` — is implemented against the live API. The cart read/write contract was **verified end-to-end** against a real account (login → add → read-back → remove, all `HTTP 200`). **Order placement** is deliberately left out (irreversible; not verifiable without a configured delivery address).
+The **authenticated leg** — `login --from-browser` / `login` / `import-har` / `set-cookie`, `whoami`, `cart` (get/add/set/clear) with the `--max` guard, and checkout readiness/address/slot flows — is implemented against the live API. The cart read/write contract was **verified end-to-end** against a real account (login → add → read-back → remove, all `HTTP 200`). Final order placement and payment authentication remain unimplemented.
 
 ---
 
