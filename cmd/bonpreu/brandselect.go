@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math/big"
 	"sort"
 	"strings"
 
@@ -148,12 +149,19 @@ func cheapestOrganic(prods []client.Product) client.Product {
 func cheapestOf(prods []client.Product) client.Product {
 	sorted := append([]client.Product(nil), prods...)
 	sort.SliceStable(sorted, func(i, j int) bool {
-		ci, ei := priceCents(sorted[i].Price.Amount)
-		cj, ej := priceCents(sorted[j].Price.Amount)
+		ci, ei := exactPriceAmount(sorted[i].Price.Amount)
+		cj, ej := exactPriceAmount(sorted[j].Price.Amount)
 		if ei != nil || ej != nil { // unparseable prices sink
 			return ei == nil && ej != nil
 		}
-		return ci < cj
+		return ci.Cmp(cj) < 0
 	})
 	return sorted[0]
+}
+
+func exactPriceAmount(s string) (*big.Rat, error) {
+	if _, err := priceCents(s); err != nil {
+		return nil, err
+	}
+	return ratFromDecimal(strings.TrimSpace(s))
 }

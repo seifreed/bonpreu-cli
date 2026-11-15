@@ -120,6 +120,16 @@ func TestCheapestOfUnparseablePriceAndStableTie(t *testing.T) {
 	}
 }
 
+func TestCheapestOfComparesSubcentPricesExactly(t *testing.T) {
+	products := []client.Product{
+		prod("higher", "A", "0.134"),
+		prod("lower", "B", "0.131"),
+	}
+	if got := cheapestOf(products); got.RetailerProductID != "lower" {
+		t.Fatalf("cheapestOf = %q; want exact lower price despite same rounded cents", got.RetailerProductID)
+	}
+}
+
 func TestResolveBrandHit(t *testing.T) {
 	// Cheapest ("a") is deliberately NOT first, so the no-config case proves it
 	// picks cheapest, not the relevance top hit.
