@@ -110,6 +110,9 @@ func cartWrite(args []string, set bool) error {
 	if err != nil {
 		return fmt.Errorf("resolve product %s: %w", retailerID, err)
 	}
+	if pd.ProductID == "" {
+		return fmt.Errorf("product %s has no cart product ID", retailerID)
+	}
 
 	delta := qty
 	if set {

@@ -71,6 +71,31 @@ func TestCartAddDoesNotWriteWhenLimitCannotBeEnforced(t *testing.T) {
 	}
 }
 
+func TestCartAddDoesNotWriteWithoutProductUUID(t *testing.T) {
+	var writes atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			writes.Add(1)
+			w.Write([]byte(`{"items":[]}`))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/products/") {
+			w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","name":"Mystery item","price":{"amount":"1.69"}}}</html>`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1"}) }); err == nil || !strings.Contains(err.Error(), "no cart product ID") {
+		t.Fatalf("cart add without product UUID error = %v", err)
+	}
+	if got := writes.Load(); got != 0 {
+		t.Fatalf("cart add sent %d write requests without a product UUID, want none", got)
+	}
+}
+
 func TestCurrentQtyPropagatesError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
