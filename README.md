@@ -228,7 +228,7 @@ on_missing = "ask"                         # per-item override missing → "ask"
 "pastillas lavavajillas" = ["Finish"]
 ```
 
-No `[brands]` section → cheapest, as before. A snapshot of every Bonpreu brand ships with the binary (`internal/branddata/brands.json`, ~3k brands) — browse it with `bonpreu brands` to pick favourites, and refresh it with `bonpreu brands --update > internal/branddata/brands.json`.
+No `[brands]` section → cheapest, as before. A snapshot of every Bonpreu brand ships with the binary (`internal/branddata/brands.json`, ~3k brands) — browse it with `bonpreu brands` to pick favourites. Refresh it through a temporary file so a failed crawl cannot truncate the current snapshot: `tmp="$(mktemp)" && bonpreu brands --update --json > "$tmp" && mv "$tmp" internal/branddata/brands.json`.
 
 ### Multi-buy Offers
 

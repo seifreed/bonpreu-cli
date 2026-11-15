@@ -114,7 +114,7 @@ func TestCmdBrandsUpdateReturnsCategoryError(t *testing.T) {
 	}
 }
 
-func TestCrawlBrandsSkipsCategoryFailure(t *testing.T) {
+func TestCrawlBrandsReturnsCategoryFailure(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/v1/categories") {
 			_, _ = w.Write([]byte(`[{"retailerCategoryId":"0301"}]`))
@@ -132,11 +132,31 @@ func TestCrawlBrandsSkipsCategoryFailure(t *testing.T) {
 	defer func() { stderrWarn = old }()
 
 	got, err := crawlBrands(testCartClient(srv), 1, 10)
-	if err != nil || len(got) != 0 {
-		t.Fatalf("crawlBrands = %v, %v; want empty result without abort", got, err)
+	if err == nil || !strings.Contains(err.Error(), "HTTP 500") || len(got) != 0 {
+		t.Fatalf("crawlBrands = %v, %v; want category failure", got, err)
 	}
 	if len(warnings) != 1 || !strings.Contains(warnings[0], "catalog.category.skipped") || !strings.Contains(warnings[0], "category_id0301") || strings.Contains(warnings[0], "remote details") {
 		t.Fatalf("expected one safe category warning, got %q", warnings)
+	}
+}
+
+func TestCmdBrandsUpdateDoesNotEmitIncompleteSnapshot(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/v1/categories") {
+			_, _ = w.Write([]byte(`[{"retailerCategoryId":"0301"},{"retailerCategoryId":"0302"}]`))
+			return
+		}
+		http.Error(w, "unavailable", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+
+	out, err := captureFile(t, func() error { return cmdBrands([]string{"--update", "--json"}) })
+	if err == nil || !strings.Contains(err.Error(), "HTTP 500") {
+		t.Fatalf("brands --update error = %v; want category failure", err)
+	}
+	if out != "" {
+		t.Fatalf("incomplete crawl wrote snapshot data: %q", out)
 	}
 }
 

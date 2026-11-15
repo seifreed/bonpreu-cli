@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -89,16 +90,21 @@ func crawlBrands(cl *client.Client, depth, limit int) ([]brandCount, error) {
 		return nil, fmt.Errorf("no categories found (try a higher --depth)")
 	}
 	counts := map[string]int{}
+	var categoryErrors []error
 	for i, id := range ids {
 		pp, perr := cl.CategoryProducts(id, limit)
 		if perr != nil {
 			stderrWarn("catalog.category.skipped", "category crawl failed; skipping it",
 				"operation", "brands", "category_id", id, "error_type", fmt.Sprintf("%T", perr))
+			categoryErrors = append(categoryErrors, fmt.Errorf("category %s: %w", id, perr))
 			continue
 		}
 		tallyBrands(counts, pp.Products())
 		stderrDebug("catalog.brand_crawl.progress", "brand crawl progress",
 			"operation", "brands", "category_index", i+1, "category_total", len(ids), "brand_count", len(counts))
+	}
+	if len(categoryErrors) > 0 {
+		return nil, errors.Join(categoryErrors...)
 	}
 	return sortedBrands(counts), nil
 }
