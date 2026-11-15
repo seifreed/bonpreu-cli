@@ -102,6 +102,16 @@ func TestLoadAuthWarnsOnForeignBaseURL(t *testing.T) {
 	if !strings.Contains(logs.String(), "security.cookie_external_host") {
 		t.Errorf("unrecognized Bonpreu subdomain must warn, got %q", logs.String())
 	}
+
+	logs.Reset()
+	c4 := &Client{BaseURL: "https://www.compraonline.bonpreuesclat.cat:8443", Logger: testLogger(&logs)}
+	c4.Cookie = "global_sid=x; aws-waf-token=y"
+	if _, err := c4.LoadAuth(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(logs.String(), "security.cookie_external_host") {
+		t.Errorf("nonstandard Bonpreu port must warn, got %q", logs.String())
+	}
 }
 
 func TestSessionRoundTripAndHARSave(t *testing.T) {

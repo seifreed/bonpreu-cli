@@ -180,7 +180,7 @@ func waitForCheckout(ctx context.Context, input io.Reader) error {
 
 func checkoutPageURL(baseURL string) (string, error) {
 	u, err := url.Parse(baseURL)
-	if err != nil || u.Scheme != "https" || !isBonpreuHost(u.Hostname()) {
+	if err != nil || u.Scheme != "https" || !isBonpreuHost(u.Hostname()) || (u.Port() != "" && u.Port() != "443") {
 		return "", fmt.Errorf("checkout browser requires an HTTPS Bonpreu host")
 	}
 	u.Path = "/checkout"

@@ -283,9 +283,11 @@ func TestCheckoutPageURLRequiresBonpreuHTTPSHost(t *testing.T) {
 		ok    bool
 	}{
 		{"https://www.compraonline.bonpreuesclat.cat/path?token=ignored#fragment", "https://www.compraonline.bonpreuesclat.cat/checkout", true},
+		{"https://www.compraonline.bonpreuesclat.cat:443/", "https://www.compraonline.bonpreuesclat.cat:443/checkout", true},
 		{"http://www.bonpreuesclat.cat/", "", false},
 		{"https://bonpreuesclat.cat.attacker.example/", "", false},
 		{"https://attacker.bonpreuesclat.cat/", "", false},
+		{"https://www.compraonline.bonpreuesclat.cat:8443/", "", false},
 		{"https://example.com/", "", false},
 	} {
 		got, err := checkoutPageURL(tc.input)

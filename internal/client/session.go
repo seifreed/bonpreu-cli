@@ -78,10 +78,12 @@ func (c *Client) warnExternalCookieHost(cookie string) {
 		return
 	}
 	host := ""
+	trusted := false
 	if u, err := url.Parse(c.BaseURL); err == nil {
 		host = u.Hostname()
+		trusted = isBonpreuHost(host) && (u.Port() == "" || u.Port() == "443")
 	}
-	if !isBonpreuHost(host) && c.Logger != nil {
+	if !trusted && c.Logger != nil {
 		c.Logger.Warn("session cookie targets an untrusted host",
 			"event_name", "security.cookie_external_host", "component", "client", "host", host)
 	}
@@ -97,7 +99,7 @@ func (c *Client) validateCookieTransport(cookie, targetURL string) error {
 	}
 	host := u.Hostname()
 	if strings.EqualFold(u.Scheme, "https") {
-		if isBonpreuHost(host) || c.AllowExternalCookieHost || strings.EqualFold(host, "localhost") {
+		if (isBonpreuHost(host) && (u.Port() == "" || u.Port() == "443")) || c.AllowExternalCookieHost || strings.EqualFold(host, "localhost") {
 			return nil
 		}
 		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
