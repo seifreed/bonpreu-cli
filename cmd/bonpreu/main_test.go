@@ -19,6 +19,17 @@ func TestMainPassesCommandExitCodeToProcess(t *testing.T) {
 	}
 }
 
+func TestRunDispatchesBrandsCommand(t *testing.T) {
+	srv := apiServer(t)
+	defer srv.Close()
+	useServer(t, srv, false)
+	var code int
+	_, err := captureFile(t, func() error { code = run([]string{"brands", "--json"}); return nil })
+	if err != nil || code != 0 {
+		t.Fatalf("brands dispatch exit=%d, err=%v", code, err)
+	}
+}
+
 func TestRunDispatch(t *testing.T) {
 	srv := apiServer(t)
 	defer srv.Close()

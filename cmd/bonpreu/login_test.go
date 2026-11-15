@@ -50,6 +50,14 @@ func TestSaveAndVerify(t *testing.T) {
 	}
 }
 
+func TestSaveAndVerifyReturnsSessionWriteError(t *testing.T) {
+	t.Setenv("BONPREU_CONFIG_DIR", unwritableConfigDir(t))
+	err := saveAndVerify(&common{}, client.Session{Cookie: "global_sid=s; aws-waf-token=t"})
+	if err == nil {
+		t.Fatal("saveAndVerify should return session persistence failure")
+	}
+}
+
 func TestCmdLoginSelectsBrowserSource(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/order/v6/orders") {
