@@ -281,34 +281,38 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 		c.logHTTPResult(req, 0, 0, started, err)
 		return nil, err
 	}
-	defer resp.Body.Close()
 	data, readErr := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
+	closeErr := resp.Body.Close()
+	bodyErr := errors.Join(readErr, closeErr)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if len(data) > maxBodyBytes {
 			data = data[:maxBodyBytes]
 		}
-		// On a non-2xx, surface whatever body we managed to read as error context
-		// (best effort) — the status is the actionable signal, not the read error.
+		// Keep the HTTP status actionable while preserving any body I/O failures.
 		apiErr := &APIError{
 			Status:     resp.StatusCode,
 			Body:       string(data),
 			RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
 		}
-		c.logHTTPResult(req, resp.StatusCode, len(data), started, apiErr)
-		return nil, apiErr
-	}
-	if len(data) > maxBodyBytes {
-		err := fmt.Errorf("response body exceeds %d-byte limit", maxBodyBytes)
-		err = errors.Join(err, readErr)
+		if bodyErr != nil {
+			err = errors.Join(apiErr, fmt.Errorf("read error response body: %w", bodyErr))
+		} else {
+			err = apiErr
+		}
 		c.logHTTPResult(req, resp.StatusCode, len(data), started, err)
 		return nil, err
 	}
-	// A 2xx whose body read failed mid-stream must not pass as success: the JSON
-	// decoders would mostly catch the truncation, but GetText (HTML scrape) has no
-	// decode step and would silently parse a partial page. Propagate it.
-	if readErr != nil {
-		c.logHTTPResult(req, resp.StatusCode, len(data), started, readErr)
-		return nil, fmt.Errorf("read response body: %w", readErr)
+	if len(data) > maxBodyBytes {
+		err := fmt.Errorf("response body exceeds %d-byte limit", maxBodyBytes)
+		err = errors.Join(err, bodyErr)
+		c.logHTTPResult(req, resp.StatusCode, len(data), started, err)
+		return nil, err
+	}
+	// A 2xx whose body read or close failed must not pass as success: the JSON
+	// decoders would mostly catch truncation, but GetText has no decode step.
+	if bodyErr != nil {
+		c.logHTTPResult(req, resp.StatusCode, len(data), started, bodyErr)
+		return nil, fmt.Errorf("response body read/close failed: %w", bodyErr)
 	}
 	c.logHTTPResult(req, resp.StatusCode, len(data), started, nil)
 	return data, nil

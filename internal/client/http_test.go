@@ -90,6 +90,11 @@ type brokenBody struct{}
 func (brokenBody) Read([]byte) (int, error) { return 0, errors.New("stream broke") }
 func (brokenBody) Close() error             { return nil }
 
+type errorBody struct{ readErr, closeErr error }
+
+func (b errorBody) Read([]byte) (int, error) { return 0, b.readErr }
+func (b errorBody) Close() error             { return b.closeErr }
+
 func TestDoReturnsSuccessfulResponseReadError(t *testing.T) {
 	cl := New()
 	cl.HTTP = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -99,10 +104,31 @@ func TestDoReturnsSuccessfulResponseReadError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cl.do(req); err == nil || !strings.Contains(err.Error(), "read response body") {
+	if _, err := cl.do(req); err == nil || !strings.Contains(err.Error(), "response body") {
 		t.Fatalf("successful response read error = %v", err)
 	} else if strings.Contains(err.Error(), "private-value") {
 		t.Fatalf("response read error exposed URL query: %v", err)
+	}
+}
+
+func TestDoPreservesErrorResponseReadAndCloseErrors(t *testing.T) {
+	readErr := errors.New("response stream failed")
+	closeErr := errors.New("response close failed")
+	cl := New()
+	cl.HTTP = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusBadGateway, Body: errorBody{readErr, closeErr}, Header: make(http.Header)}, nil
+	})}
+	req, err := http.NewRequest(http.MethodGet, "https://example.invalid/api", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = cl.do(req)
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadGateway {
+		t.Fatalf("Do error = %v, want APIError 502", err)
+	}
+	if !errors.Is(err, readErr) || !errors.Is(err, closeErr) {
+		t.Fatalf("Do error = %v, want both body read and close causes", err)
 	}
 }
 
