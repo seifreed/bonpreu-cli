@@ -47,7 +47,6 @@ Events currently emitted:
 | `auth.har.region_missing` | WARN | static remediation message |
 | `auth.cookie.may_be_anonymous` | WARN | static verification guidance |
 | `catalog.category.skipped` | WARN | `category_id`, `error_type` |
-| `cart.guard.price_unavailable` | WARN | `error_type`; says the spending guard could not price the line |
 | `cart.quantity.no_change` | INFO | no-op cart write |
 | `cart.quantity.changed` | INFO | operation and quantity delta; no product identity |
 | `cart.clear.already_empty` | INFO | no-op clear |

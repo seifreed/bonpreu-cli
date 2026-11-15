@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,41 +11,24 @@ import (
 	"github.com/seifreed/bonpreu-cli/internal/client"
 )
 
-func TestGuardLineAddWarnsWhenUnpriceable(t *testing.T) {
-	var logs []string
-	old := stderrWarn
-	stderrWarn = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
-	defer func() { stderrWarn = old }()
-
+func TestGuardLineAddRejectsUnpriceableWhenLimitSet(t *testing.T) {
 	pd := &client.ProductDetail{}
 	pd.Name = "Mystery item"
 	pd.Price.Amount = "" // unparseable → priceCents fails
 
-	// flagMax > 0 so a limit is in force; the line is unpriceable, so the guard is
-	// skipped — and must warn that --max is not enforced here.
-	if err := guardLineAdd(50, pd, 2); err != nil {
-		t.Fatalf("unpriceable line must not block: %v", err)
-	}
-	if len(logs) != 1 || !strings.Contains(logs[0], "cart.guard.price_unavailable") || !strings.Contains(logs[0], "not enforced") || strings.Contains(logs[0], pd.Name) {
-		t.Fatalf("expected one '--max not enforced' warning, got %v", logs)
+	if err := guardLineAdd(50, pd, 2); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
+		t.Fatalf("unpriceable line must fail closed when --max is set, got %v", err)
 	}
 }
 
 func TestGuardLineAddSilentWithoutLimit(t *testing.T) {
 	t.Setenv("BONPREU_MAX_EUR", "")             // no limit from env
 	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir()) // no limit from a real config.toml
-	var logs []string
-	old := stderrWarn
-	stderrWarn = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
-	defer func() { stderrWarn = old }()
 
 	pd := &client.ProductDetail{}
 	pd.Name = "Mystery item"
 	if err := guardLineAdd(0, pd, 2); err != nil { // no limit set
 		t.Fatalf("no limit: %v", err)
-	}
-	if len(logs) != 0 {
-		t.Errorf("no limit set → no warning expected, got %v", logs)
 	}
 }
 
@@ -55,6 +37,29 @@ func testCartClient(srv *httptest.Server) *client.Client {
 	cl.BaseURL = srv.URL
 	cl.HTTP = srv.Client()
 	return cl
+}
+
+func TestCartAddDoesNotWriteWhenLimitCannotBeEnforced(t *testing.T) {
+	var cartWrite bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			cartWrite = true
+		}
+		if strings.HasPrefix(r.URL.Path, "/products/") {
+			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Mystery item"}}</html>`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1", "--max", "50"}) }); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
+		t.Fatalf("cart add error = %v, want unpriceable price-limit error", err)
+	}
+	if cartWrite {
+		t.Fatal("cart add wrote despite an active limit and unknown product price")
+	}
 }
 
 func TestCurrentQtyPropagatesError(t *testing.T) {
