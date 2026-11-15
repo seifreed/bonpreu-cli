@@ -71,6 +71,9 @@ func (c *Client) GetCart() (*Cart, error) {
 	if err != nil {
 		return nil, err
 	}
+	if s.Items == nil {
+		return nil, fmt.Errorf("decode active cart response: missing or null items")
+	}
 	return &Cart{
 		Lines: s.Items,
 		Total: s.Totals.ItemPriceAfterPromos,

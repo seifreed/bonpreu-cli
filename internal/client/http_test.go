@@ -590,6 +590,25 @@ func TestCartProjectionMismatchReturnsDecodeError(t *testing.T) {
 	}
 }
 
+func TestGetCartRejectsMissingOrNullItems(t *testing.T) {
+	for _, body := range []string{`{}`, `{"items":null}`} {
+		t.Run(body, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Write([]byte(body))
+			}))
+			defer srv.Close()
+
+			cart, err := testClient(srv).GetCart()
+			if err == nil || !strings.Contains(err.Error(), "missing or null items") {
+				t.Fatalf("GetCart(%s) error = %v; want missing items error", body, err)
+			}
+			if cart != nil {
+				t.Fatalf("GetCart(%s) returned a cart after schema failure: %+v", body, cart)
+			}
+		})
+	}
+}
+
 // Every method that fronts an HTTP call must propagate a transport/5xx error.
 func TestMethodErrorBranches(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
