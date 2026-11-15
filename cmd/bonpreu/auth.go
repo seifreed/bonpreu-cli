@@ -30,7 +30,7 @@ func cmdImportHar(args []string) error {
 	file := fs.String("file", "", "path to the .har export ('-' for stdin)")
 	parseFlags(fs, args)
 	if fs.NArg() != 0 || *file == "" {
-		return fmt.Errorf("usage: bonpreu import-har --file tienda.har")
+		return invalidCommandf("usage: bonpreu import-har --file tienda.har")
 	}
 	data, err := readFileOrStdin(*file)
 	if err != nil {
@@ -58,7 +58,7 @@ func cmdSetCookie(args []string) error {
 	stdin := fs.Bool("stdin", false, "read the cookie from stdin (required)")
 	parseFlags(fs, args)
 	if !*stdin || fs.NArg() != 0 {
-		return fmt.Errorf("usage: bonpreu set-cookie --stdin")
+		return invalidCommandf("usage: bonpreu set-cookie --stdin")
 	}
 	b, err := readLimited(os.Stdin, maxCookieInputBytes, "cookie input")
 	if err != nil {
@@ -66,7 +66,7 @@ func cmdSetCookie(args []string) error {
 	}
 	cookie := strings.TrimSpace(string(b))
 	if cookie == "" {
-		return fmt.Errorf("usage: bonpreu set-cookie --stdin")
+		return invalidCommandf("usage: bonpreu set-cookie --stdin")
 	}
 	if !client.CookieLooksAuthed(cookie) {
 		return fmt.Errorf("cookie lacks the required global_sid + aws-waf-token session keys; the previous session was kept")
@@ -89,7 +89,7 @@ func cmdWhoami(args []string) error {
 	fs, cf := newCommonFlags("whoami")
 	parseFlags(fs, args)
 	if fs.NArg() != 0 {
-		return fmt.Errorf("usage: bonpreu whoami")
+		return invalidCommandf("usage: bonpreu whoami")
 	}
 	cl, err := authedClient(cf)
 	if err != nil {

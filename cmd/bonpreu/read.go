@@ -37,7 +37,7 @@ func cmdSearch(args []string) error {
 
 	term := strings.TrimSpace(strings.Join(fs.Args(), " "))
 	if term == "" {
-		return fmt.Errorf("usage: bonpreu search <term...>")
+		return invalidCommandf("usage: bonpreu search <term...>")
 	}
 	cl, _ := newClient(cf)
 	pp, err := cl.Search(term, *limit)
@@ -160,7 +160,7 @@ func cmdBatch(args []string) error {
 		return err
 	}
 	if len(terms) == 0 {
-		return fmt.Errorf("no terms (use -f file, stdin, or '<term>...' args)")
+		return invalidCommandf("no terms (use -f file, stdin, or '<term>...' args)")
 	}
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -325,7 +325,7 @@ func cmdTotal(args []string) error {
 		return err
 	}
 	if len(lines) == 0 {
-		return fmt.Errorf("no basket lines (use -f file, stdin, or '<id> [<id>...]' args)")
+		return invalidCommandf("no basket lines (use -f file, stdin, or '<id> [<id>...]' args)")
 	}
 	cl, _ := newClient(cf)
 
@@ -407,7 +407,7 @@ func cmdProduct(args []string) error {
 	fs, cf := newCommonFlags("product")
 	parseFlags(fs, args)
 	if fs.NArg() != 1 {
-		return fmt.Errorf("usage: bonpreu product <id>")
+		return invalidCommandf("usage: bonpreu product <id>")
 	}
 	cl, _ := newClient(cf)
 	pd, err := cl.Product(fs.Arg(0))
@@ -456,7 +456,7 @@ func cmdCategories(args []string) error {
 	cheapest := fs.Bool("cheapest", false, "with --id: rank by unit price (€/kg, €/L, €/u); mark the cheapest per unit")
 	parseFlags(fs, args)
 	if fs.NArg() != 0 {
-		return fmt.Errorf("usage: bonpreu categories [--id <id>] [--depth N] [--limit N] [--cheapest]")
+		return invalidCommandf("usage: bonpreu categories [--id <id>] [--depth N] [--limit N] [--cheapest]")
 	}
 	cl, _ := newClient(cf)
 

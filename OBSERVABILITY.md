@@ -33,7 +33,7 @@ Events currently emitted:
 | `command.failed` | ERROR | operation, duration, error type, HTTP status when available; no raw error text |
 | `command.rejected` | WARN | expected spending-limit refusal; operation, duration, outcome, fixed reason code |
 | `command.panicked` | FATAL | operation, panic type, stack trace; the panic value is omitted |
-| `command.invalid` | WARN | fixed operation name and `UsageError`; raw command input is omitted |
+| `command.invalid` | WARN | invalid CLI usage/subcommand, operation, and fixed `UsageError` type; raw arguments are omitted |
 | `http.request.start` | TRACE | method only; no URL, query, headers, or body |
 | `http.response` | DEBUG | method, status when available, duration, response byte count, outcome, error type only |
 | `http.retry` | WARN | method, response status, attempt, retry limit, wait duration |

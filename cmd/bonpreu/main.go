@@ -101,6 +101,12 @@ func run(args []string) int {
 		return 2
 	}
 	if err != nil {
+		var invalid *invalidCommandError
+		if errors.As(err, &invalid) {
+			logInvalidCommand(operation)
+			fmt.Fprintln(os.Stderr, "error:", terminalText(err.Error()))
+			return 1
+		}
 		var rejected *budgetExceededError
 		if errors.As(err, &rejected) {
 			defaultLogger().Warn("command rejected by spending limit",

@@ -18,7 +18,7 @@ import (
 // +adds, -removes), the same call the web app's +/- buttons make.
 func cmdCart(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: bonpreu cart <get|add|set|clear>")
+		return invalidCommandf("usage: bonpreu cart <get|add|set|clear>")
 	}
 	switch args[0] {
 	case "get":
@@ -30,7 +30,7 @@ func cmdCart(args []string) error {
 	case "clear":
 		return cartClear(args[1:])
 	default:
-		return fmt.Errorf("unknown cart subcommand %q (want get|add|set|clear)", args[0])
+		return invalidCommandf("unknown cart subcommand %q (want get|add|set|clear)", args[0])
 	}
 }
 
@@ -58,7 +58,7 @@ func cartGet(args []string) error {
 	fs, cf := newCommonFlags("cart get")
 	parseFlags(fs, args)
 	if fs.NArg() != 0 {
-		return fmt.Errorf("usage: bonpreu cart get")
+		return invalidCommandf("usage: bonpreu cart get")
 	}
 	cl, err := authedClient(cf)
 	if err != nil {
@@ -103,7 +103,7 @@ func cartWrite(args []string, set bool) error {
 		}
 	})
 	if fs.NArg() != 2 {
-		return fmt.Errorf("usage: bonpreu cart %s <id> <qty>", verb)
+		return invalidCommandf("usage: bonpreu cart %s <id> <qty>", verb)
 	}
 	retailerID := fs.Arg(0)
 	qty, err := parsePositiveQty(fs.Arg(1), set)
@@ -276,7 +276,7 @@ func cartClear(args []string) error {
 	fs, cf := newCommonFlags("cart clear")
 	parseFlags(fs, args)
 	if fs.NArg() != 0 {
-		return fmt.Errorf("usage: bonpreu cart clear")
+		return invalidCommandf("usage: bonpreu cart clear")
 	}
 	cl, err := authedClient(cf)
 	if err != nil {

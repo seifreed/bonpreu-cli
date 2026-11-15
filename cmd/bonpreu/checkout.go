@@ -31,7 +31,7 @@ func cmdCheckout(args []string) error {
 			// No subcommand → treat as `status` with flags.
 			return checkoutStatus(args)
 		}
-		return fmt.Errorf("unknown checkout subcommand %q (want status|addresses|slots|reserve|browser)", args[0])
+		return invalidCommandf("unknown checkout subcommand %q (want status|addresses|slots|reserve|browser)", args[0])
 	}
 }
 
@@ -39,7 +39,7 @@ func checkoutBrowser(args []string) error {
 	fs, cf := newCommonFlags("checkout browser")
 	parseFlags(fs, args)
 	if fs.NArg() != 0 {
-		return fmt.Errorf("usage: bonpreu checkout browser")
+		return invalidCommandf("usage: bonpreu checkout browser")
 	}
 	cl, err := authedClient(cf)
 	if err != nil {
@@ -64,7 +64,7 @@ func checkoutReserve(args []string) error {
 	externalAddress := fs.String("external-address", "", "optional custom delivery address")
 	parseFlags(fs, args)
 	if fs.NArg() != 0 || strings.TrimSpace(*address) == "" || strings.TrimSpace(*slot) == "" {
-		return fmt.Errorf("usage: bonpreu checkout reserve --address <id> --slot <id> [--region <id>] [--external-address <text>]")
+		return invalidCommandf("usage: bonpreu checkout reserve --address <id> --slot <id> [--region <id>] [--external-address <text>]")
 	}
 	cl, err := authedClient(cf)
 	if err != nil {
@@ -91,7 +91,7 @@ func checkoutStatus(args []string) error {
 	fs, cf := newCommonFlags("checkout")
 	parseFlags(fs, args)
 	if fs.NArg() != 0 {
-		return fmt.Errorf("usage: bonpreu checkout [status]")
+		return invalidCommandf("usage: bonpreu checkout [status]")
 	}
 	cl, err := authedClient(cf)
 	if err != nil {
@@ -137,7 +137,7 @@ func checkoutAddresses(args []string) error {
 	fs, cf := newCommonFlags("checkout addresses")
 	parseFlags(fs, args)
 	if fs.NArg() != 0 {
-		return fmt.Errorf("usage: bonpreu checkout addresses")
+		return invalidCommandf("usage: bonpreu checkout addresses")
 	}
 	cl, err := authedClient(cf)
 	if err != nil {
@@ -155,7 +155,7 @@ func checkoutSlots(args []string) error {
 	addr := fs.String("address", "", "delivery destination id (from `checkout addresses`)")
 	parseFlags(fs, args)
 	if fs.NArg() != 0 || *addr == "" {
-		return fmt.Errorf("usage: bonpreu checkout slots --address <deliveryDestinationId>")
+		return invalidCommandf("usage: bonpreu checkout slots --address <deliveryDestinationId>")
 	}
 	cl, err := authedClient(cf)
 	if err != nil {

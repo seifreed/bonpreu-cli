@@ -244,6 +244,25 @@ func TestRunUnknownCommandLogsWithoutInput(t *testing.T) {
 	}
 }
 
+func TestRunLogsInvalidArgumentsAsWarning(t *testing.T) {
+	t.Setenv("BONPREU_LOG_FORMAT", "json")
+	t.Setenv("BONPREU_LOG_LEVEL", "info")
+	const secret = "private-subcommand"
+	for _, args := range [][]string{{"search"}, {"cart", secret}} {
+		code, logs := runWithStderr(t, args)
+		if code != 1 || !strings.Contains(logs, `"level":"WARN"`) || !strings.Contains(logs, `"event_name":"command.invalid"`) || !strings.Contains(logs, `"error_type":"UsageError"`) {
+			t.Errorf("run(%v) exit=%d logs=%q; want warning invalid-command event", args, code, logs)
+		}
+		if strings.Contains(logs, `"level":"ERROR"`) || strings.Contains(logs, `"event_name":"command.failed"`) {
+			t.Errorf("invalid arguments were logged as an operational failure: %q", logs)
+		}
+		event, _, _ := strings.Cut(logs, "\n")
+		if strings.Contains(event, secret) {
+			t.Errorf("invalid command input leaked into structured event: %q", event)
+		}
+	}
+}
+
 func TestVersionString(t *testing.T) {
 	ov, oc, od := version, commit, date
 	defer func() { version, commit, date = ov, oc, od }()

@@ -84,6 +84,14 @@ type common struct {
 	operation string
 }
 
+type invalidCommandError struct{ message string }
+
+func (e *invalidCommandError) Error() string { return e.message }
+
+func invalidCommandf(format string, args ...any) error {
+	return &invalidCommandError{message: fmt.Sprintf(format, args...)}
+}
+
 // newCommonFlags builds a flag set carrying the common flags (--lang, --json),
 // the starting point for every command that takes them.
 func newCommonFlags(name string) (*flag.FlagSet, *common) {

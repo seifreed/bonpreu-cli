@@ -37,7 +37,7 @@ func cmdBrands(args []string) error {
 	csv := fs.Bool("csv", false, "emit CSV (brand,count) instead of a table")
 	parseFlags(fs, args)
 	if fs.NArg() != 0 {
-		return fmt.Errorf("usage: bonpreu brands [--update] [--depth N] [--limit N] [--csv]")
+		return invalidCommandf("usage: bonpreu brands [--update] [--depth N] [--limit N] [--csv]")
 	}
 
 	var ranked []brandCount
