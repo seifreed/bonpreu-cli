@@ -17,8 +17,10 @@ import (
 
 type browserLoginExecutor struct {
 	cookies           []*network.Cookie
+	setCookies        []*network.SetCookieParams
 	navigateError     error
 	navigateErrorText string
+	setCookieError    error
 	cookiesError      error
 	navigationURL     string
 	cookieURLs        []string
@@ -27,6 +29,12 @@ type browserLoginExecutor struct {
 func (e *browserLoginExecutor) Execute(_ context.Context, method string, params, result any) error {
 	switch method {
 	case network.CommandEnable:
+		return nil
+	case network.CommandSetCookie:
+		if e.setCookieError != nil {
+			return e.setCookieError
+		}
+		e.setCookies = append(e.setCookies, params.(*network.SetCookieParams))
 		return nil
 	case page.CommandNavigate:
 		e.navigationURL = params.(*page.NavigateParams).URL
@@ -49,7 +57,7 @@ func (e *browserLoginExecutor) Execute(_ context.Context, method string, params,
 
 func useBrowserLoginFakes(t *testing.T, executor cdp.Executor) {
 	t.Helper()
-	oldRun, oldNow, oldSleep := runBrowserActions, loginNow, loginSleep
+	oldRun, oldNow, oldSleep, oldCheckoutWait := runBrowserActions, loginNow, loginSleep, checkoutWait
 	runBrowserActions = func(ctx context.Context, actions ...chromedp.Action) error {
 		ctx = cdp.WithExecutor(ctx, executor)
 		for _, action := range actions {
@@ -62,7 +70,7 @@ func useBrowserLoginFakes(t *testing.T, executor cdp.Executor) {
 	loginNow = time.Now
 	loginSleep = sleepCtx
 	t.Cleanup(func() {
-		runBrowserActions, loginNow, loginSleep = oldRun, oldNow, oldSleep
+		runBrowserActions, loginNow, loginSleep, checkoutWait = oldRun, oldNow, oldSleep, oldCheckoutWait
 	})
 }
 
@@ -157,5 +165,91 @@ func TestSleepCtxCompletionAndCancellation(t *testing.T) {
 	cancel()
 	if err := sleepCtx(ctx, time.Hour); !errors.Is(err, context.Canceled) {
 		t.Fatalf("sleepCtx cancellation = %v", err)
+	}
+}
+
+func TestCheckoutPageURLRequiresBonpreuHTTPSHost(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		want  string
+		ok    bool
+	}{
+		{"https://www.compraonline.bonpreuesclat.cat/path?token=ignored#fragment", "https://www.compraonline.bonpreuesclat.cat/checkout", true},
+		{"http://www.bonpreuesclat.cat/", "", false},
+		{"https://bonpreuesclat.cat.attacker.example/", "", false},
+		{"https://example.com/", "", false},
+	} {
+		got, err := checkoutPageURL(tc.input)
+		if (err == nil) != tc.ok || got != tc.want {
+			t.Errorf("checkoutPageURL(%q) = %q, %v; want %q, ok=%v", tc.input, got, err, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestCheckoutInBrowserRejectsUnauthenticatedCookieBeforeLaunching(t *testing.T) {
+	for _, tc := range []struct{ cookie, want string }{
+		{"global_sid=anonymous", "authenticated"},
+		{"global_sid=; aws-waf-token=", "authenticated"},
+		{"global_sid=x\naws-waf-token=y", "could not be parsed"},
+	} {
+		if err := CheckoutInBrowser("https://www.bonpreuesclat.cat", tc.cookie); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("CheckoutInBrowser with invalid cookie %q error = %v", tc.cookie, err)
+		}
+	}
+}
+
+func TestCheckoutInBrowserRejectsUntrustedBaseURL(t *testing.T) {
+	if err := CheckoutInBrowser("http://example.com", "global_sid=session; aws-waf-token=waf"); err == nil || !strings.Contains(err.Error(), "HTTPS Bonpreu host") {
+		t.Fatalf("CheckoutInBrowser with untrusted base URL error = %v", err)
+	}
+}
+
+func TestCheckoutInBrowserSetsSessionCookiesAndNavigates(t *testing.T) {
+	executor := &browserLoginExecutor{}
+	useBrowserLoginFakes(t, executor)
+	checkoutWait = func() error { return nil }
+	if err := CheckoutInBrowser("https://www.compraonline.bonpreuesclat.cat/ignored", "global_sid=session; aws-waf-token=waf"); err != nil {
+		t.Fatal(err)
+	}
+	if executor.navigationURL != "https://www.compraonline.bonpreuesclat.cat/checkout" {
+		t.Fatalf("checkout navigation URL = %q", executor.navigationURL)
+	}
+	if len(executor.setCookies) != 2 {
+		t.Fatalf("set cookies = %#v", executor.setCookies)
+	}
+	seen := map[string]string{}
+	for _, cookie := range executor.setCookies {
+		seen[cookie.Name] = cookie.Value
+		if cookie.URL != executor.navigationURL || !cookie.Secure || !cookie.HTTPOnly {
+			t.Errorf("cookie params = %#v", cookie)
+		}
+	}
+	if seen["global_sid"] != "session" || seen["aws-waf-token"] != "waf" {
+		t.Fatalf("set cookie values = %#v", seen)
+	}
+}
+
+func TestCheckoutInBrowserReturnsNavigationCookieAndWaitErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		setup   func(*browserLoginExecutor)
+		waitErr error
+		want    string
+	}{
+		{"cookie setup", func(e *browserLoginExecutor) { e.setCookieError = errors.New("cookie setup failed") }, nil, "open checkout browser: cookie setup failed"},
+		{"navigation command", func(e *browserLoginExecutor) { e.navigateError = errors.New("navigation failed") }, nil, "open checkout browser: navigation failed"},
+		{"navigation response", func(e *browserLoginExecutor) { e.navigateErrorText = "net::ERR_FAILED" }, nil, "navigate: net::ERR_FAILED"},
+		{"wait", func(*browserLoginExecutor) {}, errors.New("stdin failed"), "wait for checkout confirmation: stdin failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			executor := &browserLoginExecutor{}
+			tc.setup(executor)
+			useBrowserLoginFakes(t, executor)
+			checkoutWait = func() error { return tc.waitErr }
+			err := CheckoutInBrowser("https://www.bonpreuesclat.cat", "global_sid=session; aws-waf-token=waf")
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("CheckoutInBrowser error = %v; want %q", err, tc.want)
+			}
+		})
 	}
 }

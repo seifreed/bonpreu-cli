@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,6 +22,68 @@ func TestCheckoutCanValidate(t *testing.T) {
 	out, err := capture(t, func() error { return cmdCheckout([]string{"status"}) })
 	if err != nil || !strings.Contains(out, "es pot validar") {
 		t.Fatalf("can-validate path: %q err %v", out, err)
+	}
+}
+
+func TestCheckoutBrowserUsesAuthenticatedSessionAndReportsHandoffOnly(t *testing.T) {
+	srv := apiServer(t)
+	defer srv.Close()
+	useServer(t, srv, true)
+	oldOpen := openCheckoutBrowser
+	openCheckoutBrowser = func(baseURL, cookie string) error {
+		if baseURL != srv.URL || cookie != "global_sid=a; aws-waf-token=b" {
+			t.Errorf("checkout browser args = (%q, %q)", baseURL, cookie)
+		}
+		return nil
+	}
+	t.Cleanup(func() { openCheckoutBrowser = oldOpen })
+	oldInfo := stderrInfo
+	var events []string
+	stderrInfo = func(event, _ string, _ ...any) { events = append(events, event) }
+	t.Cleanup(func() { stderrInfo = oldInfo })
+
+	out, err := capture(t, func() error { return cmdCheckout([]string{"browser", "--json"}) })
+	if err != nil || !strings.Contains(out, `"browser_closed": true`) || !strings.Contains(out, `"order_placed": false`) {
+		t.Fatalf("checkout browser output = %q, err %v", out, err)
+	}
+	if len(events) != 2 || events[0] != "checkout.browser.started" || events[1] != "checkout.browser.closed" {
+		t.Fatalf("checkout browser events = %v", events)
+	}
+}
+
+func TestCheckoutBrowserHumanOutput(t *testing.T) {
+	srv := apiServer(t)
+	defer srv.Close()
+	useServer(t, srv, true)
+	oldOpen := openCheckoutBrowser
+	openCheckoutBrowser = func(string, string) error { return nil }
+	t.Cleanup(func() { openCheckoutBrowser = oldOpen })
+	out, err := capture(t, func() error { return cmdCheckout([]string{"browser"}) })
+	if err != nil || !strings.Contains(out, "no ha confirmado si se realizó la compra") {
+		t.Fatalf("checkout browser output = %q, err %v", out, err)
+	}
+}
+
+func TestCheckoutBrowserPropagatesHandoffError(t *testing.T) {
+	srv := apiServer(t)
+	defer srv.Close()
+	useServer(t, srv, true)
+	oldOpen := openCheckoutBrowser
+	openCheckoutBrowser = func(string, string) error { return fmt.Errorf("browser launch failed") }
+	t.Cleanup(func() { openCheckoutBrowser = oldOpen })
+	_, err := capture(t, func() error { return cmdCheckout([]string{"browser"}) })
+	if err == nil || err.Error() != "browser launch failed" {
+		t.Fatalf("checkout browser error = %v", err)
+	}
+}
+
+func TestCheckoutBrowserRequiresAuthentication(t *testing.T) {
+	srv := apiServer(t)
+	defer srv.Close()
+	useServer(t, srv, false)
+	_, err := capture(t, func() error { return cmdCheckout([]string{"browser"}) })
+	if err == nil || !strings.Contains(err.Error(), "not authenticated") {
+		t.Fatalf("checkout browser without auth error = %v", err)
 	}
 }
 

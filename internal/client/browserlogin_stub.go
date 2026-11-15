@@ -12,3 +12,8 @@ func LoginViaBrowser(_ string) (Session, error) {
 		"use `bonpreu login --from-browser <chrome|firefox|safari|edge|brave>`, " +
 		"or rebuild with `go build -tags browserlogin`")
 }
+
+// CheckoutInBrowser is unavailable in the default build, which does not include chromedp.
+func CheckoutInBrowser(_ string, _ string) error {
+	return fmt.Errorf("interactive checkout needs a build with `-tags browserlogin` and Chrome")
+}

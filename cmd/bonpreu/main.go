@@ -201,6 +201,7 @@ AUTHENTICATED COMMANDS (bring your own browser session):
   checkout reserve --address <id> --slot <id>   reserve a slot; does not place the order
                                --region <id> overrides the session region
                                --external-address <text> optional custom address
+  checkout browser             open the official checkout to review/confirm manually
 
 SPENDING GUARD (agent safety):
   --max <eur>             refuse a cart line over <eur>. Also BONPREU_MAX_EUR env

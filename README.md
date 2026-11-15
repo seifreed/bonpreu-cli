@@ -201,10 +201,11 @@ bonpreu whoami                           # verify the session is accepted
 | `bonpreu checkout addresses` | List saved delivery destinations (`--json`) |
 | `bonpreu checkout slots --address <id>` | List delivery slots for a destination |
 | `bonpreu checkout reserve --address <id> --slot <id>` | Reserve a delivery slot for the active cart; region comes from the session or `--region` |
+| `bonpreu checkout browser` | Open the official checkout with the saved session; review and confirm there |
 
 Cart writes resolve the short retailer id to the API's product UUID, then `POST …/apply-quantity` — the same delta-based call the website's quantity buttons make (the CLI fetches the required `X-CSRF-TOKEN` itself). `whoami` is a real check: it hits an endpoint that returns `401` for anonymous callers.
 
-> **No order placement.** Status, addresses, and slot listings are read-only; `checkout reserve` selects a delivery slot for the active cart. It does not submit the order or start payment authentication. Final order validation and payment remain in the browser.
+> `checkout browser` opens Bonpreu's official checkout in Chrome (requires `-tags browserlogin` and Chrome). Review the order and confirm it yourself in the page; payment authentication stays with Bonpreu and your bank. The CLI does not submit payment or report that an order was placed.
 
 ### Spending Guard (agent safety)
 
@@ -314,7 +315,7 @@ Contributions are welcome.
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-Run the standard checks before opening a PR: `make check` (formats, vets + tests, and builds **both** the default and `-tags browserlogin` configurations), or individually `gofmt -l .`, `go vet ./...`, `go test ./...`.
+Run the full Go quality gate before opening a PR: `make check` (formatting, vet, tests, build, golangci-lint for both build configurations, and `govulncheck`). Install `golangci-lint` v2 and `govulncheck` v1.9.0 first. The golangci configuration includes Staticcheck, gosec, errcheck, revive, ineffassign, unused, and gocritic.
 
 ---
 

@@ -13,3 +13,9 @@ func TestLoginViaBrowserDefaultBuildExplainsBuildTag(t *testing.T) {
 		t.Fatalf("LoginViaBrowser error = %v", err)
 	}
 }
+
+func TestCheckoutInBrowserDefaultBuildExplainsBuildTag(t *testing.T) {
+	if err := CheckoutInBrowser("https://www.bonpreuesclat.cat", "global_sid=x; aws-waf-token=y"); err == nil || !strings.Contains(err.Error(), "-tags browserlogin") {
+		t.Fatalf("CheckoutInBrowser error = %v", err)
+	}
+}

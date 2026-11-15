@@ -7,8 +7,10 @@ import (
 	"github.com/seifreed/bonpreu-cli/internal/client"
 )
 
+var openCheckoutBrowser = client.CheckoutInBrowser
+
 // cmdCheckout dispatches checkout inspection and slot-reservation commands.
-// Placing an order is intentionally not implemented (see README).
+// Order confirmation and payment remain in Bonpreu's official browser UI.
 func cmdCheckout(args []string) error {
 	if len(args) == 0 {
 		return checkoutStatus(nil)
@@ -22,10 +24,31 @@ func cmdCheckout(args []string) error {
 		return checkoutSlots(args[1:])
 	case "reserve":
 		return checkoutReserve(args[1:])
+	case "browser":
+		return checkoutBrowser(args[1:])
 	default:
 		// No subcommand → treat as `status` with flags.
 		return checkoutStatus(args)
 	}
+}
+
+func checkoutBrowser(args []string) error {
+	fs, cf := newCommonFlags("checkout browser")
+	parseFlags(fs, args)
+	cl, err := authedClient(cf)
+	if err != nil {
+		return err
+	}
+	stderrInfo("checkout.browser.started", "opening official checkout in browser", "operation", cf.operation)
+	if err := openCheckoutBrowser(cl.BaseURL, cl.Cookie); err != nil {
+		return err
+	}
+	stderrInfo("checkout.browser.closed", "official checkout browser closed; purchase status was not verified", "operation", cf.operation)
+	if done, err := emitStructured(cf, map[string]any{"browser_closed": true, "order_placed": false}); done {
+		return err
+	}
+	fmt.Println("navegador cerrado; el CLI no ha confirmado si se realizó la compra")
+	return nil
 }
 
 func checkoutReserve(args []string) error {
