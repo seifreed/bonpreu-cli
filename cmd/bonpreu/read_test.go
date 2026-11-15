@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -235,6 +236,39 @@ func TestBatchSkipsUnavailableProducts(t *testing.T) {
 	out, err := capture(t, func() error { return cmdBatch([]string{"--json", "x"}) })
 	if err != nil || !strings.Contains(out, `"retailerProductId": "available"`) || strings.Contains(out, `"retailerProductId": "unavailable"`) {
 		t.Fatalf("batch selection = %q, err %v; want the available product", out, err)
+	}
+}
+
+func TestBatchSearchesBeyondFirstTenResultsForAvailableProduct(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/product-pages/search") {
+			http.NotFound(w, r)
+			return
+		}
+		limit, err := strconv.Atoi(r.URL.Query().Get("maxPageSize"))
+		if err != nil || limit != 100 {
+			t.Errorf("maxPageSize = %q, want default 100", r.URL.Query().Get("maxPageSize"))
+		}
+		var body strings.Builder
+		body.WriteString(`{"productGroups":[{"decoratedProducts":[`)
+		for i := 0; i < 10; i++ {
+			if i > 0 {
+				body.WriteByte(',')
+			}
+			fmt.Fprintf(&body, `{"retailerProductId":"out-%d","name":"Out","available":false}`, i)
+		}
+		if limit > 10 {
+			body.WriteString(`,{"retailerProductId":"in-stock","name":"In stock","available":true,"price":{"amount":"1.00"}}`)
+		}
+		body.WriteString(`]}]}`)
+		_, _ = w.Write([]byte(body.String()))
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+
+	out, err := capture(t, func() error { return cmdBatch([]string{"--json", "x"}) })
+	if err != nil || !strings.Contains(out, `"retailerProductId": "in-stock"`) {
+		t.Fatalf("batch output = %q, err %v; want available result after first ten", out, err)
 	}
 }
 

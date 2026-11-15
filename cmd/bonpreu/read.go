@@ -199,7 +199,7 @@ func cmdBatch(args []string) error {
 	missing := 0
 	var searchErrors []error
 	for _, t := range terms {
-		pp, serr := cl.Search(t, 10)
+		pp, serr := cl.Search(t, 0)
 		if serr != nil {
 			out = append(out, hit{Term: t, Error: serr.Error()})
 			searchErrors = append(searchErrors, serr)
