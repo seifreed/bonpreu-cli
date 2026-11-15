@@ -741,8 +741,22 @@ func TestDecodeError(t *testing.T) {
 	var out struct {
 		A int `json:"a"`
 	}
-	if err := testClient(srv).DoJSON("GET", srv.URL+"/x", nil, &out); err == nil {
+	err := testClient(srv).DoJSON("GET", srv.URL+"/x?token=private-value", nil, &out)
+	if err == nil {
 		t.Error("invalid JSON should produce a decode error")
+	} else if strings.Contains(err.Error(), "private-value") {
+		t.Fatalf("decode error exposed URL query: %v", err)
+	}
+}
+
+func TestDecodeEmptyJSONResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer srv.Close()
+	var out struct {
+		A int `json:"a"`
+	}
+	if err := testClient(srv).DoJSON("GET", srv.URL+"/x", nil, &out); err == nil {
+		t.Fatal("an empty 2xx response should not decode as JSON success")
 	}
 }
 

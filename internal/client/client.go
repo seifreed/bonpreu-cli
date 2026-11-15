@@ -357,9 +357,13 @@ func (c *Client) doOnce(method, url string, body, out any, extra map[string]stri
 	if err != nil {
 		return err
 	}
-	if out != nil && len(data) > 0 {
+	if out != nil {
+		requestURL := safeRequestURL(url)
+		if len(data) == 0 {
+			return fmt.Errorf("decode response from %s: empty JSON body", requestURL)
+		}
 		if err := json.Unmarshal(data, out); err != nil {
-			return fmt.Errorf("decode %s: %w", url, err)
+			return fmt.Errorf("decode response from %s: %w", requestURL, err)
 		}
 	}
 	return nil
