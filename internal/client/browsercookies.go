@@ -22,6 +22,10 @@ type nameVal struct{ name, val string }
 // decrypted store, not page JS). browser filters to one of chrome|chromium|
 // firefox|safari|edge|brave; "" reads every installed browser.
 func CookiesFromBrowser(browser string) (Session, error) {
+	return cookiesFromSequence(browser, kooky.TraverseCookies(context.Background(), kooky.DomainContains(cookieDomain)))
+}
+
+func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, error) {
 	browser = strings.ToLower(strings.TrimSpace(browser))
 
 	// Collect Bonpreu cookies grouped BY BROWSER, skipping per-store failures: a
@@ -36,7 +40,7 @@ func CookiesFromBrowser(browser string) (Session, error) {
 	}
 	stores := map[string]*store{}
 	var storeOrder []string
-	for c, err := range kooky.TraverseCookies(context.Background(), kooky.DomainContains(cookieDomain)) {
+	for c, err := range cookies {
 		if err != nil || c == nil || c.Name == "" || c.Value == "" {
 			continue
 		}
