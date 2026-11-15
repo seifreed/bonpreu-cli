@@ -186,20 +186,21 @@ func cartClear(args []string) error {
 	return nil
 }
 
-// currentQty returns the quantity of a product already in the active cart (0 if
-// absent). A read failure is returned, not swallowed: `cart set` derives its
-// delta from this, so a silent 0 would over-add the full target quantity.
+// currentQty returns the summed quantity of a product already in the active cart
+// (0 if absent). A read failure is returned, not swallowed: `cart set` derives
+// its delta from this, so a silent 0 would over-add the full target quantity.
 func currentQty(cl *client.Client, productID string) (float64, error) {
 	cart, err := cl.GetCart()
 	if err != nil {
 		return 0, err
 	}
+	var quantity float64
 	for _, l := range cart.Lines {
 		if l.ProductID == productID {
-			return l.Quantity, nil
+			quantity += l.Quantity
 		}
 	}
-	return 0, nil
+	return quantity, nil
 }
 
 // guardLineAdd enforces --max against the resulting product-line value.

@@ -153,6 +153,32 @@ func TestCartWriteLimitAppliesToResultingLine(t *testing.T) {
 	}
 }
 
+func TestCartAddMaxSumsDuplicateExistingLines(t *testing.T) {
+	var writes atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/products/"):
+			w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case strings.Contains(r.URL.Path, "/apply-quantity"):
+			writes.Add(1)
+			w.Write([]byte(`{"items":[]}`))
+		case r.URL.Path == "/api/cart/v1/carts/active":
+			w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":1},{"productId":"uuid-23597","quantity":2}]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1", "--max", "5"}) }); err == nil || !strings.Contains(err.Error(), "BUDGET EXCEEDED") {
+		t.Fatalf("cart add with duplicate existing lines error = %v, want budget exceeded", err)
+	}
+	if got := writes.Load(); got != 0 {
+		t.Fatalf("cart add sent %d writes despite duplicate lines exceeding the limit", got)
+	}
+}
+
 func TestCartAddLimitFailsClosedWhenCurrentCartCannotBeRead(t *testing.T) {
 	var writes atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -222,6 +248,17 @@ func TestCurrentQtyReturnsQuantity(t *testing.T) {
 	q, err := currentQty(testCartClient(srv), "p1")
 	if err != nil || q != 4 {
 		t.Fatalf("currentQty = %v, %v; want 4, nil", q, err)
+	}
+}
+
+func TestCurrentQtySumsDuplicateProductLines(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"items":[{"productId":"p1","quantity":2},{"productId":"p1","quantity":3}]}`))
+	}))
+	defer srv.Close()
+	q, err := currentQty(testCartClient(srv), "p1")
+	if err != nil || q != 5 {
+		t.Fatalf("currentQty for repeated lines = %v, %v; want 5, nil", q, err)
 	}
 }
 
