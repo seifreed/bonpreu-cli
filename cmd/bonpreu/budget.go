@@ -38,6 +38,16 @@ func validatedMax(value float64, source string) (float64, error) {
 	return value, nil
 }
 
+type budgetExceededError struct {
+	total  float64
+	maxEUR float64
+	action string
+}
+
+func (e *budgetExceededError) Error() string {
+	return fmt.Sprintf("BUDGET EXCEEDED: %s total %.2f€ is over the %.2f€ limit — refusing (raise with --max, BONPREU_MAX_EUR, or [limits].max_eur)", e.action, e.total, e.maxEUR)
+}
+
 // checkBudget fails when a known total exceeds the cap. maxEUR <= 0 disables it.
 func checkBudget(total float64, maxEUR float64, action string) error {
 	if _, err := validatedMax(maxEUR, "budget limit"); err != nil {
@@ -50,7 +60,7 @@ func checkBudget(total float64, maxEUR float64, action string) error {
 		return nil
 	}
 	if total > maxEUR {
-		return fmt.Errorf("BUDGET EXCEEDED: %s total %.2f€ is over the %.2f€ limit — refusing (raise with --max, BONPREU_MAX_EUR, or [limits].max_eur)", action, total, maxEUR)
+		return &budgetExceededError{action: action, total: total, maxEUR: maxEUR}
 	}
 	return nil
 }

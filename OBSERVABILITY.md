@@ -31,6 +31,7 @@ Events currently emitted:
 |---|---|---|
 | `command.completed` | INFO | operation, duration, outcome |
 | `command.failed` | ERROR | operation, duration, error type, HTTP status when available; no raw error text |
+| `command.rejected` | WARN | expected spending-limit refusal; operation, duration, outcome, fixed reason code |
 | `command.panicked` | FATAL | operation, panic type, stack trace; the panic value is omitted |
 | `command.invalid` | WARN | fixed operation name and `UsageError`; raw command input is omitted |
 | `http.request.start` | TRACE | method only; no URL, query, headers, or body |
@@ -126,7 +127,7 @@ are based on the verification evidence above and the applicability decisions bel
 | Security and privacy | 4 | 10 | Tests prove cookies, remote bodies, queries, transport error text, and panic values are omitted; slog escapes untrusted strings. |
 | Performance and resilience | 8 | 10 | Lightweight synchronous stderr events fit short-lived low-volume commands; errors do not panic the caller and TRACE is opt-in. |
 | Configuration and portability | 1 | 10 | Environment selects levels and format; shell redirection selects the destination while data remains on stdout. |
-| Error handling | 5 | 10 | Returned failures are logged once at the command boundary; invalid input is WARN and panics are FATAL with stack traces but no panic value. |
+| Error handling | 5 | 10 | Operational failures are logged once at the command boundary; expected spending-limit refusals are WARN, invalid commands are WARN, and panics are FATAL with stack traces but no panic value. |
 | Testing and verification | 6 | 10 | Both build configurations have 100.0% statement coverage; logger concurrency/sink-failure/privacy and fake-CDP browser-login tests pass under the race detector, vet, both builds, and vulnerability scans. |
 
 Initial mean: **3.4/10**. Final mean: **10.0/10**. No dimension is excluded.

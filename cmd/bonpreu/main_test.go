@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -108,6 +109,39 @@ func TestRunLogsCommandCompletionAndSafeFailure(t *testing.T) {
 		t.Fatalf("remote body leaked to logs: %q", logs)
 	}
 	t.Logf("captured failure log sample: %s", logs)
+}
+
+func TestRunLogsBudgetRejectionAsWarning(t *testing.T) {
+	t.Setenv("BONPREU_LOG_FORMAT", "json")
+	t.Setenv("BONPREU_LOG_LEVEL", "info")
+	var cartWrites atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/products/") {
+			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"2.00"}}}</html>`))
+			return
+		}
+		if r.URL.Path == "/api/cart/v1/carts/active" {
+			_, _ = w.Write([]byte(`{"items":[]}`))
+			return
+		}
+		if r.Method == http.MethodPost {
+			cartWrites.Add(1)
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	code, logs := runWithStderr(t, []string{"cart", "add", "23597", "1", "--max", "1"})
+	if code != 1 || !strings.Contains(logs, `"level":"WARN"`) || !strings.Contains(logs, `"event_name":"command.rejected"`) || !strings.Contains(logs, `"reason":"budget_exceeded"`) {
+		t.Fatalf("budget rejection exit=%d logs=%q", code, logs)
+	}
+	if strings.Contains(logs, `"level":"ERROR"`) || strings.Contains(logs, `"event_name":"command.failed"`) {
+		t.Fatalf("expected budget refusal was logged as a failure: %q", logs)
+	}
+	if got := cartWrites.Load(); got != 0 {
+		t.Fatalf("budget refusal sent %d cart writes, want 0", got)
+	}
 }
 
 func TestCommandOperationNames(t *testing.T) {

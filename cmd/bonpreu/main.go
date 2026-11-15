@@ -10,6 +10,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -100,6 +101,15 @@ func run(args []string) int {
 		return 2
 	}
 	if err != nil {
+		var rejected *budgetExceededError
+		if errors.As(err, &rejected) {
+			defaultLogger().Warn("command rejected by spending limit",
+				"component", "cli", "event_name", "command.rejected",
+				"operation", operation, "duration_ms", time.Since(started).Milliseconds(),
+				"outcome", "rejected", "reason", "budget_exceeded")
+			fmt.Fprintln(os.Stderr, "error:", terminalText(err.Error()))
+			return 1
+		}
 		attrs := []any{"component", "cli", "event_name", "command.failed",
 			"operation", operation, "duration_ms", time.Since(started).Milliseconds()}
 		if status, ok := client.HTTPStatus(err); ok {
