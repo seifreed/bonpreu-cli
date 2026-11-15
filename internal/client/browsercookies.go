@@ -42,9 +42,12 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 	stores := map[storeKey]*store{}
 	var storeOrder []storeKey
 	var storeErrors []error
+	unsupportedStoreCount := 0
 	for c, err := range cookies {
 		if err != nil {
-			if !isUnsupportedCookieStoreError(err) {
+			if isUnsupportedCookieStoreError(err) {
+				unsupportedStoreCount++
+			} else {
 				storeErrors = append(storeErrors, err)
 			}
 			continue
@@ -93,6 +96,9 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 	}
 	if len(storeErrors) > 0 {
 		return Session{}, fmt.Errorf("could not read browser cookie stores: %w", errors.Join(storeErrors...))
+	}
+	if unsupportedStoreCount > 0 {
+		return Session{}, fmt.Errorf("no Bonpreu session found in %s; %d browser cookie store(s) are unsupported on this platform — use `bonpreu import-har` instead", where, unsupportedStoreCount)
 	}
 	return Session{}, fmt.Errorf("no Bonpreu session found in %s — "+
 		"log in at compraonline.bonpreuesclat.cat in that browser first "+

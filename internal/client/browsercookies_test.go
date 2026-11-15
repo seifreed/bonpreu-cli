@@ -129,12 +129,21 @@ func TestCookiesFromSequenceOnlySkipsKnownUnsupportedStoreErrors(t *testing.T) {
 			cookieItem{nil, fmt.Errorf("cookie store: %w", errors.New(message))},
 			cookieItem{browserCookie("chrome", "global_sid", "half-session"), nil},
 		))
-		if err == nil || !strings.Contains(err.Error(), "no Bonpreu session found") {
-			t.Errorf("known unsupported error %q should be skipped, got %v", message, err)
+		if err == nil || !strings.Contains(err.Error(), "no Bonpreu session found") || !strings.Contains(err.Error(), "unsupported on this platform") {
+			t.Errorf("known unsupported error %q should be reported when no session is found, got %v", message, err)
 		}
 	}
 
-	_, err := cookiesFromSequence("chrome", cookieSequence(
+	got, err := cookiesFromSequence("chrome", cookieSequence(
+		cookieItem{nil, errors.New("not implemented")},
+		cookieItem{browserCookie("chrome", "global_sid", "session"), nil},
+		cookieItem{browserCookie("chrome", "aws-waf-token", "token"), nil},
+	))
+	if err != nil || !CookieLooksAuthed(got.Cookie) {
+		t.Errorf("unsupported unrelated store should not block a valid session: %+v, %v", got, err)
+	}
+
+	_, err = cookiesFromSequence("chrome", cookieSequence(
 		cookieItem{nil, errors.New("profile not implemented: decryption failed")},
 	))
 	if err == nil || !strings.Contains(err.Error(), "profile not implemented: decryption failed") {
