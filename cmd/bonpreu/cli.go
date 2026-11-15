@@ -54,16 +54,19 @@ func newLogger(w io.Writer) *slog.Logger {
 
 // common flags shared by every subcommand.
 type common struct {
-	lang    string
-	jsonOut bool
-	toon    bool
+	lang      string
+	jsonOut   bool
+	toon      bool
+	operation string
 }
 
 // newCommonFlags builds a flag set carrying the common flags (--lang, --json),
 // the starting point for every command that takes them.
 func newCommonFlags(name string) (*flag.FlagSet, *common) {
 	fs := flag.NewFlagSet(name, flag.ExitOnError)
-	return fs, addCommon(fs)
+	c := addCommon(fs)
+	c.operation = name
+	return fs, c
 }
 
 func addCommon(fs *flag.FlagSet) *common {
@@ -83,7 +86,7 @@ func addCommon(fs *flag.FlagSet) *common {
 // loaded from config/cache by the authenticated commands, not here.
 func newClient(c *common) *client.Client {
 	cl := client.New()
-	cl.Logger = defaultLogger().With("service", "bonpreu")
+	cl.Logger = clientLogger(os.Stderr, c.operation)
 	// BONPREU_BASE_URL points the client at an alternate host (a debugging proxy,
 	// a mock, or a staging endpoint) instead of the production API.
 	if u := os.Getenv("BONPREU_BASE_URL"); u != "" {
@@ -100,6 +103,10 @@ func newClient(c *common) *client.Client {
 		cl.RegionID = cfg.Defaults.RegionID
 	}
 	return cl
+}
+
+func clientLogger(w io.Writer, operation string) *slog.Logger {
+	return newLogger(w).With("service", "bonpreu", "operation", operation)
 }
 
 // parseFlags parses args into fs, letting flags appear among positionals (see

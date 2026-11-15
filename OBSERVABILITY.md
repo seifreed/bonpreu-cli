@@ -20,6 +20,10 @@ keeps library use silent and independent of process I/O. CLI INFO/WARN helpers
 attach `service`, `component`, stable `event_name`, and event-specific attributes
 where useful. No logging service or third-party logging dependency is required.
 
+Client events inherit the originating CLI command in the `operation` field. This
+is a useful process-local grouping for multi-request operations; no synthetic
+distributed trace ID is created.
+
 Client events currently emitted:
 
 | Event | Level | Context |
@@ -87,18 +91,18 @@ are intermediate, not a completion claim.
 | Functional coverage | 2 | 5 | Retries, fallbacks, auth/cache/security warnings, cart mismatch, and brand crawl are observable; ordinary successful API operations are not consistently logged. |
 | Event quality | 4 | 8 | Stable event names and useful retry/progress fields; some static warnings have no event-specific attributes. |
 | Structured consistency | 0 | 9 | JSON/text `slog`, UTC time, service/component/event fields, and typed attributes for contextual warnings. |
-| Context and correlation | 0 | 3 | No request/correlation ID propagation. The CLI is single-process, but one brand crawl can span multiple HTTP calls and lacks a shared operation ID. |
+| Context and correlation | 0 | 4 | Client events carry command-level `operation`; no per-invocation/request ID, and brand category context is not propagated to retries. |
 | Security and privacy | 4 | 8 | No cookies/bodies/raw remote error strings in emitted client events; error output paths still need a whole-command privacy review. |
 | Performance and resilience | 8 | 8 | Synchronous standard-library writes; no network exporter or logger failure path. Volume is low and command lifetime is short. |
 | Configuration and portability | 1 | 8 | Standard environment configuration, stderr destination, no service dependency; no file rotation is needed for this process model. |
 | Error handling | 5 | 8 | Status-only API error string and typed event errors; some operation failures are only returned to the CLI caller, not logged with operation context. |
 | Testing and verification | 6 | 9 | Logger format/level/escaping/UTC, event paths, privacy, race detector, both builds; 98.0% statement coverage is below the requested 100%. |
 
-Initial mean: **3.4/10**. Current mean: **7.4/10**. No dimension is excluded.
+Initial mean: **3.4/10**. Current mean: **7.5/10**. No dimension is excluded.
 
 ## Remaining work
 
-- Add operation context across multi-request CLI flows where it materially helps diagnosis; do not invent distributed trace/span IDs in this single-process tool.
+- Add per-invocation and per-category context across multi-request flows where it materially helps diagnosis; do not invent distributed trace/span IDs in this single-process tool.
 - Replace remaining formatted warning context with typed, minimal structured attributes where useful.
 - Close the remaining statement coverage gaps where deterministic tests are safe. Some gaps are operating-system/browser integrations; tests must not read real user cookie stores.
 - Re-run security and full validation checks, then recalculate scores from current evidence. The 10/10 target has not been met.

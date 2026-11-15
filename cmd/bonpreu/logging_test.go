@@ -41,3 +41,15 @@ func TestDiagnosticLoggerLevelsAndTextFormat(t *testing.T) {
 		})
 	}
 }
+
+func TestClientLoggerAddsOperationContext(t *testing.T) {
+	t.Setenv("BONPREU_LOG_FORMAT", "json")
+	t.Setenv("BONPREU_LOG_LEVEL", "info")
+	var out bytes.Buffer
+	clientLogger(&out, "checkout slots").Info("request complete", "event_name", "http.complete")
+	for _, field := range []string{`"service":"bonpreu"`, `"operation":"checkout slots"`, `"event_name":"http.complete"`} {
+		if !strings.Contains(out.String(), field) {
+			t.Fatalf("logger output missing %s: %q", field, out.String())
+		}
+	}
+}
