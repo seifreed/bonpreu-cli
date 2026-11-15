@@ -4,6 +4,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,8 +21,10 @@ import (
 const configFile = "config.toml"
 
 var (
-	configStat     = os.Stat
-	openConfigRoot = os.OpenRoot
+	configStat       = os.Stat
+	configRandomRead = rand.Read
+	openConfigRoot   = os.OpenRoot
+	closeConfigRoot  = (*os.Root).Close
 )
 
 // Dir is ~/.bonpreu (or $BONPREU_CONFIG_DIR).
@@ -132,7 +136,7 @@ func Load(name string, v any) error {
 	if err := ensureDir(); err != nil {
 		return fmt.Errorf("prepare config directory: %w", err)
 	}
-	root, err := openConfigRoot(Dir())
+	root, err := openPrivateRoot()
 	if err != nil {
 		return fmt.Errorf("open config directory: %w", err)
 	}
@@ -160,21 +164,33 @@ func readFileError(name string, readErr, closeErr error) error {
 	return nil
 }
 
+func openPrivateRoot() (*os.Root, error) {
+	root, err := openConfigRoot(Dir())
+	if err != nil {
+		return nil, err
+	}
+	if runtime.GOOS != "windows" {
+		info, err := root.Stat(".")
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("stat config directory: %w", err), closeConfigRoot(root))
+		}
+		if info.Mode().Perm()&0o077 != 0 {
+			err := fmt.Errorf("config directory %q must have mode 0700 (currently %04o); restrict its permissions before continuing", Dir(), info.Mode().Perm())
+			return nil, errors.Join(err, closeConfigRoot(root))
+		}
+	}
+	return root, nil
+}
+
 // Save writes v as pretty JSON to name in the config dir, 0600 (secrets). The
-// write is atomic — a temp file in the same dir, then os.Rename — so a crash or
-// disk-full mid-write cannot truncate the credential store (session.json) and
+// write is atomic: a temp file is written and renamed within the same root, so
+// a crash or disk-full mid-write cannot truncate the credential store and
 // leave the user with a corrupt, half-written session.
 func Save(name string, v any) error {
 	if err := validateName(name); err != nil {
 		return err
 	}
-	return save(name, v, func(dir, pattern string) (io.WriteCloser, string, error) {
-		tmp, err := os.CreateTemp(dir, pattern)
-		if err != nil {
-			return nil, "", err
-		}
-		return tmp, tmp.Name(), nil
-	})
+	return save(name, v, createTempInRoot)
 }
 
 func validateName(name string) error {
@@ -184,7 +200,7 @@ func validateName(name string) error {
 	return nil
 }
 
-func save(name string, v any, createTemp func(string, string) (io.WriteCloser, string, error)) (resultErr error) {
+func save(name string, v any, createTemp func(*os.Root, string) (io.WriteCloser, string, error)) (resultErr error) {
 	if err := ensureDir(); err != nil {
 		return err
 	}
@@ -192,15 +208,23 @@ func save(name string, v any, createTemp func(string, string) (io.WriteCloser, s
 	if err != nil {
 		return err
 	}
-	dir := Dir()
-	tmp, tmpName, err := createTemp(dir, name+".tmp-*") // CreateTemp opens with 0600
+	root, err := openPrivateRoot()
+	if err != nil {
+		return fmt.Errorf("open config directory: %w", err)
+	}
+	defer func() {
+		if err := closeConfigRoot(root); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("close config directory: %w", err))
+		}
+	}()
+	tmp, tmpName, err := createTemp(root, name+".tmp-")
 	if err != nil {
 		return err
 	}
 	renamed := false
 	defer func() {
 		if !renamed {
-			if err := os.Remove(tmpName); err != nil && !os.IsNotExist(err) {
+			if err := root.Remove(tmpName); err != nil && !os.IsNotExist(err) {
 				resultErr = errors.Join(resultErr, fmt.Errorf("remove temporary config file: %w", err))
 			}
 		}
@@ -208,11 +232,24 @@ func save(name string, v any, createTemp func(string, string) (io.WriteCloser, s
 	if err := writeTemp(tmp, b); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpName, filepath.Join(dir, name)); err != nil {
+	if err := root.Rename(tmpName, name); err != nil {
 		return err
 	}
 	renamed = true
 	return nil
+}
+
+func createTempInRoot(root *os.Root, prefix string) (io.WriteCloser, string, error) {
+	var suffix [16]byte
+	if _, err := configRandomRead(suffix[:]); err != nil {
+		return nil, "", fmt.Errorf("generate temporary config filename: %w", err)
+	}
+	name := prefix + hex.EncodeToString(suffix[:])
+	f, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return nil, "", fmt.Errorf("create temporary config file: %w", err)
+	}
+	return f, name, nil
 }
 
 func writeTemp(tmp io.WriteCloser, data []byte) error {

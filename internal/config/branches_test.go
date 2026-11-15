@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -63,7 +64,8 @@ func TestWriteTempClosesAndReturnsFailures(t *testing.T) {
 
 func TestSaveReportsTemporaryCleanupFailure(t *testing.T) {
 	dir := privateConfigTestDir(t)
-	tmpPath := filepath.Join(dir, "session.json.tmp-test")
+	tmpName := "session.json.tmp-test"
+	tmpPath := filepath.Join(dir, tmpName)
 	if err := os.Mkdir(tmpPath, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -71,8 +73,8 @@ func TestSaveReportsTemporaryCleanupFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFailure := errors.New("disk write failed")
-	err := save("session.json", map[string]string{"cookie": "secret"}, func(_, _ string) (io.WriteCloser, string, error) {
-		return &failingTemp{writeErr: writeFailure}, tmpPath, nil
+	err := save("session.json", map[string]string{"cookie": "secret"}, func(_ *os.Root, _ string) (io.WriteCloser, string, error) {
+		return &failingTemp{writeErr: writeFailure}, tmpName, nil
 	})
 	if !errors.Is(err, writeFailure) || !strings.Contains(err.Error(), "remove temporary config file") {
 		t.Fatalf("save error = %v; want write and cleanup errors", err)
@@ -135,6 +137,76 @@ func TestEnsureDirPropagatesStatError(t *testing.T) {
 	}
 }
 
+func TestSaveRechecksPermissionsOnOpenedRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows ACLs are not represented by Go permission bits")
+	}
+	dir := privateConfigTestDir(t)
+	old := configStat
+	configStat = func(path string) (os.FileInfo, error) {
+		info, err := old(path)
+		if path == dir && err == nil {
+			if err := os.Chmod(dir, 0o755); err != nil {
+				return nil, err
+			}
+		}
+		return info, err
+	}
+	t.Cleanup(func() { configStat = old })
+
+	if err := Save("session.json", map[string]string{"cookie": "secret"}); err == nil || !strings.Contains(err.Error(), "must have mode 0700") {
+		t.Fatalf("Save after permission change = %v; want opened-root permission failure", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "session.json")); !os.IsNotExist(err) {
+		t.Fatalf("session file stat error = %v; want no secret written", err)
+	}
+}
+
+func TestOpenPrivateRootReportsStatFailure(t *testing.T) {
+	dir := privateConfigTestDir(t)
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Close(); err != nil {
+		t.Fatal(err)
+	}
+	old := openConfigRoot
+	openConfigRoot = func(string) (*os.Root, error) { return root, nil }
+	t.Cleanup(func() { openConfigRoot = old })
+
+	if _, err := openPrivateRoot(); err == nil {
+		t.Fatal("openPrivateRoot error = nil; want stat failure for closed root")
+	}
+}
+
+func TestSaveReportsRootCloseFailure(t *testing.T) {
+	privateConfigTestDir(t)
+	want := errors.New("close config directory failed")
+	old := closeConfigRoot
+	closeConfigRoot = func(root *os.Root) error {
+		if err := old(root); err != nil {
+			return err
+		}
+		return want
+	}
+	t.Cleanup(func() { closeConfigRoot = old })
+	if err := Save("session.json", map[string]string{"cookie": "secret"}); !errors.Is(err, want) {
+		t.Fatalf("save error = %v, want root close failure", err)
+	}
+}
+
+func TestCreateTempInRootReportsRandomFailure(t *testing.T) {
+	want := errors.New("random source failed")
+	old := configRandomRead
+	configRandomRead = func([]byte) (int, error) { return 0, want }
+	t.Cleanup(func() { configRandomRead = old })
+
+	if _, _, err := createTempInRoot(nil, "session.json.tmp-"); !errors.Is(err, want) {
+		t.Fatalf("createTempInRoot error = %v, want random source error", err)
+	}
+}
+
 func TestLoadConfigPropagatesConfigStatError(t *testing.T) {
 	privateConfigTestDir(t)
 	want := errors.New("config stat failed")
@@ -162,6 +234,17 @@ func TestLoadPropagatesOpenRootError(t *testing.T) {
 	var v map[string]any
 	if err := Load("session.json", &v); !errors.Is(err, want) {
 		t.Fatalf("Load error = %v, want open-root error", err)
+	}
+}
+
+func TestSavePropagatesOpenRootError(t *testing.T) {
+	privateConfigTestDir(t)
+	want := errors.New("open config directory failed")
+	old := openConfigRoot
+	openConfigRoot = func(string) (*os.Root, error) { return nil, want }
+	t.Cleanup(func() { openConfigRoot = old })
+	if err := Save("session.json", map[string]string{"cookie": "secret"}); !errors.Is(err, want) {
+		t.Fatalf("Save error = %v, want open-root error", err)
 	}
 }
 
@@ -236,7 +319,7 @@ func TestSaveReturnsCreateTempFailure(t *testing.T) {
 func TestSaveReturnsInjectedCreateTempFailure(t *testing.T) {
 	privateConfigTestDir(t)
 	want := errors.New("temporary-file creation failed")
-	err := save("session.json", map[string]any{"cookie": "secret"}, func(string, string) (io.WriteCloser, string, error) {
+	err := save("session.json", map[string]any{"cookie": "secret"}, func(*os.Root, string) (io.WriteCloser, string, error) {
 		return nil, "", want
 	})
 	if !errors.Is(err, want) {
@@ -269,14 +352,15 @@ func TestSaveCreateTempAndRenameFailures(t *testing.T) {
 
 func TestSaveWriteFailureCleansUpTemporaryFile(t *testing.T) {
 	dir := privateConfigTestDir(t)
-	tempPath := filepath.Join(dir, "session.json.tmp-test")
+	tempName := "session.json.tmp-test"
+	tempPath := filepath.Join(dir, tempName)
 	if err := os.WriteFile(tempPath, []byte("partial"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	writeFailure := errors.New("disk write failed")
 	tmp := &failingTemp{writeErr: writeFailure}
-	err := save("session.json", map[string]string{"cookie": "secret"}, func(_, _ string) (io.WriteCloser, string, error) {
-		return tmp, tempPath, nil
+	err := save("session.json", map[string]string{"cookie": "secret"}, func(_ *os.Root, _ string) (io.WriteCloser, string, error) {
+		return tmp, tempName, nil
 	})
 	if !errors.Is(err, writeFailure) {
 		t.Fatalf("save error = %v, want original write failure", err)

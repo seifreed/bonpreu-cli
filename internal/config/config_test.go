@@ -188,6 +188,13 @@ func TestSaveLoadJSONState(t *testing.T) {
 	if err := Save("session.json", in); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
+	info, err := os.Stat(filepath.Join(Dir(), "session.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("saved session permissions = %04o; want 0600", got)
+	}
 	var out state
 	if err := Load("session.json", &out); err != nil {
 		t.Fatalf("Load: %v", err)
