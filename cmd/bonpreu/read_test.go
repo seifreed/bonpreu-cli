@@ -274,3 +274,18 @@ func TestCmdTotalFailedLine(t *testing.T) {
 	}
 	_ = client.Product{}
 }
+
+func TestCmdTotalJSONReturnsFailureForUnpricedLine(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+	out, err := capture(t, func() error { return cmdTotal([]string{"--json", "99999"}) })
+	if err == nil || !strings.Contains(err.Error(), "could not be priced") {
+		t.Fatalf("total --json error = %v; want incomplete-total error", err)
+	}
+	if !strings.Contains(out, `"complete": false`) || !strings.Contains(out, `"error": "bonpreu api: HTTP 500"`) {
+		t.Fatalf("total --json output did not preserve failed line: %q", out)
+	}
+}

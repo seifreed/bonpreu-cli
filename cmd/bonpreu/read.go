@@ -347,7 +347,13 @@ func cmdTotal(args []string) error {
 		"count":    len(lines),
 		"complete": failed == 0,
 	}); done {
-		return err
+		if err != nil {
+			return err
+		}
+		if failed > 0 {
+			return fmt.Errorf("%d of %d lines could not be priced (excluded from the total) — check the ids exist", failed, len(lines))
+		}
+		return nil
 	}
 	for _, r := range results {
 		if r.Error != "" {
