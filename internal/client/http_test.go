@@ -506,11 +506,21 @@ func TestCapWaitAndRetryAfter(t *testing.T) {
 	if capWait(time.Hour) != maxRetryWait {
 		t.Error("huge wait should clamp to maxRetryWait")
 	}
-	if parseRetryAfter("Wed, 21 Oct 2099 07:28:00 GMT") != -1 {
-		t.Error("HTTP-date Retry-After is unsupported → -1")
+	if got := parseRetryAfter("Wed, 21 Oct 2015 07:28:00 GMT"); got != 0 {
+		t.Errorf("past HTTP-date Retry-After = %v, want immediate retry", got)
+	}
+	future := time.Now().Add(2 * time.Second).UTC().Format(http.TimeFormat)
+	if got := parseRetryAfter(future); got < 0 || got > 2*time.Second {
+		t.Errorf("future HTTP-date Retry-After = %v, want between 0 and 2s", got)
+	}
+	if parseRetryAfter("not-a-date") != -1 {
+		t.Error("invalid Retry-After should be treated as absent")
 	}
 	if parseRetryAfter("5") != 5*time.Second {
 		t.Error("delta-seconds Retry-After")
+	}
+	if parseRetryAfter("9999999999999999999") != maxRetryWait {
+		t.Error("oversized delta-seconds Retry-After should be capped")
 	}
 }
 

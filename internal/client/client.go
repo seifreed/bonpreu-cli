@@ -152,14 +152,24 @@ func isRateLimited(err error) bool {
 	return ok && (status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable)
 }
 
-// parseRetryAfter reads the delta-seconds form of Retry-After; -1 when absent.
+// parseRetryAfter reads either Retry-After form; -1 when absent or invalid.
 func parseRetryAfter(h string) time.Duration {
 	h = strings.TrimSpace(h)
 	if h == "" {
 		return -1
 	}
-	if secs, err := strconv.Atoi(h); err == nil && secs >= 0 {
+	if secs, err := strconv.ParseUint(h, 10, 64); err == nil {
+		if secs > uint64(maxRetryWait/time.Second) {
+			return maxRetryWait
+		}
 		return time.Duration(secs) * time.Second
+	}
+	if at, err := http.ParseTime(h); err == nil {
+		wait := time.Until(at)
+		if wait < 0 {
+			return 0
+		}
+		return capWait(wait)
 	}
 	return -1
 }
