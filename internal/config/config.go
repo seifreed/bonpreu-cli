@@ -75,7 +75,7 @@ type Brands struct {
 func (b Brands) Configured() bool { return len(b.Preferred) > 0 || len(b.Overrides) > 0 }
 
 // LoadConfig reads config.toml. A missing file is not an error (empty config).
-// Any other stat error (permission, broken path) IS returned: callers like
+// Any other read error (permission, broken path) IS returned: callers like
 // resolveMax rely on a malformed/unreadable config failing rather than silently
 // disabling the spending guard, so only os.IsNotExist may be swallowed.
 func LoadConfig() (Config, error) {
@@ -83,14 +83,19 @@ func LoadConfig() (Config, error) {
 	if err := ensureDir(); err != nil {
 		return c, fmt.Errorf("prepare config directory: %w", err)
 	}
-	p := filepath.Join(Dir(), configFile)
-	if _, err := configStat(p); err != nil {
-		if os.IsNotExist(err) {
-			return c, nil
-		}
-		return c, fmt.Errorf("stat config %s: %w", p, err)
+	root, err := openPrivateRoot()
+	if err != nil {
+		return c, fmt.Errorf("open config directory: %w", err)
 	}
-	metadata, err := toml.DecodeFile(p, &c)
+	data, readErr := root.ReadFile(configFile)
+	closeErr := closeConfigRoot(root)
+	if errors.Is(readErr, os.ErrNotExist) && closeErr == nil {
+		return c, nil
+	}
+	if err := readFileError(configFile, readErr, closeErr); err != nil {
+		return c, err
+	}
+	metadata, err := toml.Decode(string(data), &c)
 	if err != nil {
 		return c, err
 	}

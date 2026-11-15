@@ -207,23 +207,6 @@ func TestCreateTempInRootReportsRandomFailure(t *testing.T) {
 	}
 }
 
-func TestLoadConfigPropagatesConfigStatError(t *testing.T) {
-	privateConfigTestDir(t)
-	want := errors.New("config stat failed")
-	old := configStat
-	configStat = func(path string) (os.FileInfo, error) {
-		if filepath.Base(path) == configFile {
-			return nil, want
-		}
-		return old(path)
-	}
-	t.Cleanup(func() { configStat = old })
-
-	if _, err := LoadConfig(); !errors.Is(err, want) {
-		t.Fatalf("LoadConfig error = %v, want config stat error", err)
-	}
-}
-
 func TestLoadPropagatesOpenRootError(t *testing.T) {
 	privateConfigTestDir(t)
 	want := errors.New("open config directory failed")
@@ -234,6 +217,17 @@ func TestLoadPropagatesOpenRootError(t *testing.T) {
 	var v map[string]any
 	if err := Load("session.json", &v); !errors.Is(err, want) {
 		t.Fatalf("Load error = %v, want open-root error", err)
+	}
+}
+
+func TestLoadConfigPropagatesOpenRootError(t *testing.T) {
+	privateConfigTestDir(t)
+	want := errors.New("open config directory failed")
+	old := openConfigRoot
+	openConfigRoot = func(string) (*os.Root, error) { return nil, want }
+	t.Cleanup(func() { openConfigRoot = old })
+	if _, err := LoadConfig(); !errors.Is(err, want) {
+		t.Fatalf("LoadConfig error = %v, want open-root error", err)
 	}
 }
 

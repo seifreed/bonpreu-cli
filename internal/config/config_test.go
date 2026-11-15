@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -68,6 +69,58 @@ func TestLoadConfigMissingIsEmpty(t *testing.T) {
 	}
 	if c.Auth.Cookie != "" || c.Defaults.RegionID != "" || c.Limits.MaxEUR != 0 || c.Brands.Configured() {
 		t.Errorf("missing config should be zero value, got %+v", c)
+	}
+}
+
+func TestLoadConfigReadsFromOpenedDirectoryAfterPathSwap(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory replacement semantics differ on Windows")
+	}
+	dir := privateConfigTestDir(t)
+	if err := os.WriteFile(filepath.Join(dir, configFile), []byte("[limits]\nmax_eur = 5\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	moved := dir + "-moved"
+	old := openConfigRoot
+	opened := false
+	openConfigRoot = func(path string) (*os.Root, error) {
+		root, err := old(path)
+		if err != nil {
+			return nil, err
+		}
+		opened = true
+		if err := os.Rename(dir, moved); err != nil {
+			return nil, errors.Join(err, root.Close())
+		}
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			return nil, errors.Join(err, root.Close())
+		}
+		if err := os.WriteFile(filepath.Join(dir, configFile), []byte("[limits]\nmax_eur = 99\n"), 0o600); err != nil {
+			return nil, errors.Join(err, root.Close())
+		}
+		return root, nil
+	}
+	t.Cleanup(func() { openConfigRoot = old })
+
+	got, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if got.Limits.MaxEUR != 5 {
+		t.Fatalf("loaded max_eur = %v, want value from opened directory (5)", got.Limits.MaxEUR)
+	}
+	if !opened {
+		t.Fatal("LoadConfig did not open the config directory before reading config.toml")
+	}
+}
+
+func TestLoadConfigPropagatesReadError(t *testing.T) {
+	dir := privateConfigTestDir(t)
+	if err := os.Mkdir(filepath.Join(dir, configFile), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("LoadConfig accepted a directory in place of config.toml")
 	}
 }
 
