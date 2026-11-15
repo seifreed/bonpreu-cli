@@ -67,14 +67,18 @@ func LoginViaBrowser(loginURL string) (Session, error) {
 		return Session{}, fmt.Errorf("open browser (is Chrome installed?): %w", err)
 	}
 	deadline := loginNow().Add(loginTimeout)
+	var lastReadErr error
 	for {
 		cookie, err := readBonpreuCookies(ctx, loginURL)
 		if err == nil && CookieLooksAuthed(cookie) {
 			return Session{Cookie: cookie}, nil
 		}
+		if err != nil {
+			lastReadErr = err
+		}
 		if loginNow().After(deadline) {
-			if err != nil {
-				return Session{}, fmt.Errorf("timed out waiting for login (%s) — the session cookie never appeared: %w", loginTimeout, err)
+			if lastReadErr != nil {
+				return Session{}, fmt.Errorf("timed out waiting for login (%s) — the session cookie never appeared: %w", loginTimeout, lastReadErr)
 			}
 			return Session{}, fmt.Errorf("timed out waiting for login (%s) — the session cookie never appeared", loginTimeout)
 		}
