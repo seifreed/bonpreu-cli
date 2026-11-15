@@ -56,6 +56,26 @@ func TestImportHarSilentWhenRegionPresent(t *testing.T) {
 	}
 }
 
+func TestImportHarPreservesPreviousRegionWhenMissingFromHAR(t *testing.T) {
+	privateTestConfigDir(t)
+	previous := client.Session{Cookie: "global_sid=old; aws-waf-token=old-waf", RegionID: "existing-region"}
+	if err := client.SaveSession(previous); err != nil {
+		t.Fatal(err)
+	}
+	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/api/x","headers":[{"name":"cookie","value":"global_sid=new; aws-waf-token=new-waf"}]}}]}}`
+	path := filepath.Join(t.TempDir(), "regionless.har")
+	if err := os.WriteFile(path, []byte(har), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdImportHar([]string{"--file", path}); err != nil {
+		t.Fatalf("cmdImportHar: %v", err)
+	}
+	got, err := client.LoadSession()
+	if err != nil || got.Cookie != "global_sid=new; aws-waf-token=new-waf" || got.RegionID != previous.RegionID {
+		t.Fatalf("session after regionless HAR = %+v, %v; want new cookie and preserved region", got, err)
+	}
+}
+
 func TestImportHarRejectsUnexpectedArgumentsBeforeReadingOrSaving(t *testing.T) {
 	privateTestConfigDir(t)
 	previous := client.Session{Cookie: "previous=session", RegionID: "r-previous"}
@@ -240,13 +260,25 @@ func TestWhoamiJSONReturnsErrorForUnauthenticatedSession(t *testing.T) {
 
 func TestImportHarSaveError(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", unwritableConfigDir(t))
-	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
+	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x?regionId=r1","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
 	path := filepath.Join(t.TempDir(), "s.har")
 	if err := os.WriteFile(path, []byte(har), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := cmdImportHar([]string{"--file", path}); err == nil {
 		t.Error("import-har should fail when the session cannot be saved")
+	}
+}
+
+func TestImportHarReturnsPreviousSessionReadError(t *testing.T) {
+	t.Setenv("BONPREU_CONFIG_DIR", unwritableConfigDir(t))
+	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
+	path := filepath.Join(t.TempDir(), "s.har")
+	if err := os.WriteFile(path, []byte(har), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdImportHar([]string{"--file", path}); err == nil || !strings.Contains(err.Error(), "read previous session region") {
+		t.Fatalf("cmdImportHar error = %v; want previous-session read failure", err)
 	}
 }
 

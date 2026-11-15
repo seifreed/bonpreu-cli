@@ -42,6 +42,13 @@ func cmdImportHar(args []string) error {
 	if err != nil {
 		return err
 	}
+	if s.RegionID == "" {
+		previous, err := client.LoadSession()
+		if err != nil {
+			return fmt.Errorf("read previous session region: %w", err)
+		}
+		s.RegionID = previous.RegionID
+	}
 	if err := client.SaveHARSession(s); err != nil {
 		return err
 	}

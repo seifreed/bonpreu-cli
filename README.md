@@ -189,6 +189,9 @@ bonpreu set-cookie --stdin               # paste the Cookie header, then press C
 bonpreu whoami                           # verify the session is accepted
 ```
 
+When an imported HAR has no `regionId`, `import-har` keeps the region from the
+previous saved session instead of silently resetting it.
+
 `set-cookie` requires `--stdin` and both `global_sid` and `aws-waf-token`; a
 cookie without those session keys is rejected without replacing the saved
 session. Stdin keeps the cookie out of shell history and process arguments.
