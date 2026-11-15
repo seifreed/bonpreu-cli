@@ -177,6 +177,16 @@ func TestCartUpdateLimitErrorHandlesMalformedResponse(t *testing.T) {
 	}
 }
 
+func TestCartUpdateLimitErrorReportsUnavailableProduct(t *testing.T) {
+	err := cartUpdateLimitError(json.RawMessage(`{"unavailableData":[{"productId":"uuid-23597","reason":"OUT_OF_STOCK"}]}`), "uuid-23597")
+	if err == nil || !strings.Contains(err.Error(), "OUT_OF_STOCK") {
+		t.Fatalf("unavailable cart update error = %v, want product availability failure", err)
+	}
+	if err := cartUpdateLimitError(json.RawMessage(`{"unavailableData":[{"productId":"other","reason":"OUT_OF_STOCK"}]}`), "uuid-23597"); err != nil {
+		t.Fatalf("unavailable data for another product should not fail update: %v", err)
+	}
+}
+
 func TestCartAddDoesNotWriteWhenLimitCannotBeEnforced(t *testing.T) {
 	var cartWrite bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
