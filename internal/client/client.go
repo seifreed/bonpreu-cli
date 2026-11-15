@@ -135,7 +135,7 @@ func (c *Client) newReq(method, url string, body any, extra map[string]string) (
 	}
 	req, err := http.NewRequest(method, url, r)
 	if err != nil {
-		return nil, err
+		return nil, redactURLError(err)
 	}
 	req.Header.Set("accept", "application/json")
 	switch c.Lang {
@@ -275,12 +275,7 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 	started := time.Now()
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		var urlErr *url.Error
-		if errors.As(err, &urlErr) {
-			safeErr := *urlErr
-			safeErr.URL = safeRequestURL(urlErr.URL)
-			err = &safeErr
-		}
+		err = redactURLError(err)
 		c.logHTTPResult(req, 0, 0, started, err)
 		return nil, err
 	}
@@ -327,6 +322,16 @@ func safeRequestURL(raw string) string {
 		return "<redacted>"
 	}
 	return u.Scheme + "://" + u.Host
+}
+
+func redactURLError(err error) error {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		return err
+	}
+	safeErr := *urlErr
+	safeErr.URL = safeRequestURL(urlErr.URL)
+	return &safeErr
 }
 
 func (c *Client) logHTTPResult(req *http.Request, status, responseBytes int, started time.Time, err error) {

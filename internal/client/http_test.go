@@ -146,6 +146,23 @@ func TestDoRedactsURLFromTransportError(t *testing.T) {
 	}
 }
 
+func TestDoRedactsURLFromRequestConstructionError(t *testing.T) {
+	err := New().DoJSON("GET", "https://private-value@example.invalid/%zz?token=private-value", nil, nil)
+	if err == nil {
+		t.Fatal("DoJSON error = nil; want malformed URL error")
+	}
+	if strings.Contains(err.Error(), "private-value") {
+		t.Fatalf("request construction error exposed URL credentials: %v", err)
+	}
+}
+
+func TestRedactURLErrorPreservesNonURLErrors(t *testing.T) {
+	cause := errors.New("request setup failed")
+	if got := redactURLError(cause); !errors.Is(got, cause) {
+		t.Fatalf("redactURLError(%v) = %v; want original error", cause, got)
+	}
+}
+
 func TestSafeRequestURLRedactsInvalidAndRelativeURLs(t *testing.T) {
 	for _, raw := range []string{"https://[invalid", "/relative/path"} {
 		if got := safeRequestURL(raw); got != "<redacted>" {
