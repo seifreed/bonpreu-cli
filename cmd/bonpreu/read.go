@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"sort"
 	"strings"
 
@@ -89,27 +90,30 @@ func printProductLines(prods []client.Product, winners map[string]bool, cheapest
 // Sponsored and unavailable placements never win — the ★ "millor preu" badge marks
 // the cheapest available organic item, mirroring how batch skips unusable hits.
 func rankByUnit(prods []client.Product) (sorted []client.Product, winners map[string]bool) {
-	cents := func(p client.Product) (int64, bool) {
+	unitAmount := func(p client.Product) (*big.Rat, bool) {
 		if unitSuffix(p.UnitPrice) == "" {
-			return 0, false
+			return nil, false
 		}
-		c, err := priceCents(p.UnitPrice.Price.Amount)
-		return c, err == nil
+		if _, err := priceCents(p.UnitPrice.Price.Amount); err != nil {
+			return nil, false
+		}
+		amount, err := ratFromDecimal(strings.TrimSpace(p.UnitPrice.Price.Amount))
+		return amount, err == nil
 	}
 
 	org := organic(availableProducts(prods)) // only available, non-sponsored products can win
-	minCents := map[string]int64{}           // cheapest cents seen per unit suffix (not the builtin min)
+	minAmounts := map[string]*big.Rat{}
 	for _, p := range org {
-		if c, ok := cents(p); ok {
+		if amount, ok := unitAmount(p); ok {
 			suf := unitSuffix(p.UnitPrice)
-			if m, seen := minCents[suf]; !seen || c < m {
-				minCents[suf] = c
+			if m, seen := minAmounts[suf]; !seen || amount.Cmp(m) < 0 {
+				minAmounts[suf] = amount
 			}
 		}
 	}
 	winners = map[string]bool{}
 	for _, p := range org {
-		if c, ok := cents(p); ok && c == minCents[unitSuffix(p.UnitPrice)] {
+		if amount, ok := unitAmount(p); ok && amount.Cmp(minAmounts[unitSuffix(p.UnitPrice)]) == 0 {
 			winners[p.RetailerProductID] = true
 		}
 	}
@@ -119,15 +123,15 @@ func rankByUnit(prods []client.Product) (sorted []client.Product, winners map[st
 		if sorted[i].Available != sorted[j].Available {
 			return sorted[i].Available
 		}
-		ci, oki := cents(sorted[i])
-		cj, okj := cents(sorted[j])
+		ci, oki := unitAmount(sorted[i])
+		cj, okj := unitAmount(sorted[j])
 		if oki != okj {
 			return oki // comparable products sort ahead of non-comparable
 		}
 		if !oki {
 			return false // both non-comparable: keep original order
 		}
-		return ci < cj
+		return ci.Cmp(cj) < 0
 	})
 	return sorted, winners
 }

@@ -49,6 +49,24 @@ func TestRankByUnit(t *testing.T) {
 	}
 }
 
+func TestRankByUnitComparesFractionalAmountsExactly(t *testing.T) {
+	perKg := func(amount string) client.UnitPrice {
+		return client.UnitPrice{Price: client.Money{Amount: amount}, Unit: "fop.price.per.kg", UnitName: "PER_1KG"}
+	}
+	prods := []client.Product{
+		{RetailerProductID: "higher", Available: true, UnitPrice: perKg("0.134")},
+		{RetailerProductID: "lower", Available: true, UnitPrice: perKg("0.131")},
+	}
+
+	sorted, winners := rankByUnit(prods)
+	if got := ids(sorted); !reflect.DeepEqual(got, []string{"lower", "higher"}) {
+		t.Fatalf("rankByUnit order = %v, want lower unit price first", got)
+	}
+	if !winners["lower"] || winners["higher"] {
+		t.Fatalf("rankByUnit winners = %v, want only lower", winners)
+	}
+}
+
 func TestPrintProductLinesMarksWinnersAndIndentation(t *testing.T) {
 	products := []client.Product{
 		{RetailerProductID: "winner", Name: "A", Available: true, UnitPrice: client.UnitPrice{Unit: "fop.price.per.kg"}},
