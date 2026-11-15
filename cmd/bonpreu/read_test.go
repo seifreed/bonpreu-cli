@@ -173,6 +173,30 @@ func TestBatchBadFileAndEmpty(t *testing.T) {
 	}
 }
 
+func TestBatchPreservesSearchFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"llet"}, "ERROR: bonpreu api: HTTP 500"},
+		{[]string{"--json", "llet"}, `"error": "bonpreu api: HTTP 500"`},
+	} {
+		out, err := capture(t, func() error { return cmdBatch(tc.args) })
+		if err == nil || !strings.Contains(err.Error(), "HTTP 500") {
+			t.Fatalf("batch search error = %v; want original HTTP error", err)
+		}
+		if !strings.Contains(out, tc.want) {
+			t.Fatalf("batch output should retain per-term failure %q, got %q", tc.want, out)
+		}
+	}
+}
+
 func TestBatchWarnsForMissingBrandAndMultibuy(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","brand":"Other","price":{"amount":"1.00"},"promotions":[{"description":"2x1"}]}]}]}`))

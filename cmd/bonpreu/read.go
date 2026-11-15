@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -169,14 +170,16 @@ func cmdBatch(args []string) error {
 		Considered []string        `json:"consideredBrands,omitempty"`
 		Offer      string          `json:"offer,omitempty"`      // multibuy | price
 		OfferLabel string          `json:"offerLabel,omitempty"` // the promo text (e.g. "2a unitat 50%")
+		Error      string          `json:"error,omitempty"`
 	}
 	out := make([]hit, 0, len(terms))
 	missing := 0
+	var searchErrors []error
 	for _, t := range terms {
 		pp, serr := cl.Search(t, 10)
 		if serr != nil {
-			out = append(out, hit{Term: t})
-			missing++
+			out = append(out, hit{Term: t, Error: serr.Error()})
+			searchErrors = append(searchErrors, serr)
 			continue
 		}
 		prods := filterFresh(pp.Products(), *fresh)
@@ -193,28 +196,38 @@ func cmdBatch(args []string) error {
 		out = append(out, h)
 	}
 
-	if done, err := emitStructured(cf, out); done {
-		return err
+	structured, emitErr := emitStructured(cf, out)
+	if structured && emitErr != nil {
+		return emitErr
 	}
-	w := 0
-	for _, h := range out {
-		if len(h.Term) > w {
-			w = len(h.Term)
+	if !structured {
+		w := 0
+		for _, h := range out {
+			if len(h.Term) > w {
+				w = len(h.Term)
+			}
+		}
+		for _, h := range out {
+			if h.Product == nil {
+				if h.Error != "" {
+					fmt.Printf("• %-*s → ERROR: %s\n", w, terminalText(h.Term), terminalText(h.Error))
+					continue
+				}
+				fmt.Printf("• %-*s → (sense resultats)\n", w, terminalText(h.Term))
+				continue
+			}
+			line := productLine(*h.Product)
+			if h.BrandMatch == "none" {
+				line += "  ⚠ marca preferida no disponible"
+			}
+			if h.Offer == "multibuy" {
+				line += "  💡 oferta: aprofitable per quantitat"
+			}
+			fmt.Printf("• %-*s → %s\n", w, terminalText(h.Term), line)
 		}
 	}
-	for _, h := range out {
-		if h.Product == nil {
-			fmt.Printf("• %-*s → (sense resultats)\n", w, terminalText(h.Term))
-			continue
-		}
-		line := productLine(*h.Product)
-		if h.BrandMatch == "none" {
-			line += "  ⚠ marca preferida no disponible"
-		}
-		if h.Offer == "multibuy" {
-			line += "  💡 oferta: aprofitable per quantitat"
-		}
-		fmt.Printf("• %-*s → %s\n", w, terminalText(h.Term), line)
+	if len(searchErrors) > 0 {
+		return fmt.Errorf("%d of %d term searches failed: %w", len(searchErrors), len(terms), errors.Join(searchErrors...))
 	}
 	if missing > 0 {
 		return fmt.Errorf("%d of %d terms returned no product", missing, len(terms))
