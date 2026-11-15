@@ -12,6 +12,10 @@ import (
 // bare `login` opens a browser for a fresh login and captures the session (only
 // in builds with -tags browserlogin). Both end at saveAndVerify.
 func cmdLogin(args []string) error {
+	return cmdLoginWith(args, client.CookiesFromBrowser, client.LoginViaBrowser)
+}
+
+func cmdLoginWith(args []string, readBrowser func(string) (client.Session, error), openBrowser func(string) (client.Session, error)) error {
 	fs, cf := newCommonFlags("login")
 	fromBrowser := fs.String("from-browser", "", "read the session from a browser's cookie store: chrome|chromium|firefox|safari|edge|brave (empty = any installed)")
 	parseFlags(fs, args)
@@ -26,9 +30,9 @@ func cmdLogin(args []string) error {
 	var s client.Session
 	var err error
 	if fromBrowserSet {
-		s, err = client.CookiesFromBrowser(*fromBrowser)
+		s, err = readBrowser(*fromBrowser)
 	} else {
-		s, err = client.LoginViaBrowser(newClient(cf).BaseURL + "/")
+		s, err = openBrowser(newClient(cf).BaseURL + "/")
 	}
 	if err != nil {
 		return err

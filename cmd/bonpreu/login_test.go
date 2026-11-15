@@ -49,3 +49,55 @@ func TestSaveAndVerify(t *testing.T) {
 		})
 	}
 }
+
+func TestCmdLoginSelectsBrowserSource(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/order/v6/orders") {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "existing browser", args: []string{"--from-browser", "firefox"}, want: "cookie from browser"},
+		{name: "open browser", args: nil, want: "cookie from login"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fromCalled, openCalled := false, false
+			out, err := capture(t, func() error {
+				return cmdLoginWith(tc.args,
+					func(browser string) (client.Session, error) {
+						fromCalled = true
+						if browser != "firefox" {
+							t.Errorf("browser = %q, want firefox", browser)
+						}
+						return client.Session{Cookie: tc.want, RegionID: "r1"}, nil
+					},
+					func(url string) (client.Session, error) {
+						openCalled = true
+						if url != srv.URL+"/" {
+							t.Errorf("login URL = %q", url)
+						}
+						return client.Session{Cookie: tc.want, RegionID: "r1"}, nil
+					})
+			})
+			if err != nil || !strings.Contains(out, "authenticated") {
+				t.Fatalf("login output = %q, err %v", out, err)
+			}
+			if fromCalled != (tc.args != nil) || openCalled == fromCalled {
+				t.Fatalf("source calls: from-browser=%v open-browser=%v", fromCalled, openCalled)
+			}
+			if got := client.LoadSession().Cookie; got != tc.want {
+				t.Fatalf("saved session cookie = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
