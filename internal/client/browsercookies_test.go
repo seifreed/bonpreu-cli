@@ -25,6 +25,15 @@ type cookieItem struct {
 	err    error
 }
 
+type testCookieStore struct {
+	kooky.CookieStore
+	browser    string
+	cookies    kooky.CookieSeq
+	closeErr   error
+	traversals int
+	closes     int
+}
+
 func (b testBrowser) Browser() string             { return string(b) }
 func (testBrowser) Profile() string               { return "default" }
 func (testBrowser) IsDefaultProfile() bool        { return true }
@@ -33,6 +42,15 @@ func (b testProfileBrowser) Browser() string      { return b.browser }
 func (b testProfileBrowser) Profile() string      { return b.profile }
 func (testProfileBrowser) IsDefaultProfile() bool { return false }
 func (b testProfileBrowser) FilePath() string     { return b.path }
+func (s *testCookieStore) Browser() string        { return s.browser }
+func (s *testCookieStore) TraverseCookies(...kooky.Filter) kooky.CookieSeq {
+	s.traversals++
+	return s.cookies
+}
+func (s *testCookieStore) Close() error {
+	s.closes++
+	return s.closeErr
+}
 
 func cookieSequence(items ...cookieItem) kooky.CookieSeq {
 	return func(yield func(*kooky.Cookie, error) bool) {
@@ -70,6 +88,61 @@ func TestCookiesFromSequenceGroupsByBrowserAndFilters(t *testing.T) {
 	got, err = cookiesFromSequence("", seq)
 	if err != nil || got.Cookie != "aws-waf-token=token; global_sid=new" {
 		t.Fatalf("unfiltered session = %+v, err %v", got, err)
+	}
+}
+
+func TestCookiesFromStoresSkipsUnselectedBrowserAndClosesSelectedStore(t *testing.T) {
+	other := &testCookieStore{browser: "firefox", cookies: cookieSequence(cookieItem{nil, errors.New("unrelated store failed")})}
+	selected := &testCookieStore{browser: "chrome", cookies: cookieSequence(
+		cookieItem{browserCookie("chrome", "global_sid", "session"), nil},
+		cookieItem{browserCookie("chrome", "aws-waf-token", "token"), nil},
+	)}
+	stores := kooky.CookieStoreSeq(func(yield func(kooky.CookieStore, error) bool) {
+		if !yield(other, nil) || !yield(selected, nil) {
+			return
+		}
+	})
+
+	got, err := cookiesFromSequence("chrome", cookiesFromStores("chrome", stores))
+	if err != nil || !CookieLooksAuthed(got.Cookie) {
+		t.Fatalf("selected browser session = %+v, error %v", got, err)
+	}
+	if other.traversals != 0 || other.closes != 0 {
+		t.Fatalf("unselected browser was opened: traversals=%d closes=%d", other.traversals, other.closes)
+	}
+	if selected.traversals != 1 || selected.closes != 1 {
+		t.Fatalf("selected browser store lifecycle: traversals=%d closes=%d", selected.traversals, selected.closes)
+	}
+}
+
+func TestCookiesFromStoresPreservesTraversalAndCloseErrors(t *testing.T) {
+	traverseErr := errors.New("selected store read failed")
+	closeErr := errors.New("selected store close failed")
+	selected := &testCookieStore{browser: "chrome", closeErr: closeErr, cookies: cookieSequence(cookieItem{nil, traverseErr})}
+	stores := kooky.CookieStoreSeq(func(yield func(kooky.CookieStore, error) bool) {
+		if !yield(selected, nil) {
+			return
+		}
+	})
+	_, err := cookiesFromSequence("chrome", cookiesFromStores("chrome", stores))
+	if !errors.Is(err, traverseErr) || !errors.Is(err, closeErr) {
+		t.Fatalf("selected store errors = %v; want traversal and close errors", err)
+	}
+	if selected.closes != 1 {
+		t.Fatalf("selected store closes = %d; want 1", selected.closes)
+	}
+}
+
+func TestCookiesFromStoresPreservesUnattributedDiscoveryErrors(t *testing.T) {
+	discoveryErr := errors.New("browser profile discovery failed")
+	stores := kooky.CookieStoreSeq(func(yield func(kooky.CookieStore, error) bool) {
+		if !yield(nil, discoveryErr) {
+			return
+		}
+	})
+	_, err := cookiesFromSequence("chrome", cookiesFromStores("chrome", stores))
+	if !errors.Is(err, discoveryErr) {
+		t.Fatalf("browser discovery error = %v; want original error", err)
 	}
 }
 

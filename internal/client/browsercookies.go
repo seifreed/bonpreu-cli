@@ -25,7 +25,38 @@ type nameVal struct{ name, val string }
 // decrypted store, not page JS). browser filters to one of chrome|chromium|
 // firefox|safari|edge|brave; "" reads every installed browser.
 func CookiesFromBrowser(browser string) (Session, error) {
-	return cookiesFromSequence(browser, kooky.TraverseCookies(context.Background(), kooky.DomainContains(cookieDomain)))
+	return cookiesFromSequence(browser, cookiesFromStores(browser, kooky.TraverseCookieStores(context.Background())))
+}
+
+func cookiesFromStores(browser string, stores kooky.CookieStoreSeq) kooky.CookieSeq {
+	browser = strings.ToLower(strings.TrimSpace(browser))
+	type item struct {
+		cookie *kooky.Cookie
+		err    error
+	}
+	var items []item
+	for store, err := range stores {
+		if err != nil {
+			items = append(items, item{err: err})
+			continue
+		}
+		if store == nil || browser != "" && !strings.EqualFold(strings.TrimSpace(store.Browser()), browser) {
+			continue
+		}
+		for cookie, err := range store.TraverseCookies(kooky.DomainContains(cookieDomain)) {
+			items = append(items, item{cookie: cookie, err: err})
+		}
+		if err := store.Close(); err != nil {
+			items = append(items, item{err: fmt.Errorf("close %s cookie store: %w", store.Browser(), err)})
+		}
+	}
+	return func(yield func(*kooky.Cookie, error) bool) {
+		for _, item := range items {
+			if !yield(item.cookie, item.err) {
+				return
+			}
+		}
+	}
 }
 
 func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, error) {
