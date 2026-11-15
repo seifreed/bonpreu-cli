@@ -222,6 +222,39 @@ func TestWriteBrandsCSVEscapesSpecials(t *testing.T) {
 	}
 }
 
+func TestWriteBrandsCSVPreventsFormulaInjection(t *testing.T) {
+	brands := []string{
+		"=1+1",
+		"+SUM(A1:A2)",
+		"-1+2",
+		"@SUM(A1:A2)",
+		"\t=HYPERLINK(\"https://example.invalid\")",
+		"  =1+1",
+		"\n=1+1",
+		"＝1＋1",
+	}
+	items := make([]brandCount, len(brands))
+	for i, brand := range brands {
+		items[i] = brandCount{Brand: brand}
+	}
+	var buf bytes.Buffer
+	if err := writeBrandsCSV(&buf, items); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "\"\t=1+1\"") {
+		t.Fatalf("formula-like CSV field was not quoted with a leading tab: %q", buf.String())
+	}
+	rows, err := csv.NewReader(&buf).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, input := range brands {
+		if got := rows[i+1][0]; !strings.HasPrefix(got, "\t") || strings.TrimPrefix(got, "\t") != input {
+			t.Errorf("CSV brand %q = %q, want tab-prefixed text", input, got)
+		}
+	}
+}
+
 func TestCollectCategoryIDs(t *testing.T) {
 	tree := []client.Category{
 		{RetailerCategoryID: "03", ChildCategories: []client.Category{

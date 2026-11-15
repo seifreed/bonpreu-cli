@@ -9,6 +9,9 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/seifreed/bonpreu-cli/internal/branddata"
 	"github.com/seifreed/bonpreu-cli/internal/client"
@@ -71,9 +74,19 @@ func writeBrandsCSV(out io.Writer, ranked []brandCount) error {
 	records := make([][]string, 0, len(ranked)+1)
 	records = append(records, []string{"brand", "count"})
 	for _, b := range ranked {
-		records = append(records, []string{b.Brand, strconv.Itoa(b.Count)})
+		records = append(records, []string{spreadsheetSafeBrand(b.Brand), strconv.Itoa(b.Count)})
 	}
 	return w.WriteAll(records)
+}
+
+// spreadsheetSafeBrand keeps catalog-controlled values from becoming spreadsheet formulas.
+func spreadsheetSafeBrand(brand string) string {
+	trimmed := strings.TrimLeftFunc(brand, unicode.IsSpace)
+	r, _ := utf8.DecodeRuneInString(trimmed)
+	if strings.HasPrefix(brand, "\t") || strings.HasPrefix(brand, "\r") || strings.HasPrefix(brand, "\n") || strings.ContainsRune("=+-@＝＋－＠", r) {
+		return "\t" + brand
+	}
+	return brand
 }
 
 // crawlBrands walks the category tree to depth and aggregates distinct product

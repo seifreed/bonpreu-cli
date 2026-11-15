@@ -42,7 +42,7 @@ It's a port of [`mercadona-cli`](https://github.com/ivorpad/mercadona-cli) to Bo
 | **Product detail** | Price, brand, format, offers, and ingredients/nutrition text when present |
 | **Preferred brands** | `[brands]` config picks your favourite brands (global + per-product), else the cheapest |
 | **Multi-buy offers** | Flags actionable deals (2nd-unit, lot, NxM) so you can take them; `[offers]` config |
-| **Brand catalogue** | `bonpreu brands` — ~3k brands shipped in-binary, `--update` to refresh |
+| **Brand catalogue** | `bonpreu brands` — ~3k brands shipped in-binary, `--update` to refresh; `--csv` prefixes formula-like names with a tab for spreadsheet viewing (tab stays in data) |
 | **Easy auth** | `bonpreu login --from-browser chrome` lifts the session from your browser — no DevTools |
 | **Authenticated cart** | `cart get/add/set/clear`, verified end-to-end against a real account |
 | **Spending guard** | `--max <eur>` (also env / config) refuses a cart line over the cap before writing |
