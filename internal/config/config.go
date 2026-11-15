@@ -99,6 +99,16 @@ func Load(name string, v any) error {
 // disk-full mid-write cannot truncate the credential store (session.json) and
 // leave the user with a corrupt, half-written session.
 func Save(name string, v any) error {
+	return save(name, v, func(dir, pattern string) (io.WriteCloser, string, error) {
+		tmp, err := os.CreateTemp(dir, pattern)
+		if err != nil {
+			return nil, "", err
+		}
+		return tmp, tmp.Name(), nil
+	})
+}
+
+func save(name string, v any, createTemp func(string, string) (io.WriteCloser, string, error)) error {
 	if err := ensureDir(); err != nil {
 		return err
 	}
@@ -107,11 +117,10 @@ func Save(name string, v any) error {
 		return err
 	}
 	dir := Dir()
-	tmp, err := os.CreateTemp(dir, name+".tmp-*") // CreateTemp opens with 0600
+	tmp, tmpName, err := createTemp(dir, name+".tmp-*") // CreateTemp opens with 0600
 	if err != nil {
 		return err
 	}
-	tmpName := tmp.Name()
 	defer func() { _ = os.Remove(tmpName) }() // cleanup on error; no-op once the rename below succeeds
 	if err := writeTemp(tmp, b); err != nil {
 		return err

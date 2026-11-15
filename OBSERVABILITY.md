@@ -68,13 +68,13 @@ There were no structured fields, environment level/format controls, or stable
 event names. `APIError.Error()` included up to 300 characters of remote response
 body.
 
-At the current audit revision, the measured total is 99.8% statements:
+At the current audit revision, the measured total is 100.0% statements:
 
 | Package | Coverage |
 |---|---:|
 | `cmd/bonpreu` | 100.0% |
-| `internal/client` | 99.8% |
-| `internal/config` | 97.4% |
+| `internal/client` | 100.0% |
+| `internal/config` | 100.0% |
 | `internal/branddata` | no executable statements |
 
 The current verification set passes `make check`, `go test -race ./...`, and
@@ -98,13 +98,13 @@ are intermediate, not a completion claim.
 | Performance and resilience | 8 | 8 | Synchronous standard-library writes; no network exporter or logger failure path. Volume is low and command lifetime is short. |
 | Configuration and portability | 1 | 8 | Standard environment configuration, stderr destination, no service dependency; no file rotation is needed for this process model. |
 | Error handling | 5 | 8 | Status-only API error string and typed event errors; some operation failures are only returned to the CLI caller, not logged with operation context. |
-| Testing and verification | 6 | 9 | Logger format/level/escaping/UTC, event paths, privacy, race detector, both builds; 99.8% statement coverage remains below 100%. |
+| Testing and verification | 6 | 9 | Logger format/level/escaping/UTC, event paths, privacy, race detector, both builds; 100.0% statement coverage. Event usefulness and operational behavior still require broader evidence. |
 
-Initial mean: **3.4/10**. Current mean: **8.0/10**. No dimension is excluded.
+Initial mean: **3.4/10**. Current mean: **7.8/10**. No dimension is excluded.
 
 ## Remaining work
 
 - Add per-invocation and per-category context across multi-request flows where it materially helps diagnosis; do not invent distributed trace/span IDs in this single-process tool.
 - Replace remaining formatted warning context with typed, minimal structured attributes where useful.
-- The remaining 0.2% consists of the real browser-cookie traversal and the temporary-file write failure inside atomic config save. The former requires reading installed browser stores; the latter is a filesystem failure that cannot be injected without adding a production seam solely for the test.
+- Every executable statement is covered. The browser-cookie test points `HOME` and `USERPROFILE` at an empty temporary directory, so it exercises the public path without reading the real profile. The atomic-save write failure is injected at the temp-file factory boundary and verifies cleanup while preserving the original error.
 - Re-run security and full validation checks, then recalculate scores from current evidence. The 10/10 target has not been met.

@@ -70,3 +70,12 @@ func TestCookiesFromSequenceExplainsMissingSession(t *testing.T) {
 		}
 	}
 }
+
+func TestCookiesFromBrowserUsesIsolatedProfile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if _, err := CookiesFromBrowser("chrome"); err == nil || !strings.Contains(err.Error(), "no Bonpreu session found") {
+		t.Fatalf("empty isolated browser profile error = %v", err)
+	}
+}

@@ -121,3 +121,29 @@ func TestSaveCreateTempAndRenameFailures(t *testing.T) {
 		}
 	}
 }
+
+func TestSaveWriteFailureCleansUpTemporaryFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	tempPath := filepath.Join(dir, "session.json.tmp-test")
+	if err := os.WriteFile(tempPath, []byte("partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeFailure := errors.New("disk write failed")
+	tmp := &failingTemp{writeErr: writeFailure}
+	err := save("session.json", map[string]string{"cookie": "secret"}, func(_, _ string) (io.WriteCloser, string, error) {
+		return tmp, tempPath, nil
+	})
+	if !errors.Is(err, writeFailure) {
+		t.Fatalf("save error = %v, want original write failure", err)
+	}
+	if !tmp.closed {
+		t.Error("temporary writer must be closed after write failure")
+	}
+	if _, err := os.Stat(tempPath); !os.IsNotExist(err) {
+		t.Errorf("temporary file remains after write failure: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "session.json")); !os.IsNotExist(err) {
+		t.Errorf("destination was created after write failure: %v", err)
+	}
+}
