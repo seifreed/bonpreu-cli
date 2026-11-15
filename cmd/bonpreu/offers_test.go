@@ -8,7 +8,7 @@ import (
 
 func TestClassifyOffer(t *testing.T) {
 	multibuy := func(d string) string { k, _ := classifyOffer([]client.Promotion{{Description: d}}); return k }
-	for _, d := range []string{"2a unitat 50% de descompte", "Lot estalvi a 7,75 euros/lot. Clica aquí", "3x2", "2x1"} {
+	for _, d := range []string{"2a unitat 50% de descompte", "Lot estalvi a 7,75 euros/lot. Clica aquí", "3x2", "2x1", "4x3", "4 x 3", "4×3"} {
 		if multibuy(d) != "multibuy" {
 			t.Errorf("%q should be multibuy, got %q", d, multibuy(d))
 		}

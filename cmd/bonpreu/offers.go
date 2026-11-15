@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/seifreed/bonpreu-cli/internal/client"
@@ -12,9 +13,13 @@ import (
 // unlike a was-price or a flat % / loyalty-card discount that already applies.
 // Bonpreu tags every promotion type "OFFER", so the distinction is text-only.
 var multibuyHints = []string{"unitat", "unidad", "lot", "emporta", "leva", "2x", "3x", "x2", "x1"}
+var nxmOffer = regexp.MustCompile(`(?i)\b\d+\s*[x×]\s*\d+\b`)
 
 // isMultibuy reports whether a promotion description is a quantity-dependent deal.
 func isMultibuy(desc string) bool {
+	if nxmOffer.MatchString(desc) {
+		return true
+	}
 	d := strings.ToLower(desc)
 	for _, h := range multibuyHints {
 		if strings.Contains(d, h) {
