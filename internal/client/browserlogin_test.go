@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -296,4 +297,25 @@ func TestWaitForCheckoutReadsLineAndStopsOnCancellation(t *testing.T) {
 		t.Fatal("waitForCheckout did not return after cancellation")
 	}
 	close(reader.release)
+}
+
+func TestDefaultCheckoutWaitReadsStdin(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	if _, err := writer.WriteString("\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stdin := os.Stdin
+	os.Stdin = reader
+	t.Cleanup(func() { os.Stdin = stdin })
+
+	if err := checkoutWait(context.Background()); err != nil {
+		t.Fatalf("default checkout wait = %v", err)
+	}
 }

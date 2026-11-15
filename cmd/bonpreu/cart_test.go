@@ -48,6 +48,48 @@ func testCartClient(srv *httptest.Server) *client.Client {
 	return cl
 }
 
+func TestCartAddDoesNotCheckoutOrPlaceOrder(t *testing.T) {
+	var cartWrites, forbiddenRequests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := strings.ToLower(r.URL.Path)
+		if strings.Contains(path, "checkout") || strings.Contains(path, "order") ||
+			(r.Method == http.MethodPost && r.URL.Path != "/api/cart/v1/carts/active/apply-quantity") {
+			forbiddenRequests.Add(1)
+		}
+		if r.Method == http.MethodPost {
+			if r.URL.Path == "/api/cart/v1/carts/active/apply-quantity" {
+				cartWrites.Add(1)
+			}
+		}
+		switch r.URL.Path {
+		case "/products/23597":
+			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case "/":
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		case "/api/cart/v1/carts/active/apply-quantity":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	if _, err := capture(t, func() error {
+		return cmdCart([]string{"add", "23597", "1", "--max", "50"})
+	}); err != nil {
+		t.Fatalf("cart add: %v", err)
+	}
+	if got := cartWrites.Load(); got != 1 {
+		t.Fatalf("cart quantity writes = %d, want 1", got)
+	}
+	if got := forbiddenRequests.Load(); got != 0 {
+		t.Fatalf("checkout/order requests or non-cart writes = %d, want 0", got)
+	}
+}
+
 func TestCartAddDoesNotWriteWhenLimitCannotBeEnforced(t *testing.T) {
 	var cartWrite bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
