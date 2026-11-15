@@ -56,6 +56,29 @@ func TestImportHarSilentWhenRegionPresent(t *testing.T) {
 	}
 }
 
+func TestImportHarRejectsUnexpectedArgumentsBeforeReadingOrSaving(t *testing.T) {
+	privateTestConfigDir(t)
+	previous := client.Session{Cookie: "previous=session", RegionID: "r-previous"}
+	if err := client.SaveSession(previous); err != nil {
+		t.Fatal(err)
+	}
+	oldOpen := openHARInput
+	openHARInput = func(string) (io.ReadCloser, error) {
+		t.Fatal("unexpected argument must be rejected before opening the HAR")
+		return nil, nil
+	}
+	t.Cleanup(func() { openHARInput = oldOpen })
+
+	err := cmdImportHar([]string{"--file", "session.har", "unexpected"})
+	if err == nil || !strings.Contains(err.Error(), "usage: bonpreu import-har") {
+		t.Fatalf("cmdImportHar error = %v; want usage error", err)
+	}
+	got, err := client.LoadSession()
+	if err != nil || got != previous {
+		t.Fatalf("unexpected argument changed saved session = %+v, %v; want %+v", got, err, previous)
+	}
+}
+
 func TestSetCookieRejectsAnonymousCookieWithoutReplacingSession(t *testing.T) {
 	privateTestConfigDir(t)
 	previous := client.Session{Cookie: "global_sid=old; aws-waf-token=old-token", RegionID: "old-region"}

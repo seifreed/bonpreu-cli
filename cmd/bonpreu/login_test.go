@@ -203,6 +203,23 @@ func TestCmdLoginSelectsBrowserSource(t *testing.T) {
 	}
 }
 
+func TestCmdLoginRejectsUnexpectedArgumentsBeforeBrowserAccess(t *testing.T) {
+	readCalled, openCalled := false, false
+	err := cmdLoginWith([]string{"unexpected"}, func(string) (client.Session, error) {
+		readCalled = true
+		return client.Session{}, nil
+	}, func(string) (client.Session, error) {
+		openCalled = true
+		return client.Session{}, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "usage: bonpreu login") {
+		t.Fatalf("cmdLoginWith error = %v; want usage error", err)
+	}
+	if readCalled || openCalled {
+		t.Fatalf("unexpected argument reached browser access: read=%v open=%v", readCalled, openCalled)
+	}
+}
+
 func TestRunLoginLogsBrowserOpenFailure(t *testing.T) {
 	t.Setenv("BONPREU_BASE_URL", "https://login.example")
 	privateTestConfigDir(t)

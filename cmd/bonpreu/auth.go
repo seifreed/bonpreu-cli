@@ -29,7 +29,7 @@ func cmdImportHar(args []string) error {
 	fs := flag.NewFlagSet("import-har", flag.ExitOnError)
 	file := fs.String("file", "", "path to the .har export ('-' for stdin)")
 	parseFlags(fs, args)
-	if *file == "" {
+	if fs.NArg() != 0 || *file == "" {
 		return fmt.Errorf("usage: bonpreu import-har --file tienda.har")
 	}
 	data, err := readFileOrStdin(*file)
