@@ -687,6 +687,13 @@ func TestRequestHeaderBranches(t *testing.T) {
 	}
 }
 
+func TestNewReqRejectsUnsupportedLanguage(t *testing.T) {
+	cl := &Client{BaseURL: BaseURL, Lang: "fr"}
+	if _, err := cl.newReq(http.MethodGet, cl.BaseURL+"/api", nil, nil); err == nil || !strings.Contains(err.Error(), `unsupported language "fr"`) {
+		t.Fatalf("newReq error = %v, want unsupported-language validation", err)
+	}
+}
+
 // A 429 without Retry-After exercises the exponential-backoff+jitter wait path.
 func TestRetryBackoffJitterPath(t *testing.T) {
 	var hits int

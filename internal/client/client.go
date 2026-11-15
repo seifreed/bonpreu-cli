@@ -138,10 +138,13 @@ func (c *Client) newReq(method, url string, body any, extra map[string]string) (
 		return nil, err
 	}
 	req.Header.Set("accept", "application/json")
-	if c.Lang == "es" {
+	switch c.Lang {
+	case "es":
 		req.Header.Set("accept-language", "es-ES,es;q=0.9,ca;q=0.8,en;q=0.7")
-	} else {
+	case "", "ca":
 		req.Header.Set("accept-language", "ca-ES,ca;q=0.9,es;q=0.8,en;q=0.7")
+	default:
+		return nil, fmt.Errorf("unsupported language %q (want ca or es)", c.Lang)
 	}
 	req.Header.Set("user-agent", c.UserAgent)
 	req.Header.Set("referer", c.BaseURL+"/")
