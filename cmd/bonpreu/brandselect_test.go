@@ -46,6 +46,28 @@ func TestPreferredFor(t *testing.T) {
 	}
 }
 
+func TestPreferredForOverlappingOverridesIsDeterministic(t *testing.T) {
+	b := config.Brands{Overrides: map[string][]string{
+		"milk":         {"Generic"},
+		"organic milk": {"Organic"},
+	}}
+	for range 100 {
+		list, override := preferredFor("organic milk", b)
+		if !override || len(list) != 1 || list[0] != "Organic" {
+			t.Fatalf("preferredFor with overlapping overrides = %v, %v; want Organic override", list, override)
+		}
+	}
+
+	tied := config.Brands{Overrides: map[string][]string{
+		"oat-milk": {"B"},
+		"oat milk": {"A"},
+	}}
+	list, override := preferredFor("oat milk", tied)
+	if !override || len(list) != 1 || list[0] != "A" {
+		t.Fatalf("equal-length overrides = %v, %v; want stable lexical tie-break A", list, override)
+	}
+}
+
 func prod(id, brand, price string) client.Product {
 	return client.Product{RetailerProductID: id, Brand: brand, Price: client.Money{Amount: price}}
 }

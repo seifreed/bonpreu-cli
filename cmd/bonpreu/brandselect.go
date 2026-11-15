@@ -39,21 +39,25 @@ func normBrand(s string) string {
 	return b.String()
 }
 
-// preferredFor returns the brand list that applies to a search term: the first
-// override whose key matches the term (normalized substring, either direction)
-// wins; otherwise the global Preferred list. isOverride reports which it was.
+// preferredFor returns the brand list whose normalized override key most
+// specifically matches a search term (substring either direction); otherwise it
+// returns the global Preferred list. Equal-length matches use the key text as a
+// stable tie-breaker. isOverride reports whether an override matched.
 func preferredFor(term string, b config.Brands) (brands []string, isOverride bool) {
 	nt := normBrand(term)
+	bestKey, bestNorm := "", ""
+	var bestList []string
 	for key, list := range b.Overrides {
 		nk := normBrand(key)
-		// Both sides must be non-empty: strings.Contains(x, "") is always true, so
-		// without the nt!="" guard a term that normalizes to empty (a symbol-only
-		// term like "!!!", or a stray bullet line in a -f file) would spuriously
-		// match the first override visited — and map order is random, so the pick
-		// would be nondeterministic. Such a term has no brand intent; fall through.
+		// Both sides must be non-empty because strings.Contains(x, "") is always true.
 		if nk != "" && nt != "" && (strings.Contains(nt, nk) || strings.Contains(nk, nt)) {
-			return list, true
+			if len(nk) > len(bestNorm) || len(nk) == len(bestNorm) && key < bestKey {
+				bestKey, bestNorm, bestList = key, nk, list
+			}
 		}
+	}
+	if bestKey != "" {
+		return bestList, true
 	}
 	return b.Preferred, false
 }
