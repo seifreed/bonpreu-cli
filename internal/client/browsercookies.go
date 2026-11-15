@@ -12,8 +12,7 @@ import (
 	_ "github.com/browserutils/kooky/browser/all" // register Chrome/Firefox/Safari/Edge/Brave finders
 )
 
-// cookieDomain is the substring every Bonpreu cookie's domain carries; used to
-// pull just the site's cookies out of a browser's (large) cookie store.
+// cookieDomain is the registrable domain shared by Bonpreu's site cookies.
 const cookieDomain = "bonpreuesclat.cat"
 
 type nameVal struct{ name, val string }
@@ -50,7 +49,7 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 			}
 			continue
 		}
-		if c == nil || c.Name == "" || c.Value == "" {
+		if c == nil || c.Name == "" || c.Value == "" || !isBonpreuCookieDomain(c.Domain) {
 			continue
 		}
 		bname := ""
@@ -95,6 +94,11 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 	return Session{}, fmt.Errorf("no Bonpreu session found in %s — "+
 		"log in at compraonline.bonpreuesclat.cat in that browser first "+
 		"(or pass --from-browser <chrome|firefox|safari|edge|brave>)", where)
+}
+
+func isBonpreuCookieDomain(domain string) bool {
+	domain = strings.Trim(strings.ToLower(strings.TrimSpace(domain)), ".")
+	return domain == cookieDomain || strings.HasSuffix(domain, "."+cookieDomain)
 }
 
 func isUnsupportedCookieStoreError(err error) bool {

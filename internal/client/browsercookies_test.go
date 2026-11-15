@@ -33,7 +33,11 @@ func cookieSequence(items ...cookieItem) kooky.CookieSeq {
 }
 
 func browserCookie(browser, name, value string) *kooky.Cookie {
-	return &kooky.Cookie{Browser: testBrowser(browser), Cookie: http.Cookie{Name: name, Value: value}}
+	return browserCookieForDomain(browser, name, value, "."+cookieDomain)
+}
+
+func browserCookieForDomain(browser, name, value, domain string) *kooky.Cookie {
+	return &kooky.Cookie{Browser: testBrowser(browser), Cookie: http.Cookie{Name: name, Value: value, Domain: domain}}
 }
 
 func TestCookiesFromSequenceGroupsByBrowserAndFilters(t *testing.T) {
@@ -55,6 +59,20 @@ func TestCookiesFromSequenceGroupsByBrowserAndFilters(t *testing.T) {
 	got, err = cookiesFromSequence("", seq)
 	if err != nil || got.Cookie != "aws-waf-token=token; global_sid=new" {
 		t.Fatalf("unfiltered session = %+v, err %v", got, err)
+	}
+}
+
+func TestCookiesFromSequenceIgnoresDomainsThatOnlyContainBonpreuName(t *testing.T) {
+	seq := cookieSequence(
+		cookieItem{browserCookie("chrome", "global_sid", "legit-session"), nil},
+		cookieItem{browserCookieForDomain("chrome", "aws-waf-token", "legit-token", ".www.compraonline.bonpreuesclat.cat"), nil},
+		cookieItem{browserCookieForDomain("chrome", "global_sid", "spoof-session", "evilbonpreuesclat.cat"), nil},
+		cookieItem{browserCookieForDomain("chrome", "aws-waf-token", "spoof-token", "bonpreuesclat.cat.evil.example"), nil},
+	)
+
+	got, err := cookiesFromSequence("chrome", seq)
+	if err != nil || got.Cookie != "aws-waf-token=legit-token; global_sid=legit-session" {
+		t.Fatalf("session from domains containing Bonpreu's name = %+v, %v; want only exact Bonpreu domains", got, err)
 	}
 }
 
