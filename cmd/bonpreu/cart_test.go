@@ -45,6 +45,52 @@ func TestGuardResultingLineSilentWithoutLimit(t *testing.T) {
 	}
 }
 
+func TestCartLineTotalCents(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		lines []client.CartLine
+		want  int64
+		fail  bool
+	}{
+		{
+			name: "sums duplicate lines",
+			lines: []client.CartLine{
+				{ProductID: "p", TotalPrices: struct {
+					FinalPrice client.Money `json:"finalPrice"`
+				}{FinalPrice: client.Money{Amount: "1.25"}}},
+				{ProductID: "p", TotalPrices: struct {
+					FinalPrice client.Money `json:"finalPrice"`
+				}{FinalPrice: client.Money{Amount: "2.00"}}},
+			},
+			want: 325,
+		},
+		{name: "missing product", lines: []client.CartLine{{ProductID: "other"}}, fail: true},
+		{name: "missing total", lines: []client.CartLine{{ProductID: "p"}}, fail: true},
+		{
+			name: "overflow",
+			lines: []client.CartLine{
+				{ProductID: "p", TotalPrices: struct {
+					FinalPrice client.Money `json:"finalPrice"`
+				}{FinalPrice: client.Money{Amount: "92233720368547758.07"}}},
+				{ProductID: "p", TotalPrices: struct {
+					FinalPrice client.Money `json:"finalPrice"`
+				}{FinalPrice: client.Money{Amount: "0.01"}}},
+			},
+			fail: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := cartLineTotalCents(tc.lines, "p")
+			if tc.fail && err == nil {
+				t.Fatalf("cartLineTotalCents = %d, nil; want error", got)
+			}
+			if !tc.fail && (err != nil || got != tc.want) {
+				t.Fatalf("cartLineTotalCents = %d, %v; want %d", got, err, tc.want)
+			}
+		})
+	}
+}
+
 func testCartClient(srv *httptest.Server) *client.Client {
 	cl := client.New()
 	cl.BaseURL = srv.URL
@@ -97,7 +143,7 @@ func statefulCartServer(t *testing.T, initialQty float64) *httptest.Server {
 }
 
 func TestCartAddDoesNotCheckoutOrPlaceOrder(t *testing.T) {
-	var cartWrites, forbiddenRequests atomic.Int32
+	var cartWrites, forbiddenRequests, cartReads atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.ToLower(r.URL.Path)
 		if strings.Contains(path, "checkout") || strings.Contains(path, "order") ||
@@ -115,7 +161,11 @@ func TestCartAddDoesNotCheckoutOrPlaceOrder(t *testing.T) {
 		case "/":
 			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
 		case "/api/cart/v1/carts/active":
-			_, _ = w.Write([]byte(`{"items":[]}`))
+			if cartReads.Add(1) == 1 {
+				_, _ = w.Write([]byte(`{"items":[]}`))
+			} else {
+				_, _ = w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":1,"totalPrices":{"finalPrice":{"amount":"1.69"}}}]}`))
+			}
 		case "/api/cart/v1/carts/active/apply-quantity":
 			_, _ = w.Write([]byte(`{"items":[]}`))
 		default:
@@ -469,7 +519,7 @@ func TestCartAddMaxVerifiesResultAfterAcceptedWrite(t *testing.T) {
 						w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":1e300}]}`))
 					default:
 						// A concurrent writer adds lines after the preflight read.
-						w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":4}]}`))
+						w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":4,"totalPrices":{"finalPrice":{"amount":"6.76"}}}]}`))
 					}
 				case r.URL.Path == "/":
 					w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
@@ -492,6 +542,88 @@ func TestCartAddMaxVerifiesResultAfterAcceptedWrite(t *testing.T) {
 			}
 			if got := writes.Load(); got != 1 {
 				t.Fatalf("cart add sent %d writes, want one accepted write", got)
+			}
+		})
+	}
+}
+
+func TestCartWriteMaxChecksActualCartLinePrice(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		args   []string
+		before string
+		after  string
+		want   string
+	}{
+		{
+			name:   "add",
+			args:   []string{"add", "23597", "1", "--max", "5"},
+			before: `{"items":[]}`,
+			after:  `{"items":[{"productId":"uuid-23597","quantity":1,"totalPrices":{"finalPrice":{"amount":"6.00"}}}]}`,
+			want:   "resulting line exceeds --max",
+		},
+		{
+			name:   "set",
+			args:   []string{"set", "23597", "2", "--max", "5"},
+			before: `{"items":[{"productId":"uuid-23597","quantity":1,"totalPrices":{"finalPrice":{"amount":"1.69"}}}]}`,
+			after:  `{"items":[{"productId":"uuid-23597","quantity":2,"totalPrices":{"finalPrice":{"amount":"12.00"}}}]}`,
+			want:   "resulting line exceeds --max",
+		},
+		{
+			name:   "missing actual cart price",
+			args:   []string{"add", "23597", "1", "--max", "5"},
+			before: `{"items":[]}`,
+			after:  `{"items":[{"productId":"uuid-23597","quantity":1}]}`,
+			want:   "spending limit could not be checked after the write",
+		},
+		{
+			name:   "accepted write missing from readback",
+			args:   []string{"add", "23597", "1", "--max", "5"},
+			before: `{"items":[]}`,
+			after:  `{"items":[]}`,
+			want:   "below the requested increase",
+		},
+		{
+			name:   "unrepresentable combined quantity",
+			args:   []string{"add", "23597", "1", "--max", "5"},
+			before: `{"items":[]}`,
+			after:  `{"items":[{"productId":"uuid-23597","quantity":1e308},{"productId":"uuid-23597","quantity":1e308}]}`,
+			want:   "result could not be verified",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var cartReads, writes atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case strings.HasPrefix(r.URL.Path, "/products/"):
+					_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+				case r.URL.Path == "/api/cart/v1/carts/active":
+					if cartReads.Add(1) == 1 {
+						_, _ = w.Write([]byte(tc.before))
+					} else {
+						_, _ = w.Write([]byte(tc.after))
+					}
+				case r.URL.Path == "/":
+					_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+				case strings.Contains(r.URL.Path, "/apply-quantity"):
+					writes.Add(1)
+					_, _ = w.Write([]byte(`{"items":[]}`))
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+			useServer(t, srv, true)
+
+			out, err := capture(t, func() error { return cmdCart(tc.args) })
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("cart %s output %q error = %v; want actual line price to exceed cap", tc.name, out, err)
+			}
+			if strings.Contains(out, "ok —") {
+				t.Fatalf("cart %s reported success above the cap: %q", tc.name, out)
+			}
+			if got := writes.Load(); got != 1 {
+				t.Fatalf("cart %s writes = %d; want one accepted write", tc.name, got)
 			}
 		})
 	}

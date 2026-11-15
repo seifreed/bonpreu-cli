@@ -45,7 +45,7 @@ It's a port of [`mercadona-cli`](https://github.com/ivorpad/mercadona-cli) to Bo
 | **Brand catalogue** | `bonpreu brands` — ~3k brands shipped in-binary, `--update` to refresh; `--csv` prefixes formula-like names with a tab for spreadsheet viewing (tab stays in data) |
 | **Easy auth** | `bonpreu login --from-browser chrome` lifts the session from your browser — no DevTools |
 | **Authenticated cart** | `cart get/add/set/clear`, verified end-to-end against a real account |
-| **Spending guard** | `--max <eur>` (also env / config) refuses a cart line over the cap before writing |
+| **Spending guard** | `--max <eur>` (also env / config) checks the catalog estimate before writing and verifies the resulting cart line total |
 | **Claude skill** | Bundled `bonpreu-shop` skill shops from a **photo** of a basket/fridge/receipt |
 | **JSON + human output** | Structured `--json`/`--toon` for agents, readable tables for people |
 
@@ -209,13 +209,15 @@ session. Stdin keeps the cookie out of shell history and process arguments.
 
 Cart writes resolve the short retailer id to the API's product UUID, then `POST …/apply-quantity` — the same delta-based call the website's quantity buttons make (the CLI fetches the required `X-CSRF-TOKEN` itself). `whoami` is a real check: it hits an endpoint that returns `401` for anonymous callers.
 
+`--max` preflights with the current catalog price and checks the server-priced cart line after the write. If the price changes between those steps, the server may already have accepted the cart update when the CLI reports that the actual line exceeds the cap; inspect the cart and stop rather than retrying. The CLI does not start checkout or place a purchase.
+
 > `checkout browser` opens Bonpreu's official checkout in Chrome (requires `-tags browserlogin` and Chrome). Review the order and confirm it yourself in the page; payment authentication stays with Bonpreu and your bank. The CLI does not submit payment or report that an order was placed.
 
 ### Spending Guard (agent safety)
 
 | Option | Description |
 |--------|-------------|
-| `--max <eur>` | Refuse a resulting product line over the cap, before writing; existing quantity counts |
+| `--max <eur>` | Check the estimated resulting line before writing; after an accepted write, verify the actual cart line total and report if it exceeds the cap. Existing quantity counts. |
 | `BONPREU_MAX_EUR` | Same cap via environment variable |
 | `[limits] max_eur` | Same cap in `~/.bonpreu/config.toml` (precedence: flag > env > config) |
 
@@ -254,7 +256,7 @@ This repo bundles a Claude Code skill, **`bonpreu-shop`** (`.claude/skills/bonpr
 1. Claude reads the image into an item list and shows you what it parsed.
 2. Resolves each item to a real Bonpreu product with `batch`/`search`.
 3. Shows the plan with a code-computed total.
-4. After your OK, fills the cart with a hard `--max` spending cap.
+4. After your OK, fills the cart with the `--max` spending guard and checks actual line totals.
 5. Verifies the cart and stops. It does not start checkout, reserve a delivery slot, or place a purchase.
 
 The vision step lives in the agent, not the binary — so any provider drives the same clean primitives, no LLM SDKs baked into the CLI. Install it where your Claude reads skills (symlink or copy `.claude/skills/bonpreu-shop` into `~/.claude/skills/`); build the CLI first.

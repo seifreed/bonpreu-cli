@@ -3,7 +3,7 @@ name: bonpreu-shop
 description: >-
   Build a Bonpreu i Esclat cart (compraonline.bonpreuesclat.cat) by driving the local `bonpreu` CLI:
   turn a shopping list — or a PHOTO of a basket, fridge, receipt or handwritten list — into real priced
-  Bonpreu products, confirm them, and fill the cart with a hard spending cap.
+  Bonpreu products, confirm them, and fill the cart with a spending guard.
   Use whenever the user wants to shop, price a grocery list, build a cart, or "do the Bonpreu shop" —
   including when they just paste a list or drop an image and mention Bonpreu/Esclat. Spanish/Catalan
   phrasings: "hazme la compra del Bonpreu", "fes la compra", "añade X al carrito", "¿cuánto cuesta
@@ -30,10 +30,12 @@ This touches a real account and real money, so:
    (each list/photo item → the exact product you picked: `[id] name — size — price`) and wait for an
    explicit OK. Product matching is fuzzy (and a photo adds a second fuzzy step), so this is where the
    user catches a wrong brand, size or quantity — cheap now, annoying after the cart is full.
-2. **Always cap spend with `--max`.** Put a hard euro ceiling on every cart write so a wrong match or a
-   fat-fingered quantity can't run up the order. Use the user's stated budget, else the agreed plan
-   total rounded up with a little margin. A line over the cap fails with `error: BUDGET EXCEEDED …` and
-   a non-zero exit — treat that as **stop-and-report**, don't raise the cap unless the user does.
+2. **Always cap spend with `--max`.** Use the user's stated budget, else the agreed plan total rounded
+   up with a little margin. The CLI checks the current catalog estimate before writing and verifies
+   the actual cart line total after the server accepts the update. A preflight overage reports
+   `error: BUDGET EXCEEDED …`; if the actual price changed and exceeds the cap, the cart may already
+   have been updated. Treat either non-zero exit as **stop-and-report**: inspect the cart, do not retry,
+   and do not continue toward checkout.
 3. **Stop at the cart.** The task is complete after the confirmed items are in the cart and verified
    with `bonpreu cart get`. Never run checkout commands, reserve a delivery slot, open the checkout
    browser, submit an order, or confirm a purchase/payment. Tell the user the cart is ready; do not
@@ -148,6 +150,9 @@ sets the **absolute** quantity (`0` removes). `--max` is a **per-line** cap, not
 bonpreu cart add 23597 1 --max 60
 bonpreu cart get                      # verify lines + total
 ```
+
+If the CLI reports an actual line over the cap after the write, stop and report it; do not retry the
+add, raise the cap, or proceed to checkout. The CLI does not place purchases.
 
 **For a big list, fill with `cart set`, not `cart add`.** Each write is slow (it resolves the short id
 to a UUID by scraping, then applies the delta), so a long fill can outlast a shell timeout — and

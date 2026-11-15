@@ -86,8 +86,8 @@ func cartGet(args []string) error {
 }
 
 // cartWrite implements `cart add <id> <qty>` (delta +qty) and `cart set <id> <qty>`
-// (delta = target − current). Quantities are priced first so --max can refuse
-// before any write.
+// (delta = target − current). The current catalog price preflights --max before
+// writes; accepted updates are checked against the server-priced cart line.
 func cartWrite(args []string, set bool) error {
 	verb := "add"
 	if set {
@@ -135,12 +135,13 @@ func cartWrite(args []string, set bool) error {
 	}
 
 	delta := qty
+	current := float64(0)
 	if set {
-		cur, qerr := currentQty(cl, pd.ProductID)
-		if qerr != nil {
-			return fmt.Errorf("read current cart quantity: %w", qerr)
+		current, err = currentQty(cl, pd.ProductID)
+		if err != nil {
+			return fmt.Errorf("read current cart quantity: %w", err)
 		}
-		delta = qty - cur
+		delta = qty - current
 		if delta == 0 {
 			stderrInfo("cart.quantity.no_change", "cart line is already at target quantity", "operation", "cart write")
 			return nil
@@ -152,7 +153,7 @@ func cartWrite(args []string, set bool) error {
 		}
 		lineQty := qty
 		if limit > 0 {
-			current, err := currentQty(cl, pd.ProductID)
+			current, err = currentQty(cl, pd.ProductID)
 			if err != nil {
 				return fmt.Errorf("read current cart quantity: %w", err)
 			}
@@ -168,27 +169,33 @@ func cartWrite(args []string, set bool) error {
 		return err
 	}
 	limitErr := cartUpdateLimitError(cart.Raw, pd.ProductID)
-	if set && limitErr == nil {
-		actual, err := currentQty(cl, pd.ProductID)
+	if limitErr == nil && (set || (!set && delta > 0 && limit > 0)) {
+		updatedCart, err := cl.GetCart()
 		if err != nil {
-			return fmt.Errorf("cart set was accepted but the result could not be verified; inspect the cart before retrying: %w", err)
+			return fmt.Errorf("cart %s was accepted but the result could not be verified; inspect the cart before retrying: %w", verb, err)
 		}
-		if actual != qty {
+		actual, err := decimalQtySum(updatedCart.Lines, pd.ProductID)
+		if err != nil {
+			return fmt.Errorf("cart %s was accepted but the result could not be verified; inspect the cart before retrying: %w", verb, err)
+		}
+		if set && actual != qty {
 			return fmt.Errorf("cart set was accepted but resulting quantity is %s, not requested %s; inspect the cart before retrying", fmtQty(actual), fmtQty(qty))
 		}
-	}
-	if !set && delta > 0 && limit > 0 && limitErr == nil {
-		actual, err := currentQty(cl, pd.ProductID)
-		if err != nil {
-			return fmt.Errorf("cart add was accepted but the result could not be verified; inspect the cart before retrying: %w", err)
+		if !set && actual < current+delta {
+			return fmt.Errorf("cart add was accepted but resulting quantity is %s, below the requested increase to %s; inspect the cart before retrying", fmtQty(actual), fmtQty(current+delta))
 		}
-		lineCents, err := resultingLineCents(pd, actual)
-		if err != nil {
-			return fmt.Errorf("cart add was accepted but the spending limit could not be checked after the write; inspect the cart before retrying: %w", err)
-		}
-		lineEUR := float64(lineCents) / 100
-		if lineEUR > limit {
-			return fmt.Errorf("cart add was accepted but the resulting line exceeds --max: %.2f€ > %.2f€; inspect the cart before retrying", lineEUR, limit)
+		if limit > 0 {
+			actualLineCents := int64(0)
+			if actual > 0 {
+				actualLineCents, err = cartLineTotalCents(updatedCart.Lines, pd.ProductID)
+				if err != nil {
+					return fmt.Errorf("cart %s was accepted but the spending limit could not be checked after the write; inspect the cart before retrying: %w", verb, err)
+				}
+			}
+			lineEUR := float64(actualLineCents) / 100
+			if lineEUR > limit {
+				return fmt.Errorf("cart %s was accepted but the resulting line exceeds --max: %.2f€ > %.2f€; inspect the cart before retrying", verb, lineEUR, limit)
+			}
 		}
 	}
 	if limitErr == nil {
@@ -344,6 +351,29 @@ func decimalQtySum(lines []client.CartLine, productID string) (float64, error) {
 	total, _ := quantity.Float64()
 	if math.IsInf(total, 0) {
 		return 0, fmt.Errorf("cart quantity for product %s exceeds the supported range", productID)
+	}
+	return total, nil
+}
+
+func cartLineTotalCents(lines []client.CartLine, productID string) (int64, error) {
+	var total int64
+	found := false
+	for _, line := range lines {
+		if line.ProductID != productID {
+			continue
+		}
+		found = true
+		cents, err := priceCents(line.TotalPrices.FinalPrice.Amount)
+		if err != nil {
+			return 0, fmt.Errorf("unparseable cart line total: %w", err)
+		}
+		if cents > math.MaxInt64-total {
+			return 0, fmt.Errorf("cart line total exceeds the supported range")
+		}
+		total += cents
+	}
+	if !found {
+		return 0, fmt.Errorf("product %s is missing from the cart response", productID)
 	}
 	return total, nil
 }
