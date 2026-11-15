@@ -51,9 +51,9 @@ func TestNewClientWarnsOnMalformedConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	var logs []string
-	old := stderrLogf
-	stderrLogf = func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }
-	defer func() { stderrLogf = old }()
+	old := stderrWarnf
+	stderrWarnf = func(event, f string, a ...any) { logs = append(logs, event+" "+fmt.Sprintf(f, a...)) }
+	defer func() { stderrWarnf = old }()
 
 	_ = newClient(&common{})
 	if len(logs) != 1 || !strings.Contains(logs[0], "config.toml could not be read") {

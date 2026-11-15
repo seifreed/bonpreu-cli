@@ -21,6 +21,10 @@ var stderrLogf = func(format string, args ...any) {
 	defaultLogger().Info(fmt.Sprintf(format, args...), "service", "bonpreu", "component", "cli", "event_name", "cli.diagnostic")
 }
 
+var stderrWarnf = func(event, format string, args ...any) {
+	defaultLogger().Warn(fmt.Sprintf(format, args...), "service", "bonpreu", "component", "cli", "event_name", event)
+}
+
 func defaultLogger() *slog.Logger {
 	return newLogger(os.Stderr)
 }
@@ -86,7 +90,7 @@ func newClient(c *common) *client.Client {
 	}
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		stderrLogf("config.toml could not be read (%v) — using defaults", err)
+		stderrWarnf("config.load_failed", "config.toml could not be read (%T) — using defaults", err)
 	}
 	if v := firstNonEmpty(c.lang, cfg.Defaults.Lang); v != "" {
 		cl.Lang = v

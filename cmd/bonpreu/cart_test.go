@@ -14,9 +14,9 @@ import (
 
 func TestGuardLineAddWarnsWhenUnpriceable(t *testing.T) {
 	var logs []string
-	old := stderrLogf
-	stderrLogf = func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }
-	defer func() { stderrLogf = old }()
+	old := stderrWarnf
+	stderrWarnf = func(event, f string, a ...any) { logs = append(logs, event+" "+fmt.Sprintf(f, a...)) }
+	defer func() { stderrWarnf = old }()
 
 	pd := &client.ProductDetail{}
 	pd.Name = "Mystery item"
@@ -36,9 +36,9 @@ func TestGuardLineAddSilentWithoutLimit(t *testing.T) {
 	t.Setenv("BONPREU_MAX_EUR", "")             // no limit from env
 	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir()) // no limit from a real config.toml
 	var logs []string
-	old := stderrLogf
-	stderrLogf = func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }
-	defer func() { stderrLogf = old }()
+	old := stderrWarnf
+	stderrWarnf = func(event, f string, a ...any) { logs = append(logs, event+" "+fmt.Sprintf(f, a...)) }
+	defer func() { stderrWarnf = old }()
 
 	pd := &client.ProductDetail{}
 	pd.Name = "Mystery item"

@@ -23,9 +23,9 @@ func importHarWith(t *testing.T, cookie, regionURL string) []string {
 	}
 
 	var logs []string
-	old := stderrLogf
-	stderrLogf = func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }
-	defer func() { stderrLogf = old }()
+	old := stderrWarnf
+	stderrWarnf = func(event, f string, a ...any) { logs = append(logs, event+" "+fmt.Sprintf(f, a...)) }
+	defer func() { stderrWarnf = old }()
 
 	if err := cmdImportHar([]string{"--file", path}); err != nil {
 		t.Fatalf("cmdImportHar: %v", err)
@@ -54,9 +54,9 @@ func TestImportHarSilentWhenRegionPresent(t *testing.T) {
 func TestSetCookieWarnsOnAnonymousCookie(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
 	var logs []string
-	old := stderrLogf
-	stderrLogf = func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }
-	defer func() { stderrLogf = old }()
+	old := stderrWarnf
+	stderrWarnf = func(event, f string, a ...any) { logs = append(logs, event+" "+fmt.Sprintf(f, a...)) }
+	defer func() { stderrWarnf = old }()
 
 	if err := cmdSetCookie([]string{"sessionid=x; other=y"}); err != nil {
 		t.Fatalf("cmdSetCookie: %v", err)
@@ -69,9 +69,9 @@ func TestSetCookieWarnsOnAnonymousCookie(t *testing.T) {
 func TestSetCookieSilentOnAuthedCookie(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
 	var logs []string
-	old := stderrLogf
-	stderrLogf = func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }
-	defer func() { stderrLogf = old }()
+	old := stderrWarnf
+	stderrWarnf = func(event, f string, a ...any) { logs = append(logs, event+" "+fmt.Sprintf(f, a...)) }
+	defer func() { stderrWarnf = old }()
 
 	if err := cmdSetCookie([]string{"global_sid=a; aws-waf-token=b"}); err != nil {
 		t.Fatalf("cmdSetCookie: %v", err)
