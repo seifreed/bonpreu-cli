@@ -59,7 +59,7 @@ manual fallback. The `aws-waf-token` rotates, so re-run `login --from-browser` w
 
 | Command | What it does |
 |---|---|
-| `bonpreu login --from-browser <name>` | **Easiest.** Lift the session from a browser's cookie store: `chrome`\|`chromium`\|`firefox`\|`safari`\|`edge`\|`brave` (empty = any). Self-verifies. |
+| `bonpreu login --from-browser <name>` | **Easiest.** Lift the session from a browser's cookie store: `chrome`\|`chromium`\|`firefox`\|`safari`\|`edge`\|`brave` (empty = auto-detect; errors if ambiguous). Self-verifies. |
 | `bonpreu login` | Open a browser, log in, capture the session. Only with `-tags browserlogin` (+ Chrome at runtime); else points to `--from-browser`. |
 | `bonpreu import-har --file <har\|->` | Extract the session cookie + region from a DevTools HAR. Use **"Save all as HAR with sensitive data"** — the plain ⤓ export is sanitized (no Cookie headers) and is rejected. |
 | `bonpreu set-cookie '<cookie>'` | Seed a raw Cookie header manually (`--stdin`). |

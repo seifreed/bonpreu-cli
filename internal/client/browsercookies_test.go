@@ -86,6 +86,43 @@ func TestCookiesFromSequenceDoesNotCombineProfiles(t *testing.T) {
 	}
 }
 
+func TestCookiesFromSequenceRejectsAmbiguousAuthenticatedSessions(t *testing.T) {
+	profileA := testProfileBrowser{browser: "chrome", profile: "Default", path: "/chrome/Default/Cookies"}
+	profileB := testProfileBrowser{browser: "chrome", profile: "Profile 1", path: "/chrome/Profile 1/Cookies"}
+	for _, tc := range []struct {
+		name    string
+		browser string
+		items   []cookieItem
+	}{
+		{
+			name: "multiple browsers",
+			items: []cookieItem{
+				{browserCookie("chrome", "global_sid", "session-a"), nil},
+				{browserCookie("chrome", "aws-waf-token", "token-a"), nil},
+				{browserCookie("firefox", "global_sid", "session-b"), nil},
+				{browserCookie("firefox", "aws-waf-token", "token-b"), nil},
+			},
+		},
+		{
+			name:    "multiple profiles in selected browser",
+			browser: "chrome",
+			items: []cookieItem{
+				{&kooky.Cookie{Browser: profileA, Cookie: http.Cookie{Name: "global_sid", Value: "session-a", Domain: "." + cookieDomain}}, nil},
+				{&kooky.Cookie{Browser: profileA, Cookie: http.Cookie{Name: "aws-waf-token", Value: "token-a", Domain: "." + cookieDomain}}, nil},
+				{&kooky.Cookie{Browser: profileB, Cookie: http.Cookie{Name: "global_sid", Value: "session-b", Domain: "." + cookieDomain}}, nil},
+				{&kooky.Cookie{Browser: profileB, Cookie: http.Cookie{Name: "aws-waf-token", Value: "token-b", Domain: "." + cookieDomain}}, nil},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := cookiesFromSequence(tc.browser, cookieSequence(tc.items...))
+			if err == nil || !strings.Contains(err.Error(), "multiple authenticated Bonpreu sessions") || got.Cookie != "" {
+				t.Fatalf("cookiesFromSequence = %+v, %v; want ambiguous-session error", got, err)
+			}
+		})
+	}
+}
+
 func TestCookiesFromSequenceIgnoresDomainsThatOnlyContainBonpreuName(t *testing.T) {
 	seq := cookieSequence(
 		cookieItem{browserCookie("chrome", "global_sid", "legit-session"), nil},

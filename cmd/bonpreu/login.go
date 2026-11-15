@@ -23,7 +23,7 @@ func cmdLogin(args []string) error {
 
 func cmdLoginWith(args []string, readBrowser func(string) (client.Session, error), openBrowser func(string) (client.Session, error)) error {
 	fs, cf := newCommonFlags("login")
-	fromBrowser := fs.String("from-browser", "", "read the session from a browser's cookie store: chrome|chromium|firefox|safari|edge|brave (empty = any installed)")
+	fromBrowser := fs.String("from-browser", "", "read the session from a browser's cookie store: chrome|chromium|firefox|safari|edge|brave (empty = auto-detect; errors if multiple sessions)")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}

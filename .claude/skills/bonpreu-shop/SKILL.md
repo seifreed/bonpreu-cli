@@ -61,8 +61,9 @@ the cookies are HttpOnly, so they can't be read from a page). The user logs in o
 bot-sensitive behind AWS WAF), then pick the easiest way to hand the session to the CLI:
 
 1. **`bonpreu login --from-browser chrome`** — the easy path, prefer it. Reads the session straight
-   from the browser's cookie store (`chrome`|`chromium`|`firefox`|`safari`|`edge`|`brave`; empty = any
-   installed). No DevTools, no files. On macOS Chrome it may pop a one-time Keychain prompt. The
+   from the browser's cookie store (`chrome`|`chromium`|`firefox`|`safari`|`edge`|`brave`; empty =
+   auto-detect, but errors if multiple authenticated sessions exist). No DevTools, no files. On macOS
+   Chrome it may pop a one-time Keychain prompt. The
    command self-verifies and prints `ok — authenticated (region …)`.
 2. **`bonpreu login`** — opens a browser, the user logs in, the CLI captures the session. Only in a
    build with `-tags browserlogin` (+ Chrome installed); otherwise it points back to `--from-browser`.

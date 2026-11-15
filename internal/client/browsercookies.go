@@ -80,8 +80,15 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 		s.val[c.Name] = c.Value // last write wins within a single browser
 	}
 
-	// Use the first browser (in traversal order) whose cookie set is a complete,
-	// authenticated session.
+	where := "your browser"
+	if browser != "" {
+		where = browser
+	}
+	var authenticatedCookie string
+	ambiguityHint := "pass --from-browser <name>"
+	if browser != "" {
+		ambiguityHint = "leave only one authenticated profile in that browser"
+	}
 	for _, key := range storeOrder {
 		s := stores[key]
 		pairs := make([]nameVal, 0, len(s.order))
@@ -89,14 +96,16 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 			pairs = append(pairs, nameVal{n, s.val[n]})
 		}
 		if cookie := buildCookieHeader(pairs); CookieLooksAuthed(cookie) {
-			return Session{Cookie: cookie}, nil
+			if authenticatedCookie != "" {
+				return Session{}, fmt.Errorf("multiple authenticated Bonpreu sessions found in %s; %s and retry", where, ambiguityHint)
+			}
+			authenticatedCookie = cookie
 		}
 	}
-
-	where := "your browser"
-	if browser != "" {
-		where = browser
+	if authenticatedCookie != "" {
+		return Session{Cookie: authenticatedCookie}, nil
 	}
+
 	if len(storeErrors) > 0 {
 		return Session{}, fmt.Errorf("could not read browser cookie stores: %w", errors.Join(storeErrors...))
 	}

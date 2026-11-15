@@ -174,7 +174,7 @@ Bonpreu authenticates with a **cookie session** (`global_sid` + the AWS WAF clea
 
 ```bash
 # 1) From your browser's cookie store — just stay logged in (recommended).
-bonpreu login --from-browser chrome     # or chromium|firefox|safari|edge|brave (empty = any)
+bonpreu login --from-browser chrome     # or chromium|firefox|safari|edge|brave (empty = auto-detect; errors if ambiguous)
                                          # → ~/.bonpreu/session.json (0600); verifies itself
 
 # 2) Open a browser, log in, capture the session (needs a build with the tag + Chrome):
