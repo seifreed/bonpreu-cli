@@ -46,10 +46,10 @@ when an agent parses the output).
 `none` = an explicit override/`--brand` brand wasn't stocked → **ask the user before substituting**
 (see SKILL "Brand preferences"). `off`/`preferred`/`override` need no prompt.
 
-Hits also carry `offer` + `offerLabel` when the chosen product has a promotion: `"multibuy"` (a
-buy-more deal — 2nd-unit, lot, NxM — worth acting on) or `"price"` (was-price / flat discount, info).
-Controlled by `[offers] mode` (`alert` default | `ignore` | `accept`) or `--offers`; `ignore` omits the
-fields. See SKILL "Offers".
+Hits carry `offerMode` with the resolved `[offers] mode` (`alert` default | `ignore` | `accept`) or
+`--offers`. When not ignored, `offer` + `offerLabel` classify the chosen product's promotion as
+`"multibuy"` (2nd-unit, lot, NxM) or `"price"` (was-price / flat discount). The agent uses
+`offerMode` to prepare the plan; it never changes the cart without the user's confirmation.
 
 ## Authenticated commands (need a session)
 

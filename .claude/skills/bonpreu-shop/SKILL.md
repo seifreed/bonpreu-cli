@@ -236,7 +236,8 @@ one-time). If the user names a brand mid-shop ("la mayonesa siempre Hellmann's")
 Bonpreu pushes quantity deals — "2a unitat 50%", "Lot estalvi a 7,75€/lot", "3x2". `batch` flags the
 *actionable* ones: each `--json` hit gets `offer: "multibuy"` (+ `offerLabel` with the text) when the
 chosen product has a buy-more deal (a was-price or flat % discount is `"price"`, not flagged; human
-output marks multibuy with 💡). Behaviour is set by `[offers] mode` in config (or `--offers`):
+output marks multibuy with 💡). Each hit also carries `offerMode`, resolved from `[offers] mode` in
+config (or `--offers`), so the agent can follow the selected policy:
 
 - **`alert`** (default, incl. when unset) — surface the deal and **ask** before acting. At Gate 1, for
   each `multibuy` item, tell the user the deal and ask if they want to take it (e.g. "Carn picada tiene
@@ -245,6 +246,8 @@ output marks multibuy with 💡). Behaviour is set by `[offers] mode` in config 
 - **`ignore`** — don't surface or mention offers.
 - **`accept`** — default to taking the deal in the plan (e.g. qty 2 for a 2nd-unit offer), still shown
   in the Gate-1 plan so the user can veto, still capped by `--max`.
+
+The mode only guides the plan. Always get the user's OK before changing the cart.
 
 Don't infer the deal's exact quantity from the label blindly — "2a unitat 50%" → 2, a lot → ask how
 many; when unsure, ask. Never let an offer push spend past the cap.

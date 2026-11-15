@@ -170,6 +170,7 @@ func cmdBatch(args []string) error {
 		Considered []string        `json:"consideredBrands,omitempty"`
 		Offer      string          `json:"offer,omitempty"`      // multibuy | price
 		OfferLabel string          `json:"offerLabel,omitempty"` // the promo text (e.g. "2a unitat 50%")
+		OfferMode  string          `json:"offerMode,omitempty"`  // resolved alert | ignore | accept policy
 		Error      string          `json:"error,omitempty"`
 	}
 	out := make([]hit, 0, len(terms))
@@ -189,7 +190,7 @@ func cmdBatch(args []string) error {
 			continue
 		}
 		p, match, considered := resolveBrandHit(prods, t, cfg.Brands, override, *noBrands)
-		h := hit{Term: t, Product: &p, BrandMatch: match, Considered: considered}
+		h := hit{Term: t, Product: &p, BrandMatch: match, Considered: considered, OfferMode: offersMode}
 		if offersMode != "ignore" {
 			h.Offer, h.OfferLabel = classifyOffer(p.Promotions)
 		}

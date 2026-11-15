@@ -232,7 +232,7 @@ No `[brands]` section → cheapest, as before. A snapshot of every Bonpreu brand
 
 ### Multi-buy Offers
 
-`batch` flags actionable Bonpreu deals (2nd-unit, lot, NxM) — `--json` hits carry `offer: "multibuy"` + `offerLabel`, human output marks them 💡. `[offers] mode` (or `--offers`) decides the behaviour:
+`batch` flags actionable Bonpreu deals (2nd-unit, lot, NxM) — structured hits carry the resolved `offerMode` and, unless ignored, `offer` + `offerLabel`; human output marks them 💡. `[offers] mode` (or `--offers`) decides the plan behavior:
 
 ```toml
 [offers]

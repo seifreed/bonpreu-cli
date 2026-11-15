@@ -197,6 +197,34 @@ func TestBatchPreservesSearchFailure(t *testing.T) {
 	}
 }
 
+func TestBatchReportsResolvedOfferMode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"X","brand":"B","price":{"amount":"1.00"},"promotions":[{"description":"2a unitat 50%"}]}]}]}`))
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+	for _, tc := range []struct {
+		args []string
+		mode string
+	}{
+		{[]string{"--json", "--offers", "alert", "x"}, "alert"},
+		{[]string{"--json", "--offers", "ignore", "x"}, "ignore"},
+		{[]string{"--json", "--offers", "accept", "x"}, "accept"},
+	} {
+		out, err := capture(t, func() error { return cmdBatch(tc.args) })
+		if err != nil || !strings.Contains(out, `"offerMode": "`+tc.mode+`"`) {
+			t.Fatalf("batch mode %q output = %q, err %v", tc.mode, out, err)
+		}
+		if tc.mode == "ignore" {
+			if strings.Contains(out, `"offer":`) {
+				t.Fatalf("ignore mode still returned offer fields: %q", out)
+			}
+		} else if !strings.Contains(out, `"offer": "multibuy"`) {
+			t.Fatalf("mode %q lost the actionable offer: %q", tc.mode, out)
+		}
+	}
+}
+
 func TestBatchWarnsForMissingBrandAndMultibuy(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","brand":"Other","price":{"amount":"1.00"},"promotions":[{"description":"2x1"}]}]}]}`))
