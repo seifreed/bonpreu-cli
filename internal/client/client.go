@@ -59,7 +59,7 @@ type Client struct {
 // client presents Chrome's TLS (JA3) fingerprint via uTLS; if that fails to
 // initialize it falls back to the stdlib transport.
 func New() *Client {
-	hc := &http.Client{Timeout: 30 * time.Second}
+	hc := &http.Client{Timeout: 30 * time.Second, CheckRedirect: checkRedirect}
 	c := &Client{
 		HTTP:      hc,
 		BaseURL:   BaseURL,
@@ -72,6 +72,16 @@ func New() *Client {
 		c.transportErr = err
 	}
 	return c
+}
+
+func checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) > 0 && strings.EqualFold(via[len(via)-1].URL.Scheme, "https") && !strings.EqualFold(req.URL.Scheme, "https") {
+		return errors.New("refusing HTTPS-to-HTTP redirect")
+	}
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	return nil
 }
 
 // APIError carries a non-2xx response so callers (and agents) can branch on it.
@@ -131,6 +141,9 @@ func (c *Client) newReq(method, url string, body any, extra map[string]string) (
 		req.Header.Set("content-type", "application/json")
 	}
 	if c.Cookie != "" {
+		if err := c.validateCookieTransport(c.Cookie); err != nil {
+			return nil, err
+		}
 		req.Header.Set("cookie", c.Cookie)
 	}
 	for k, v := range extra {

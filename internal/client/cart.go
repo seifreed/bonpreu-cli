@@ -85,6 +85,9 @@ func (c *Client) CheckAuth() (bool, error) {
 // CheckAuthWithCookie verifies a candidate cookie without mutating the client's
 // cached cookie or persisting it.
 func (c *Client) CheckAuthWithCookie(cookie string) (bool, error) {
+	if err := c.validateCookieTransport(cookie); err != nil {
+		return false, err
+	}
 	c.warnExternalCookieHost(cookie)
 	return c.checkAuth(map[string]string{"cookie": cookie})
 }

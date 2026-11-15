@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -242,6 +243,85 @@ func TestCheckAuthWithCookieUsesCandidateWithoutChangingClient(t *testing.T) {
 	}
 	if cl.Cookie != "cached=old" {
 		t.Errorf("candidate verification changed cached cookie to %q", cl.Cookie)
+	}
+}
+
+func TestCheckAuthWithCookieRejectsRemoteHTTP(t *testing.T) {
+	cl := &Client{BaseURL: "http://compraonline.bonpreuesclat.cat"}
+	if _, err := cl.CheckAuthWithCookie("global_sid=secret"); err == nil || !strings.Contains(err.Error(), "non-HTTPS") {
+		t.Fatalf("CheckAuthWithCookie error = %v, want non-HTTPS rejection", err)
+	}
+}
+
+func TestNewReqRejectsRemoteHTTPCookie(t *testing.T) {
+	cl := &Client{BaseURL: "http://compraonline.bonpreuesclat.cat", Cookie: "global_sid=secret"}
+	if _, err := cl.newReq(http.MethodGet, cl.BaseURL+"/api", nil, nil); err == nil || !strings.Contains(err.Error(), "non-HTTPS") {
+		t.Fatalf("newReq error = %v, want non-HTTPS rejection", err)
+	}
+}
+
+func TestClientDoesNotForwardCookieOnHTTPSDowngradeRedirect(t *testing.T) {
+	var destinationRequests atomic.Int32
+	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		destinationRequests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer destination.Close()
+	source := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", destination.URL)
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer source.Close()
+
+	cl := New()
+	cl.BaseURL = source.URL
+	cl.HTTP.Transport = source.Client().Transport
+	cl.Cookie = "global_sid=secret"
+	if _, err := cl.GetText(source.URL); err == nil || !strings.Contains(err.Error(), "HTTPS-to-HTTP") {
+		t.Fatalf("HTTPS downgrade error = %v", err)
+	}
+	if got := destinationRequests.Load(); got != 0 {
+		t.Fatalf("HTTP downgrade destination received %d requests, want none", got)
+	}
+}
+
+func TestCheckRedirectAllowsSafeRedirectAndEnforcesLimit(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "http://example.test/path", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkRedirect(req, []*http.Request{req}); err != nil {
+		t.Fatalf("same-scheme redirect error = %v", err)
+	}
+	via := make([]*http.Request, 10)
+	for i := range via {
+		via[i] = req
+	}
+	if err := checkRedirect(req, via); err == nil || !strings.Contains(err.Error(), "10 redirects") {
+		t.Fatalf("redirect limit error = %v", err)
+	}
+}
+
+func TestValidateCookieTransport(t *testing.T) {
+	for _, tc := range []struct {
+		name, baseURL, cookie string
+		wantErr               bool
+	}{
+		{name: "empty cookie"},
+		{name: "bad url", baseURL: "://bad", cookie: "secret", wantErr: true},
+		{name: "https", baseURL: "https://example.test", cookie: "secret"},
+		{name: "uppercase https", baseURL: "HTTPS://example.test", cookie: "secret"},
+		{name: "localhost", baseURL: "http://localhost:8080", cookie: "secret"},
+		{name: "loopback ip", baseURL: "http://127.0.0.1:8080", cookie: "secret"},
+		{name: "remote http", baseURL: "http://example.test", cookie: "secret", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cl := &Client{BaseURL: tc.baseURL}
+			err := cl.validateCookieTransport(tc.cookie)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("validateCookieTransport = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
 	}
 }
 

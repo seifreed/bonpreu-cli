@@ -3,8 +3,10 @@ package client
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/seifreed/bonpreu-cli/internal/config"
 )
@@ -83,4 +85,25 @@ func (c *Client) warnExternalCookieHost(cookie string) {
 		c.Logger.Warn("session cookie targets a non-Bonpreu host",
 			"event_name", "security.cookie_external_host", "component", "client", "host", host)
 	}
+}
+
+func (c *Client) validateCookieTransport(cookie string) error {
+	if cookie == "" {
+		return nil
+	}
+	u, err := url.Parse(c.BaseURL)
+	if err != nil || u.Hostname() == "" {
+		return fmt.Errorf("cannot safely send session cookie to invalid base URL")
+	}
+	if strings.EqualFold(u.Scheme, "https") {
+		return nil
+	}
+	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return nil
+	}
+	return fmt.Errorf("refusing to send session cookie over non-HTTPS transport to %q", host)
 }
