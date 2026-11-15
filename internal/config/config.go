@@ -41,9 +41,8 @@ type Config struct {
 		Cookie string `toml:"cookie"` // browser session (global_sid + aws-waf-token) for the authenticated leg
 	} `toml:"auth"`
 	Defaults struct {
-		RegionID   string `toml:"region_id"`   // scopes cart/checkout prices; resolved from postal code
-		Lang       string `toml:"lang"`        // "ca" (default) or "es"
-		PostalCode string `toml:"postal_code"` // human-meaningful source; region is derived from it
+		RegionID string `toml:"region_id"` // delivery region from the authenticated session
+		Lang     string `toml:"lang"`      // "ca" (default) or "es"
 	} `toml:"defaults"`
 	Limits struct {
 		MaxEUR float64 `toml:"max_eur"` // maximum value of one resulting cart line (0 = no limit)

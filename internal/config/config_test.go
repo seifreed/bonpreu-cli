@@ -26,7 +26,6 @@ cookie = "global_sid=abc; aws-waf-token=def"
 [defaults]
 region_id = "d57f6327-ce67-44d5-bdd5-dc63e98460a6"
 lang = "es"
-postal_code = "08001"
 [limits]
 max_eur = 75.5
 [brands]
@@ -47,7 +46,7 @@ on_missing = "ask"
 
 	if got.Auth.Cookie != "global_sid=abc; aws-waf-token=def" ||
 		got.Defaults.RegionID != "d57f6327-ce67-44d5-bdd5-dc63e98460a6" ||
-		got.Defaults.Lang != "es" || got.Defaults.PostalCode != "08001" ||
+		got.Defaults.Lang != "es" ||
 		got.Limits.MaxEUR != 75.5 {
 		t.Errorf("LoadConfig core fields mismatch: %+v", got)
 	}
@@ -79,6 +78,16 @@ func TestLoadConfigRejectsUnknownKeys(t *testing.T) {
 	}
 	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "limits.max_eur_limit") {
 		t.Fatalf("LoadConfig error = %v, want unknown key path", err)
+	}
+}
+
+func TestLoadConfigRejectsPostalCodeWithoutRegionResolver(t *testing.T) {
+	dir := privateConfigTestDir(t)
+	if err := os.WriteFile(filepath.Join(dir, configFile), []byte("[defaults]\npostal_code = \"08001\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "defaults.postal_code") {
+		t.Fatalf("LoadConfig error = %v, want unsupported postal_code key", err)
 	}
 }
 
