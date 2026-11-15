@@ -1,6 +1,23 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
+
+func TestMainPassesCommandExitCodeToProcess(t *testing.T) {
+	oldArgs, oldExit := os.Args, exitProcess
+	t.Cleanup(func() { os.Args, exitProcess = oldArgs, oldExit })
+	os.Args = []string{"bonpreu", "version"}
+	exitCode := -1
+	exitProcess = func(code int) { exitCode = code }
+	if _, err := capture(t, func() error { main(); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("main exit code = %d, want 0", exitCode)
+	}
+}
 
 func TestRunDispatch(t *testing.T) {
 	srv := apiServer(t)

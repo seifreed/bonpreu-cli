@@ -15,12 +15,13 @@ import (
 
 // Build metadata, injected at release time via -ldflags (GoReleaser).
 var (
-	version = "dev"
-	commit  = ""
-	date    = ""
+	version     = "dev"
+	commit      = ""
+	date        = ""
+	exitProcess = os.Exit
 )
 
-func main() { os.Exit(run(os.Args[1:])) }
+func main() { exitProcess(run(os.Args[1:])) }
 
 // run dispatches a command and returns the process exit code. Split from main so
 // it is testable without os.Exit.
