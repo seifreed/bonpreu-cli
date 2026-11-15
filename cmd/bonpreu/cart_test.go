@@ -218,7 +218,7 @@ func TestCartAddReportsServerQuantityLimit(t *testing.T) {
 }
 
 func TestCartUpdateLimitErrorHandlesMalformedResponse(t *testing.T) {
-	for _, raw := range []string{`not-json`, `null`, `{}`, `{"other":true}`, `{"limitedItems":{"productId":"uuid-23597"}}`} {
+	for _, raw := range []string{`not-json`, `null`, `{}`, `{"other":true}`, `{"items":"bad"}`, `{"items":null}`, `{"limitedItems":{"productId":"uuid-23597"}}`} {
 		err := cartUpdateLimitError(json.RawMessage(raw), "uuid-23597")
 		if err == nil || !strings.Contains(err.Error(), "check the cart before retrying") {
 			t.Errorf("malformed cart update %s error = %v, want read-back guidance", raw, err)

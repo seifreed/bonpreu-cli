@@ -221,6 +221,7 @@ func cartUpdateLimitError(raw json.RawMessage, productID string) error {
 		return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: missing result fields")
 	}
 	var result struct {
+		Items        []json.RawMessage `json:"items"`
 		LimitedItems []struct {
 			ProductID string `json:"productId"`
 			Reason    string `json:"reason"`
@@ -232,6 +233,9 @@ func cartUpdateLimitError(raw json.RawMessage, productID string) error {
 	}
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: %w", err)
+	}
+	if hasItems && result.Items == nil {
+		return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: items must be an array")
 	}
 	for _, item := range result.LimitedItems {
 		if item.ProductID == productID {
