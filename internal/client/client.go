@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -271,6 +272,12 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 	started := time.Now()
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			safeErr := *urlErr
+			safeErr.URL = safeRequestURL(urlErr.URL)
+			err = &safeErr
+		}
 		c.logHTTPResult(req, 0, 0, started, err)
 		return nil, err
 	}
@@ -301,10 +308,18 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 	// decode step and would silently parse a partial page. Propagate it.
 	if readErr != nil {
 		c.logHTTPResult(req, resp.StatusCode, len(data), started, readErr)
-		return nil, fmt.Errorf("read response body from %s: %w", req.URL, readErr)
+		return nil, fmt.Errorf("read response body: %w", readErr)
 	}
 	c.logHTTPResult(req, resp.StatusCode, len(data), started, nil)
 	return data, nil
+}
+
+func safeRequestURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "<redacted>"
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 func (c *Client) logHTTPResult(req *http.Request, status, responseBytes int, started time.Time, err error) {

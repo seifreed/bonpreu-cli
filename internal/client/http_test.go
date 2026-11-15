@@ -95,12 +95,36 @@ func TestDoReturnsSuccessfulResponseReadError(t *testing.T) {
 	cl.HTTP = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Body: brokenBody{}, Header: make(http.Header)}, nil
 	})}
-	req, err := http.NewRequest(http.MethodGet, "https://example.invalid/data", nil)
+	req, err := http.NewRequest(http.MethodGet, "https://example.invalid/data?token=private-value", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cl.do(req); err == nil || !strings.Contains(err.Error(), "read response body") {
 		t.Fatalf("successful response read error = %v", err)
+	} else if strings.Contains(err.Error(), "private-value") {
+		t.Fatalf("response read error exposed URL query: %v", err)
+	}
+}
+
+func TestDoRedactsURLFromTransportError(t *testing.T) {
+	cl := New()
+	cl.HTTP = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("dial failed")
+	})}
+	err := cl.DoJSON("GET", "https://private-value@example.invalid/search?token=private-value", nil, nil)
+	if err == nil {
+		t.Fatal("DoJSON error = nil; want transport error")
+	}
+	if strings.Contains(err.Error(), "private-value") {
+		t.Fatalf("transport error exposed URL query: %v", err)
+	}
+}
+
+func TestSafeRequestURLRedactsInvalidAndRelativeURLs(t *testing.T) {
+	for _, raw := range []string{"https://[invalid", "/relative/path"} {
+		if got := safeRequestURL(raw); got != "<redacted>" {
+			t.Errorf("safeRequestURL(%q) = %q, want <redacted>", raw, got)
+		}
 	}
 }
 
