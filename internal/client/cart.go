@@ -3,7 +3,9 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
+	"strings"
 )
 
 // CartItem is one element of an apply-quantity request: the product's stable UUID
@@ -126,6 +128,14 @@ func (c *Client) csrfToken() (string, error) {
 func (c *Client) ApplyQuantity(items []CartItem) (*Cart, error) {
 	if len(items) == 0 {
 		return c.GetCart()
+	}
+	for _, item := range items {
+		if strings.TrimSpace(item.ProductID) == "" {
+			return nil, fmt.Errorf("cart product ID is required")
+		}
+		if item.Quantity == 0 || math.IsNaN(item.Quantity) || math.IsInf(item.Quantity, 0) {
+			return nil, fmt.Errorf("cart quantity delta must be finite and non-zero")
+		}
 	}
 	csrf, err := c.csrfToken()
 	if err != nil {

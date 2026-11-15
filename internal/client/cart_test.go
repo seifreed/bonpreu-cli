@@ -1,9 +1,11 @@
 package client
 
 import (
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -14,6 +16,34 @@ func TestApplyQuantityEmptyItemsFetchesCart(t *testing.T) {
 	defer srv.Close()
 	if _, err := testClient(srv).ApplyQuantity(nil); err != nil {
 		t.Fatalf("empty ApplyQuantity should fetch the cart: %v", err)
+	}
+}
+
+func TestApplyQuantityRejectsInvalidItemsBeforeNetwork(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	cl := testClient(srv)
+	for _, tc := range []struct {
+		name string
+		item CartItem
+	}{
+		{name: "empty ID", item: CartItem{Quantity: 1}},
+		{name: "zero delta", item: CartItem{ProductID: "p1"}},
+		{name: "NaN delta", item: CartItem{ProductID: "p1", Quantity: math.NaN()}},
+		{name: "infinite delta", item: CartItem{ProductID: "p1", Quantity: math.Inf(1)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := cl.ApplyQuantity([]CartItem{tc.item}); err == nil {
+				t.Fatal("ApplyQuantity should reject invalid item")
+			}
+		})
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("invalid items made %d network requests, want none", got)
 	}
 }
 
