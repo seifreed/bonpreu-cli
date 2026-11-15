@@ -252,6 +252,13 @@ func cartClear(args []string) error {
 			return err
 		}
 	}
+	remaining, err := cl.GetCart()
+	if err != nil {
+		return fmt.Errorf("cart clear was accepted but the result could not be verified; inspect the cart before retrying: %w", err)
+	}
+	if len(remaining.Lines) > 0 {
+		return fmt.Errorf("cart clear was accepted but %d cart line(s) remain; inspect the cart before retrying", len(remaining.Lines))
+	}
 	stderrInfo("cart.clear.completed", "cart lines cleared", "operation", cf.operation, "line_count", len(items))
 	if done, err := emitStructured(cf, updated.Raw); done {
 		if err != nil {

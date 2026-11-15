@@ -641,8 +641,53 @@ func TestCartClearReportsServerQuantityLimit(t *testing.T) {
 	}
 }
 
+func TestCartClearVerifiesResultAfterAcceptedWrite(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		readback500 bool
+		want        string
+	}{
+		{name: "concurrent line remains", want: "accepted but 1 cart line(s) remain"},
+		{name: "readback fails", readback500: true, want: "accepted but the result could not be verified"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var cartReads, writes atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/":
+					w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+				case "/api/cart/v1/carts/active":
+					if cartReads.Add(1) > 1 && tc.readback500 {
+						w.WriteHeader(http.StatusInternalServerError)
+						return
+					}
+					w.Write([]byte(`{"items":[{"productId":"p1","quantity":1}]}`))
+				case "/api/cart/v1/carts/active/apply-quantity":
+					writes.Add(1)
+					w.Write([]byte(`{"items":[]}`))
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+			useServer(t, srv, true)
+
+			out, err := capture(t, func() error { return cmdCart([]string{"clear"}) })
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("cart clear output %q, error = %v; want %q", out, err, tc.want)
+			}
+			if strings.Contains(out, "ok — removed") {
+				t.Fatalf("cart clear reported success: %q", out)
+			}
+			if got := writes.Load(); got != 1 {
+				t.Fatalf("cart clear sent %d writes, want one accepted write", got)
+			}
+		})
+	}
+}
+
 func TestCartClearOutputFailureAfterCartWrite(t *testing.T) {
-	srv := apiServer(t)
+	srv := statefulCartServer(t, 1)
 	defer srv.Close()
 	useServer(t, srv, true)
 
@@ -653,18 +698,7 @@ func TestCartClearOutputFailureAfterCartWrite(t *testing.T) {
 }
 
 func TestCartClearJSONOutput(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/":
-			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
-		case "/api/cart/v1/carts/active":
-			_, _ = w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":1}]}`))
-		case "/api/cart/v1/carts/active/apply-quantity":
-			_, _ = w.Write([]byte(`{"items":[]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
+	srv := statefulCartServer(t, 1)
 	defer srv.Close()
 	useServer(t, srv, true)
 
@@ -675,18 +709,7 @@ func TestCartClearJSONOutput(t *testing.T) {
 }
 
 func TestCartClearJSONOutputFailureAfterWrite(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/":
-			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
-		case "/api/cart/v1/carts/active":
-			_, _ = w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":1}]}`))
-		case "/api/cart/v1/carts/active/apply-quantity":
-			_, _ = w.Write([]byte(`{"items":[]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
+	srv := statefulCartServer(t, 1)
 	defer srv.Close()
 	useServer(t, srv, true)
 
