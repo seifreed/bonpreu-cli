@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"regexp"
-	"strings"
+	"strconv"
 
 	"github.com/seifreed/bonpreu-cli/internal/client"
 )
@@ -12,22 +12,38 @@ import (
 // unit, a lot, an NxM deal) — worth a heads-up because the user can act on it,
 // unlike a was-price or a flat % / loyalty-card discount that already applies.
 // Bonpreu tags every promotion type "OFFER", so the distinction is text-only.
-var multibuyHints = []string{"unitat", "unidad", "lot", "emporta", "leva", "2x", "3x", "x2", "x1"}
-var nxmOffer = regexp.MustCompile(`(?i)\b\d+\s*[x×]\s*\d+\b`)
+var (
+	nxmOffer      = regexp.MustCompile(`(?i)\b(\d+)\s*[x×]\s*(\d+)\b`)
+	unitOffer     = regexp.MustCompile(`(?i)\b(?:[2-9]\d*\s*(?:a|ª|º)|segona|segunda)\s+(?:unitat|unidad)\b`)
+	multibuyWords = regexp.MustCompile(`(?i)\b(?:lot(?:e)?|emporta(?:['’]t)?|ll[eé]va(?:te)?)\b`)
+)
 
 // isMultibuy reports whether a promotion description is a quantity-dependent deal.
 func isMultibuy(desc string) bool {
-	if nxmOffer.MatchString(desc) {
+	if unitOffer.MatchString(desc) || multibuyWords.MatchString(desc) {
 		return true
 	}
-	d := strings.ToLower(desc)
-	for _, h := range multibuyHints {
-		if strings.Contains(d, h) {
+	for _, match := range nxmOffer.FindAllStringSubmatchIndex(desc, -1) {
+		if adjacentDecimal(desc, match[0], match[1]) {
+			continue
+		}
+		buy, buyErr := strconv.Atoi(desc[match[2]:match[3]])
+		get, getErr := strconv.Atoi(desc[match[4]:match[5]])
+		if buyErr == nil && getErr == nil && buy > get {
 			return true
 		}
 	}
 	return false
 }
+
+func adjacentDecimal(s string, start, end int) bool {
+	if start >= 2 && (s[start-1] == '.' || s[start-1] == ',') && isDigit(s[start-2]) {
+		return true
+	}
+	return end+1 < len(s) && (s[end] == '.' || s[end] == ',') && isDigit(s[end+1])
+}
+
+func isDigit(b byte) bool { return b >= '0' && b <= '9' }
 
 // classifyOffer inspects a product's promotions: "multibuy" (a quantity deal worth
 // a heads-up) wins; else "price" (a was-price drop, informational); else "". label

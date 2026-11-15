@@ -16,6 +16,17 @@ func TestClassifyOffer(t *testing.T) {
 	if multibuy("Abans 5,99€") != "price" {
 		t.Errorf("was-price should be 'price', got %q", multibuy("Abans 5,99€"))
 	}
+	for _, d := range []string{
+		"Oportunitat única 5,99€",
+		"Producte d'Olot 5,99€",
+		"Format 2x1,5 L",
+		"Format 1,5x1 L",
+		"Format 1x1",
+	} {
+		if got := multibuy(d); got != "price" {
+			t.Errorf("non-multibuy promotion %q classified as %q", d, got)
+		}
+	}
 	if k, _ := classifyOffer(nil); k != "" {
 		t.Errorf("no promos → empty, got %q", k)
 	}
