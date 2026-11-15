@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"strings"
@@ -150,15 +151,39 @@ func cartWrite(args []string, set bool) error {
 	if err != nil {
 		return err
 	}
-	stderrInfo("cart.quantity.changed", "cart line quantity updated", "operation", cf.operation, "quantity_delta", delta)
+	limitErr := cartUpdateLimitError(cart.Raw, pd.ProductID)
+	if limitErr == nil {
+		stderrInfo("cart.quantity.changed", "cart line quantity updated", "operation", cf.operation, "quantity_delta", delta)
+	}
 	if done, err := emitStructured(cf, cart.Raw); done {
 		if err != nil {
-			return fmt.Errorf("cart quantity was updated but confirmation output failed; inspect the cart before retrying: %w", err)
+			return fmt.Errorf("cart update was accepted but confirmation output failed; inspect the cart before retrying: %w", err)
 		}
-		return nil
+		return limitErr
+	}
+	if limitErr != nil {
+		return limitErr
 	}
 	if err := writeStdout("ok — %s [%s] %s (Δ%+g) — %s\n", verb, terminalText(retailerID), fmtQty(qty), delta, terminalText(pd.Name)); err != nil {
-		return fmt.Errorf("cart quantity was updated but confirmation output failed; inspect the cart before retrying: %w", err)
+		return fmt.Errorf("cart update was accepted but confirmation output failed; inspect the cart before retrying: %w", err)
+	}
+	return nil
+}
+
+func cartUpdateLimitError(raw json.RawMessage, productID string) error {
+	var result struct {
+		LimitedItems []struct {
+			ProductID string `json:"productId"`
+			Reason    string `json:"reason"`
+		} `json:"limitedItems"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: %w", err)
+	}
+	for _, item := range result.LimitedItems {
+		if item.ProductID == productID {
+			return fmt.Errorf("cart quantity was limited by the server (%s); inspect the cart before retrying", terminalText(firstNonEmpty(item.Reason, "quantity limit")))
+		}
 	}
 	return nil
 }
