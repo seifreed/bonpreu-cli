@@ -210,11 +210,20 @@ func cartClear(args []string) error {
 	for _, l := range cart.Lines {
 		items = append(items, client.CartItem{ProductID: l.ProductID, Quantity: -l.Quantity})
 	}
-	if _, err := cl.ApplyQuantity(items); err != nil {
+	updated, err := cl.ApplyQuantity(items)
+	if err != nil {
 		return err
 	}
+	for _, item := range items {
+		if err := cartUpdateLimitError(updated.Raw, item.ProductID); err != nil {
+			return err
+		}
+	}
 	stderrInfo("cart.clear.completed", "cart lines cleared", "operation", cf.operation, "line_count", len(items))
-	return writeStdout("ok — removed %d line(s)\n", len(items))
+	if err := writeStdout("ok — removed %d line(s)\n", len(items)); err != nil {
+		return fmt.Errorf("cart update was accepted but confirmation output failed; inspect the cart before retrying: %w", err)
+	}
+	return nil
 }
 
 // currentQty returns the summed quantity of a product already in the active cart

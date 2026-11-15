@@ -392,6 +392,47 @@ func TestCartClearApplyError(t *testing.T) {
 	}
 }
 
+func TestCartClearReportsServerQuantityLimit(t *testing.T) {
+	var cartWrites atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active":
+			_, _ = w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":1}]}`))
+		case "/api/cart/v1/carts/active/apply-quantity":
+			cartWrites.Add(1)
+			_, _ = w.Write([]byte(`{"limitedItems":[{"productId":"uuid-23597","reason":"QUANTITY_UNAVAILABLE"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	out, err := capture(t, func() error { return cmdCart([]string{"clear"}) })
+	if err == nil || !strings.Contains(err.Error(), "QUANTITY_UNAVAILABLE") {
+		t.Fatalf("cart clear error = %v, want server quantity-limit failure", err)
+	}
+	if strings.Contains(out, "ok — removed") {
+		t.Fatalf("cart clear reported success despite a server limit: %q", out)
+	}
+	if got := cartWrites.Load(); got != 1 {
+		t.Fatalf("cart writes = %d, want one cart update", got)
+	}
+}
+
+func TestCartClearOutputFailureAfterCartWrite(t *testing.T) {
+	srv := apiServer(t)
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	err := withFailingStdout(t, func() error { return cmdCart([]string{"clear"}) })
+	if err == nil || !strings.Contains(err.Error(), "inspect the cart before retrying") {
+		t.Fatalf("cart clear output error = %v, want read-back guidance after write", err)
+	}
+}
+
 // `set` for a product not currently in the cart exercises currentQty's
 // not-found return.
 func TestCartSetNewProduct(t *testing.T) {
