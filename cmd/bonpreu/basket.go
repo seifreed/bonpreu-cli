@@ -109,34 +109,52 @@ func priceCents(s string) (int64, error) {
 	if parseErr == nil && (math.IsNaN(v) || math.IsInf(v, 0) || v < 0) {
 		return 0, fmt.Errorf("invalid price %q (want a finite, non-negative amount)", s)
 	}
-	amount, ok := new(big.Rat).SetString(s)
-	if parseErr != nil || !ok {
+	amount, ratErr := ratFromDecimal(s)
+	if parseErr != nil || ratErr != nil {
 		return 0, fmt.Errorf("unparseable price %q", s)
 	}
 	amount.Mul(amount, big.NewRat(100, 1))
-	cents, remainder := new(big.Int), new(big.Int)
-	cents.QuoRem(amount.Num(), amount.Denom(), remainder)
-	if remainder.Lsh(remainder, 1).Cmp(amount.Denom()) >= 0 {
-		cents.Add(cents, big.NewInt(1))
-	}
+	cents := roundRat(amount)
 	if !cents.IsInt64() {
 		return 0, fmt.Errorf("price %q exceeds the supported range", s)
 	}
 	return cents.Int64(), nil
 }
 
+func ratFromDecimal(s string) (*big.Rat, error) {
+	r, ok := new(big.Rat).SetString(s)
+	if !ok {
+		return nil, fmt.Errorf("invalid decimal %q", s)
+	}
+	return r, nil
+}
+
+func roundRat(r *big.Rat) *big.Int {
+	integer, remainder := new(big.Int), new(big.Int)
+	integer.QuoRem(r.Num(), r.Denom(), remainder)
+	if remainder.Lsh(remainder, 1).Cmp(r.Denom()) >= 0 {
+		integer.Add(integer, big.NewInt(1))
+	}
+	return integer
+}
+
 // lineCents returns a line subtotal in whole cents: unit-price cents × qty,
 // rounded. Shared by the basket total and the --max budget guard so both price
 // a line identically.
 func lineCents(unitCents int64, qty float64) (int64, error) {
-	if unitCents < 0 || qty < 0 || math.IsNaN(qty) || math.IsInf(qty, 0) {
+	if unitCents < 0 || qty < 0 {
 		return 0, fmt.Errorf("invalid price or quantity")
 	}
-	subtotal := math.Round(float64(unitCents) * qty)
-	if math.IsInf(subtotal, 0) || subtotal >= float64(math.MaxInt64) {
+	quantity, err := ratFromDecimal(strconv.FormatFloat(qty, 'g', -1, 64))
+	if err != nil {
+		return 0, fmt.Errorf("invalid price or quantity: %w", err)
+	}
+	subtotal := new(big.Rat).Mul(big.NewRat(unitCents, 1), quantity)
+	cents := roundRat(subtotal)
+	if !cents.IsInt64() {
 		return 0, fmt.Errorf("line subtotal exceeds the supported range")
 	}
-	return int64(subtotal), nil
+	return cents.Int64(), nil
 }
 
 // centsStr renders integer cents as a "35.00"-style euro string. Negative values

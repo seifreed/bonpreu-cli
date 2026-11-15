@@ -30,9 +30,18 @@ func TestPriceCents(t *testing.T) {
 	}
 }
 
+func TestRatFromDecimalRejectsInvalidInput(t *testing.T) {
+	if _, err := ratFromDecimal("not a number"); err == nil {
+		t.Fatal("ratFromDecimal should report malformed decimal input")
+	}
+}
+
 func TestLineCentsRejectsOverflow(t *testing.T) {
 	if got, err := lineCents(169, 2); err != nil || got != 338 {
 		t.Fatalf("lineCents(169, 2) = %d, %v; want 338, nil", got, err)
+	}
+	if got, err := lineCents(25, 0.580); err != nil || got != 15 {
+		t.Fatalf("lineCents(25, 0.580) = %d, %v; want 15, nil", got, err)
 	}
 	if _, err := lineCents(169, 1e300); err == nil {
 		t.Fatal("lineCents must reject a subtotal that overflows int64")
