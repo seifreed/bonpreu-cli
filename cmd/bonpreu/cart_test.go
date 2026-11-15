@@ -168,15 +168,15 @@ func TestCartAddArgErrorsAndApplyError(t *testing.T) {
 }
 
 func TestGuardResolveMaxErrorOnAdd(t *testing.T) {
-	srv := apiServer(t)
-	defer srv.Close()
-	dir := useServer(t, srv, true)
-	// Malformed config.toml in the (already session-seeded) dir → resolveMax fails
-	// inside guardLineAdd when no --max flag is given.
+	dir := t.TempDir()
+	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	t.Setenv("BONPREU_MAX_EUR", "")
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("bad = ["), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1"}) }); err == nil {
+	pd := &client.ProductDetail{}
+	pd.Price.Amount = "1.69"
+	if err := guardLineAdd(0, pd, 1); err == nil {
 		t.Error("a malformed config should fail the spending-guard resolution")
 	}
 }
@@ -225,6 +225,29 @@ func TestAuthedClientWithoutSession(t *testing.T) {
 	useServer(t, srv, false) // no session seeded
 	if _, err := authedClient(&common{}); err == nil {
 		t.Error("authedClient should fail without a session")
+	}
+}
+
+func TestAuthedClientSurfacesUnreadableAuthState(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		file string
+		body string
+	}{
+		{name: "corrupt session", file: "session.json", body: "{ invalid"},
+		{name: "malformed config", file: "config.toml", body: "not valid = toml ["},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("BONPREU_CONFIG_DIR", dir)
+			t.Setenv("BONPREU_MAX_EUR", "")
+			if err := os.WriteFile(filepath.Join(dir, tt.file), []byte(tt.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := authedClient(&common{operation: "cart get"}); err == nil || strings.Contains(err.Error(), "not authenticated") {
+				t.Fatalf("authedClient error = %v; want the underlying auth-state error", err)
+			}
+		})
 	}
 }
 

@@ -58,7 +58,7 @@ Diagnostics use Go's standard `log/slog` and go to stderr, keeping
 excluded from error strings because they are untrusted and may contain secrets.
 The client accepts an optional `*slog.Logger`; without one, library calls stay
 silent. Current client events include `http.retry`, `transport.fallback`,
-`auth.session_cache.read_failed`, and `security.cookie_external_host`. Retry
+and `security.cookie_external_host`. Retry
 events carry method, status, attempt,
 maximum attempts, and wait duration; events omit request URLs, bodies, cookies,
 and raw error text. Add new diagnostics at the operation boundary with a stable

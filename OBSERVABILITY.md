@@ -37,7 +37,6 @@ Events currently emitted:
 | `http.response` | DEBUG | method, status when available, duration, response byte count, outcome, error type only |
 | `http.retry` | WARN | method, response status, attempt, retry limit, wait duration |
 | `transport.fallback` | WARN | error type when the Chrome TLS transport falls back |
-| `auth.session_cache.read_failed` | WARN | error type; never the cookie or raw error text |
 | `auth.login.started` | INFO | operation and login source type; no browser name or cookie |
 | `auth.har.imported` | INFO | whether a region was found; no cookie or region value |
 | `auth.cookie.saved` | INFO | operation only; no cookie value or length |

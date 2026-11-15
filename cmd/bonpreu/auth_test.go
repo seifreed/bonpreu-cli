@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/seifreed/bonpreu-cli/internal/client"
 )
 
 // importHarWith runs cmdImportHar against a HAR file holding the given cookie and
@@ -104,6 +106,16 @@ func TestSetCookieSaveError(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", unwritableConfigDir(t))
 	if err := cmdSetCookie([]string{"global_sid=a; aws-waf-token=b"}); err == nil {
 		t.Error("set-cookie should fail when the session cannot be saved")
+	}
+}
+
+func TestSetCookieReturnsSaveError(t *testing.T) {
+	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	oldSave := persistSession
+	persistSession = func(client.Session) error { return fmt.Errorf("disk write failed") }
+	t.Cleanup(func() { persistSession = oldSave })
+	if err := cmdSetCookie([]string{"global_sid=a; aws-waf-token=b"}); err == nil || !strings.Contains(err.Error(), "disk write failed") {
+		t.Fatalf("set-cookie error = %v; want save error", err)
 	}
 }
 

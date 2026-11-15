@@ -10,6 +10,8 @@ import (
 	"github.com/seifreed/bonpreu-cli/internal/client"
 )
 
+var persistSession = client.SaveSession
+
 // cmdImportHar imports a browser session from a DevTools HAR export: the Cookie
 // header (login + AWS WAF clearance) and the resolved region. This is the
 // preferred way to bring your own authenticated session — Bonpreu's first login
@@ -59,9 +61,12 @@ func cmdSetCookie(args []string) error {
 	if cookie == "" {
 		return fmt.Errorf("usage: bonpreu set-cookie '<cookie header>'  (or --stdin)")
 	}
-	s := client.LoadSession()
+	s, err := client.LoadSession()
+	if err != nil {
+		return err
+	}
 	s.Cookie = cookie
-	if err := client.SaveSession(s); err != nil {
+	if err := persistSession(s); err != nil {
 		return err
 	}
 	stderrInfo("auth.cookie.saved", "session cookie saved", "operation", "set-cookie")

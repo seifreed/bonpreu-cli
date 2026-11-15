@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -58,6 +60,19 @@ func TestSaveAndVerify(t *testing.T) {
 				t.Errorf("successful verification events = %v", events)
 			}
 		})
+	}
+}
+
+func TestSaveAndVerifyReturnsUnreadableConfigError(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	t.Setenv("BONPREU_MAX_EUR", "")
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("not valid = toml ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := saveAndVerify(&common{operation: "login"}, client.Session{Cookie: "global_sid=a; aws-waf-token=b"})
+	if err == nil || !strings.Contains(err.Error(), "read authentication config") {
+		t.Fatalf("saveAndVerify error = %v; want config error", err)
 	}
 }
 
@@ -124,7 +139,11 @@ func TestCmdLoginSelectsBrowserSource(t *testing.T) {
 			if len(events) != 2 || events[0] != "auth.login.started" || events[1] != "auth.session.verified" {
 				t.Fatalf("login events = %v", events)
 			}
-			if got := client.LoadSession().Cookie; got != tc.want {
+			session, err := client.LoadSession()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := session.Cookie; got != tc.want {
 				t.Fatalf("saved session cookie = %q, want %q", got, tc.want)
 			}
 		})

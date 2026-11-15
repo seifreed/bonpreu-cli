@@ -20,10 +20,15 @@ type Session struct {
 }
 
 // LoadSession reads the cached session; a missing file yields a zero Session.
-func LoadSession() Session {
+func LoadSession() (Session, error) {
 	var s Session
-	_ = config.Load(sessionFile, &s)
-	return s
+	if err := config.Load(sessionFile, &s); err != nil {
+		if os.IsNotExist(err) {
+			return s, nil
+		}
+		return s, fmt.Errorf("read cached session: %w", err)
+	}
+	return s, nil
 }
 
 // SaveSession persists the session cache (0600).
@@ -32,20 +37,18 @@ func SaveSession(s Session) error {
 }
 
 // LoadAuth loads the cached session (and config fallbacks) onto the client so
-// its requests carry the browser cookie and region. Returns false when there is
-// no cookie — the caller should tell the user to import a session. The name
-// signals the load side effect; it is not a pure predicate.
-func (c *Client) LoadAuth() bool {
-	var s Session
-	// A corrupt cache (exists but unreadable) is distinct from "no session yet":
-	// the latter is normal, the former should not masquerade as "not authenticated".
-	if err := config.Load(sessionFile, &s); err != nil && !os.IsNotExist(err) {
-		if c.Logger != nil {
-			c.Logger.Warn("session cache could not be read; re-import the session",
-				"event_name", "auth.session_cache.read_failed", "component", "client", "error_type", fmt.Sprintf("%T", err))
-		}
+// its requests carry the browser cookie and region. Returns false, nil when
+// there is no cookie; unreadable state is returned as an error. The name signals
+// the load side effect; it is not a pure predicate.
+func (c *Client) LoadAuth() (bool, error) {
+	s, err := LoadSession()
+	if err != nil {
+		return false, err
 	}
-	cfg, _ := config.LoadConfig()
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return false, fmt.Errorf("read authentication config: %w", err)
+	}
 	if s.Cookie == "" {
 		s.Cookie = cfg.Auth.Cookie
 	}
@@ -75,5 +78,5 @@ func (c *Client) LoadAuth() bool {
 			}
 		}
 	}
-	return c.Cookie != ""
+	return c.Cookie != "", nil
 }

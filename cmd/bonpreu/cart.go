@@ -30,7 +30,11 @@ func cmdCart(args []string) error {
 
 func authedClient(cf *common) (*client.Client, error) {
 	cl := newClient(cf)
-	if !cl.LoadAuth() {
+	loaded, err := cl.LoadAuth()
+	if err != nil {
+		return nil, err
+	}
+	if !loaded {
 		return nil, fmt.Errorf("not authenticated — run `bonpreu import-har --file <har>` first")
 	}
 	// A stored cookie that lacks the session markers (global_sid + aws-waf-token) is

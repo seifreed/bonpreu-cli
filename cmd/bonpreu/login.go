@@ -58,7 +58,11 @@ func saveAndVerify(cf *common, s client.Session) error {
 		return err
 	}
 	cl := newClient(cf)
-	if !cl.LoadAuth() {
+	loaded, err := cl.LoadAuth()
+	if err != nil {
+		return err
+	}
+	if !loaded {
 		return fmt.Errorf("session saved but carried no cookie")
 	}
 	ok, err := cl.CheckAuth()

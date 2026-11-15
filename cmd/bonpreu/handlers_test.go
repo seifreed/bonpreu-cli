@@ -234,7 +234,7 @@ func TestImportHarEndToEnd(t *testing.T) {
 	if err := cmdImportHar([]string{"--file", path}); err != nil {
 		t.Fatalf("import-har: %v", err)
 	}
-	if s := client.LoadSession(); s.RegionID != "r-9" {
+	if s, err := client.LoadSession(); err != nil || s.RegionID != "r-9" {
 		t.Errorf("session region = %q, want r-9", s.RegionID)
 	}
 }
