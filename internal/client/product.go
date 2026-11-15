@@ -43,13 +43,25 @@ func (c *Client) Product(retailerProductID string) (*ProductDetail, error) {
 	if node == nil {
 		return nil, fmt.Errorf("product %s: not found in page (id may be invalid or out of catalog)", retailerProductID)
 	}
-	b, _ := json.Marshal(node)
-	var pd ProductDetail
-	if err := json.Unmarshal(b, &pd.Product); err != nil {
-		return nil, fmt.Errorf("decode product %s: %w", retailerProductID, err)
+	product, err := productFromNode(node, retailerProductID)
+	if err != nil {
+		return nil, err
 	}
+	pd := &ProductDetail{Product: product}
 	pd.Details = collectDetails(html, retailerProductID)
-	return &pd, nil
+	return pd, nil
+}
+
+func productFromNode(node map[string]any, retailerProductID string) (Product, error) {
+	b, err := json.Marshal(node)
+	if err != nil {
+		return Product{}, fmt.Errorf("encode product %s: %w", retailerProductID, err)
+	}
+	var product Product
+	if err := json.Unmarshal(b, &product); err != nil {
+		return Product{}, fmt.Errorf("decode product %s: %w", retailerProductID, err)
+	}
+	return product, nil
 }
 
 var stateVarRE = regexp.MustCompile(`window\.(__URQL_DATA__|__INITIAL_STATE__|__QUERY_INITIAL_STATE__)\s*=\s*`)

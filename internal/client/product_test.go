@@ -7,6 +7,13 @@ import (
 	"testing"
 )
 
+func TestProductFromNodeReturnsMarshalError(t *testing.T) {
+	_, err := productFromNode(map[string]any{"bad": make(chan int)}, "product-1")
+	if err == nil || !strings.Contains(err.Error(), "encode product product-1") || !strings.Contains(err.Error(), "unsupported type") {
+		t.Fatalf("productFromNode error = %v; want wrapped marshal error", err)
+	}
+}
+
 // A miniature of the real product page: the node lives in __QUERY_INITIAL_STATE__
 // under queries[].state.data.product, with titled info blocks alongside it.
 const fixturePage = `<!doctype html><html><head></head><body>
