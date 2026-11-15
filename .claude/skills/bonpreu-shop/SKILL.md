@@ -10,7 +10,7 @@ description: >-
   esta lista en Bonpreu?", "compra estos productos", "mira esta foto de la cesta y pídelo". English:
   "do my Bonpreu shop", "price this list at Bonpreu", "fill my Bonpreu cart", "shop this fridge photo
   at Bonpreu". Always confirm the resolved products before touching the cart, always cap spend with
-  --max. Stop after verifying the cart: never start checkout, reserve a delivery slot, or place an order.
+  --max. Stop after verifying the cart: never start checkout, reserve a delivery slot, submit an order, or confirm a purchase/payment.
   Do NOT use for other supermarkets (Mercadona, Carrefour, Lidl) — Bonpreu/Esclat only.
 ---
 
@@ -36,7 +36,8 @@ This touches a real account and real money, so:
    a non-zero exit — treat that as **stop-and-report**, don't raise the cap unless the user does.
 3. **Stop at the cart.** The task is complete after the confirmed items are in the cart and verified
    with `bonpreu cart get`. Never run checkout commands, reserve a delivery slot, open the checkout
-   browser, or place an order. Tell the user the cart is ready; do not prompt them to continue buying.
+   browser, submit an order, or confirm a purchase/payment. Tell the user the cart is ready; do not
+   prompt them to continue buying.
 
 ## Locate the binary
 
