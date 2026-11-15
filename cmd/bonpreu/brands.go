@@ -109,6 +109,7 @@ func crawlBrands(cl *client.Client, depth, limit int) ([]brandCount, error) {
 		return nil, fmt.Errorf("no categories found (try a higher --depth)")
 	}
 	counts := map[string]int{}
+	seenProducts := map[string]bool{}
 	var categoryErrors []error
 	for i, id := range ids {
 		pp, perr := cl.CategoryProducts(id, limit)
@@ -118,7 +119,7 @@ func crawlBrands(cl *client.Client, depth, limit int) ([]brandCount, error) {
 			categoryErrors = append(categoryErrors, fmt.Errorf("category %s: %w", id, perr))
 			continue
 		}
-		tallyBrands(counts, pp.Products())
+		tallyBrands(counts, seenProducts, pp.Products())
 		stderrDebug("catalog.brand_crawl.progress", "brand crawl progress",
 			"operation", "brands", "category_index", i+1, "category_total", len(ids), "brand_count", len(counts))
 	}
@@ -140,11 +141,24 @@ func collectCategoryIDs(cats []client.Category, out *[]string, seen map[string]b
 }
 
 // tallyBrands adds each product's (non-empty) brand to counts.
-func tallyBrands(counts map[string]int, prods []client.Product) {
+func tallyBrands(counts map[string]int, seen map[string]bool, prods []client.Product) {
 	for _, p := range prods {
-		if p.Brand != "" {
-			counts[p.Brand]++
+		if p.Brand == "" {
+			continue
 		}
+		productID := "product:" + p.ProductID
+		retailerID := "retailer:" + p.RetailerProductID
+		duplicate := p.ProductID != "" && seen[productID] || p.RetailerProductID != "" && seen[retailerID]
+		if p.ProductID != "" {
+			seen[productID] = true
+		}
+		if p.RetailerProductID != "" {
+			seen[retailerID] = true
+		}
+		if duplicate {
+			continue
+		}
+		counts[p.Brand]++
 	}
 }
 

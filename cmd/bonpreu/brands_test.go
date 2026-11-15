@@ -19,12 +19,20 @@ import (
 
 func TestTallyAndSortBrands(t *testing.T) {
 	counts := map[string]int{}
-	tallyBrands(counts, []client.Product{
-		{Brand: "BONPREU"}, {Brand: "HELLMANN'S"}, {Brand: "BONPREU"}, {Brand: ""},
+	seen := map[string]bool{}
+	tallyBrands(counts, seen, []client.Product{
+		{ProductID: "p1", RetailerProductID: "1", Brand: "BONPREU"},
+		{ProductID: "p2", RetailerProductID: "2", Brand: "HELLMANN'S"},
+		{ProductID: "p1", RetailerProductID: "1", Brand: "BONPREU"},
+		{Brand: ""},
 	})
-	tallyBrands(counts, []client.Product{{Brand: "BONPREU"}, {Brand: "ASTURIANA"}})
+	tallyBrands(counts, seen, []client.Product{
+		{RetailerProductID: "1", Brand: "BONPREU"}, // same product in another category
+		{ProductID: "p3", RetailerProductID: "3", Brand: "BONPREU"},
+		{ProductID: "p4", RetailerProductID: "4", Brand: "ASTURIANA"},
+	})
 
-	if counts["BONPREU"] != 3 || counts["HELLMANN'S"] != 1 || counts["ASTURIANA"] != 1 {
+	if counts["BONPREU"] != 2 || counts["HELLMANN'S"] != 1 || counts["ASTURIANA"] != 1 {
 		t.Fatalf("counts wrong: %v", counts)
 	}
 	if _, ok := counts[""]; ok {
@@ -32,8 +40,8 @@ func TestTallyAndSortBrands(t *testing.T) {
 	}
 
 	ranked := sortedBrands(counts)
-	if ranked[0].Brand != "BONPREU" || ranked[0].Count != 3 {
-		t.Errorf("top brand = %+v, want BONPREU/3", ranked[0])
+	if ranked[0].Brand != "BONPREU" || ranked[0].Count != 2 {
+		t.Errorf("top brand = %+v, want BONPREU/2", ranked[0])
 	}
 	// ties (count 1) ordered by name: ASTURIANA before HELLMANN'S.
 	if ranked[1].Brand != "ASTURIANA" || ranked[2].Brand != "HELLMANN'S" {
