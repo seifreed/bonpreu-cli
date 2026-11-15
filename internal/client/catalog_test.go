@@ -134,6 +134,44 @@ func TestCatalogMethodsRejectMissingOrNullProductGroups(t *testing.T) {
 	}
 }
 
+func TestCatalogMethodsRejectGroupsWithoutDecoratedProducts(t *testing.T) {
+	for _, body := range []string{
+		`{"productGroups":[{}]}`,
+		`{"productGroups":[{"decoratedProducts":null}]}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer srv.Close()
+			cl := testClient(srv)
+			if _, err := cl.Search("milk", 0); err == nil || !strings.Contains(err.Error(), "decoratedProducts") {
+				t.Errorf("Search response %s error = %v; want shape error", body, err)
+			}
+			if _, err := cl.CategoryProducts("0301", 0); err == nil || !strings.Contains(err.Error(), "decoratedProducts") {
+				t.Errorf("CategoryProducts response %s error = %v; want shape error", body, err)
+			}
+		})
+	}
+}
+
+func TestCatalogMethodsAcceptEmptyProductGroups(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"productGroups":[]}`))
+	}))
+	defer srv.Close()
+	cl := testClient(srv)
+	for name, call := range map[string]func() (*ProductPage, error){
+		"search":            func() (*ProductPage, error) { return cl.Search("milk", 0) },
+		"category products": func() (*ProductPage, error) { return cl.CategoryProducts("0301", 0) },
+	} {
+		pp, err := call()
+		if err != nil || len(pp.Products()) != 0 {
+			t.Errorf("%s empty response = %+v, %v; want empty product page", name, pp, err)
+		}
+	}
+}
+
 func TestCategories(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`[{"retailerCategoryId":"0301","name":"Begudes"}]`))

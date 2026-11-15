@@ -77,6 +77,18 @@ func (pp *ProductPage) Products() []Product {
 	return out
 }
 
+func validateProductPage(pp *ProductPage) error {
+	if pp.ProductGroups == nil {
+		return fmt.Errorf("decode product page response: missing or null productGroups")
+	}
+	for i, group := range pp.ProductGroups {
+		if group.DecoratedProducts == nil {
+			return fmt.Errorf("decode product page response: missing or null decoratedProducts in group %d", i)
+		}
+	}
+	return nil
+}
+
 const (
 	searchTermMax  = 50  // the SPA truncates the query to 50 chars
 	defaultPageMax = 100 // products per call when the caller gives no limit
@@ -126,8 +138,8 @@ func (c *Client) Search(term string, limit int) (*ProductPage, error) {
 	if err := c.DoJSON("GET", u, nil, &pp); err != nil {
 		return nil, err
 	}
-	if pp.ProductGroups == nil {
-		return nil, fmt.Errorf("decode product page response: missing or null productGroups")
+	if err := validateProductPage(&pp); err != nil {
+		return nil, err
 	}
 	return &pp, nil
 }
@@ -153,8 +165,8 @@ func (c *Client) CategoryProducts(id string, limit int) (*ProductPage, error) {
 	if err := c.DoJSON("GET", u, nil, &pp); err != nil {
 		return nil, err
 	}
-	if pp.ProductGroups == nil {
-		return nil, fmt.Errorf("decode product page response: missing or null productGroups")
+	if err := validateProductPage(&pp); err != nil {
+		return nil, err
 	}
 	return &pp, nil
 }
