@@ -136,11 +136,10 @@ func lineCents(unitCents int64, qty float64) (int64, error) {
 // are formatted on their magnitude with the sign prepended, so -105 → "-1.05"
 // rather than "-1.-5" from a naive %d.%02d on the raw quotient/remainder.
 func centsStr(c int64) string {
-	sign := ""
 	if c < 0 {
-		sign, c = "-", -c
+		return fmt.Sprintf("-%d.%02d", -(c / 100), -(c % 100))
 	}
-	return fmt.Sprintf("%s%d.%02d", sign, c/100, c%100)
+	return fmt.Sprintf("%d.%02d", c/100, c%100)
 }
 
 func fmtQty(q float64) string {

@@ -47,6 +47,7 @@ func TestCentsStr(t *testing.T) {
 	cases := map[int64]string{
 		169: "1.69", 5: "0.05", 1000: "10.00", 0: "0.00",
 		-105: "-1.05", -5: "-0.05", -1000: "-10.00", // negatives keep a single leading sign
+		math.MinInt64: "-92233720368547758.08",
 	}
 	for in, want := range cases {
 		if got := centsStr(in); got != want {
