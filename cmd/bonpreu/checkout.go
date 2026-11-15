@@ -60,8 +60,8 @@ func checkoutReserve(args []string) error {
 	region := fs.String("region", "", "delivery region id (defaults to the authenticated session)")
 	externalAddress := fs.String("external-address", "", "optional custom delivery address")
 	parseFlags(fs, args)
-	if strings.TrimSpace(*address) == "" || strings.TrimSpace(*slot) == "" {
-		return fmt.Errorf("usage: bonpreu checkout reserve --address <id> --slot <id> [--region <id>]")
+	if fs.NArg() != 0 || strings.TrimSpace(*address) == "" || strings.TrimSpace(*slot) == "" {
+		return fmt.Errorf("usage: bonpreu checkout reserve --address <id> --slot <id> [--region <id>] [--external-address <text>]")
 	}
 	cl, err := authedClient(cf)
 	if err != nil {

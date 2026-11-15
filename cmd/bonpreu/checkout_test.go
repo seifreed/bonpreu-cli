@@ -126,6 +126,33 @@ func TestCheckoutReserveRequiresAddressAndSlot(t *testing.T) {
 	}
 }
 
+func TestCheckoutReserveRejectsExtraArgumentsBeforeReservation(t *testing.T) {
+	var reservations int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			w.Write([]byte(checkoutCSRFHTML))
+			return
+		}
+		if r.Method == http.MethodPost && r.URL.Path == "/api/ecomslots/v1/slots/reservation" {
+			reservations++
+			w.Write([]byte(`{"reserved":true}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+	_, err := capture(t, func() error {
+		return cmdCheckout([]string{"reserve", "--address", "address-1", "--slot", "slot-1", "unexpected"})
+	})
+	if err == nil || !strings.Contains(err.Error(), "usage") {
+		t.Fatalf("checkout reserve with extra argument error = %v; want usage error", err)
+	}
+	if reservations != 0 {
+		t.Fatalf("checkout reserve sent %d reservation requests with invalid arguments", reservations)
+	}
+}
+
 func TestCheckoutReserveRequiresAuthentication(t *testing.T) {
 	srv := apiServer(t)
 	defer srv.Close()
