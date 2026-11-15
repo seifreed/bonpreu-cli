@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,28 @@ func TestPriceCents(t *testing.T) {
 	}
 	if _, err := priceCents("abc"); err == nil {
 		t.Error("expected error for non-numeric price")
+	}
+	for _, bad := range []string{"NaN", "Inf", "+Inf", "-Inf", "-1.00", "1e308", "92233720368547760"} {
+		if cents, err := priceCents(bad); err == nil {
+			t.Errorf("priceCents(%q) = %d, want invalid-price error", bad, cents)
+		}
+	}
+}
+
+func TestLineCentsRejectsOverflow(t *testing.T) {
+	if got, err := lineCents(169, 2); err != nil || got != 338 {
+		t.Fatalf("lineCents(169, 2) = %d, %v; want 338, nil", got, err)
+	}
+	if _, err := lineCents(169, 1e300); err == nil {
+		t.Fatal("lineCents must reject a subtotal that overflows int64")
+	}
+	for _, input := range []struct {
+		cents int64
+		qty   float64
+	}{{-1, 1}, {169, -1}, {169, math.NaN()}, {169, math.Inf(1)}} {
+		if _, err := lineCents(input.cents, input.qty); err == nil {
+			t.Errorf("lineCents(%d, %v) must reject invalid input", input.cents, input.qty)
+		}
 	}
 }
 

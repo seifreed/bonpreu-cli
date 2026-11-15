@@ -21,6 +21,14 @@ func TestGuardLineAddRejectsUnpriceableWhenLimitSet(t *testing.T) {
 	}
 }
 
+func TestGuardLineAddRejectsOverflowWhenLimitSet(t *testing.T) {
+	pd := &client.ProductDetail{}
+	pd.Price.Amount = "1.00"
+	if err := guardLineAdd(50, pd, 1e300); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
+		t.Fatalf("unrepresentable line subtotal must fail closed, got %v", err)
+	}
+}
+
 func TestGuardLineAddSilentWithoutLimit(t *testing.T) {
 	t.Setenv("BONPREU_MAX_EUR", "")             // no limit from env
 	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir()) // no limit from a real config.toml
@@ -46,7 +54,7 @@ func TestCartAddDoesNotWriteWhenLimitCannotBeEnforced(t *testing.T) {
 			cartWrite = true
 		}
 		if strings.HasPrefix(r.URL.Path, "/products/") {
-			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Mystery item"}}</html>`))
+			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Mystery item","price":{"amount":"NaN"}}}</html>`))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)

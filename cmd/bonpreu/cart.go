@@ -179,14 +179,18 @@ func guardLineAdd(flagMax float64, pd *client.ProductDetail, qty float64) error 
 	if err != nil {
 		return err
 	}
-	cents, perr := priceCents(pd.Price.Amount)
-	if perr != nil {
-		if maxEUR > 0 {
-			return fmt.Errorf("cannot enforce spending limit for an unpriceable cart line: %w", perr)
-		}
+	if maxEUR == 0 {
 		return nil
 	}
-	line := float64(lineCents(cents, qty)) / 100
+	cents, perr := priceCents(pd.Price.Amount)
+	if perr != nil {
+		return fmt.Errorf("cannot enforce spending limit for an unpriceable cart line: %w", perr)
+	}
+	lineCents, err := lineCents(cents, qty)
+	if err != nil {
+		return fmt.Errorf("cannot enforce spending limit for cart line: %w", err)
+	}
+	line := float64(lineCents) / 100
 	return checkBudget(line, maxEUR, "cart line")
 }
 

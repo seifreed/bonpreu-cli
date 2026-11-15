@@ -108,14 +108,28 @@ func priceCents(s string) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("unparseable price %q", s)
 	}
-	return int64(math.Round(v * 100)), nil
+	if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
+		return 0, fmt.Errorf("invalid price %q (want a finite, non-negative amount)", s)
+	}
+	cents := math.Round(v * 100)
+	if math.IsInf(cents, 0) || cents >= float64(math.MaxInt64) {
+		return 0, fmt.Errorf("price %q exceeds the supported range", s)
+	}
+	return int64(cents), nil
 }
 
 // lineCents returns a line subtotal in whole cents: unit-price cents × qty,
 // rounded. Shared by the basket total and the --max budget guard so both price
 // a line identically.
-func lineCents(unitCents int64, qty float64) int64 {
-	return int64(math.Round(float64(unitCents) * qty))
+func lineCents(unitCents int64, qty float64) (int64, error) {
+	if unitCents < 0 || qty < 0 || math.IsNaN(qty) || math.IsInf(qty, 0) {
+		return 0, fmt.Errorf("invalid price or quantity")
+	}
+	subtotal := math.Round(float64(unitCents) * qty)
+	if math.IsInf(subtotal, 0) || subtotal >= float64(math.MaxInt64) {
+		return 0, fmt.Errorf("line subtotal exceeds the supported range")
+	}
+	return int64(subtotal), nil
 }
 
 // centsStr renders integer cents as a "35.00"-style euro string. Negative values

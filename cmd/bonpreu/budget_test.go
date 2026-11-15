@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -36,6 +37,17 @@ func TestResolveMaxPrecedence(t *testing.T) {
 	if _, err := resolveMax(0); err == nil {
 		t.Error("invalid BONPREU_MAX_EUR should error")
 	}
+	for _, invalid := range []float64{-1, math.NaN(), math.Inf(1)} {
+		if _, err := resolveMax(invalid); err == nil {
+			t.Errorf("invalid --max %v should error", invalid)
+		}
+	}
+	for _, invalid := range []string{"NaN", "Inf", "-1"} {
+		t.Setenv("BONPREU_MAX_EUR", invalid)
+		if _, err := resolveMax(0); err == nil {
+			t.Errorf("invalid BONPREU_MAX_EUR %q should error", invalid)
+		}
+	}
 }
 
 func TestCheckBudget(t *testing.T) {
@@ -47,6 +59,14 @@ func TestCheckBudget(t *testing.T) {
 	}
 	if err := checkBudget(999, 0, "cart"); err != nil {
 		t.Errorf("cap 0 disables the guard: %v", err)
+	}
+	for _, invalid := range []float64{math.NaN(), math.Inf(1), -1} {
+		if err := checkBudget(1, invalid, "cart"); err == nil {
+			t.Errorf("invalid budget %v should error", invalid)
+		}
+		if err := checkBudget(invalid, 10, "cart"); err == nil {
+			t.Errorf("invalid total %v should error", invalid)
+		}
 	}
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -197,6 +198,19 @@ func TestTotalBadFileAndUnpriceable(t *testing.T) {
 	out, err := capture(t, func() error { return cmdTotal([]string{"7"}) })
 	if err == nil || !strings.Contains(out, "ERROR") {
 		t.Errorf("unpriceable line: %q err %v", out, err)
+	}
+}
+
+func TestTotalRejectsAggregateOverflow(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/products/")
+		_, _ = fmt.Fprintf(w, `<html>window.__URQL_DATA__ = {"p":{"retailerProductId":%q,"productId":"u-%s","name":"X","price":{"amount":"50000000000000000"}}}</html>`, id, id)
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+	out, err := capture(t, func() error { return cmdTotal([]string{"1", "2"}) })
+	if err == nil || !strings.Contains(out, "basket total exceeds the supported range") {
+		t.Fatalf("cmdTotal output = %q, error = %v; want overflow error", out, err)
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -312,7 +313,15 @@ func cmdTotal(args []string) error {
 			failed++
 			continue
 		}
-		sub := lineCents(cents, bl.qty)
+		sub, serr := lineCents(cents, bl.qty)
+		if serr != nil || sub > math.MaxInt64-totalCents {
+			if serr == nil {
+				serr = fmt.Errorf("basket total exceeds the supported range")
+			}
+			results = append(results, lineResult{ID: bl.id, Name: pd.Name, Qty: bl.qty, Error: serr.Error()})
+			failed++
+			continue
+		}
 		totalCents += sub
 		results = append(results, lineResult{
 			ID: bl.id, Name: pd.Name, Qty: bl.qty,
