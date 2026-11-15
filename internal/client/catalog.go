@@ -126,6 +126,9 @@ func (c *Client) Search(term string, limit int) (*ProductPage, error) {
 	if err := c.DoJSON("GET", u, nil, &pp); err != nil {
 		return nil, err
 	}
+	if pp.ProductGroups == nil {
+		return nil, fmt.Errorf("decode product page response: missing or null productGroups")
+	}
 	return &pp, nil
 }
 
@@ -149,6 +152,9 @@ func (c *Client) CategoryProducts(id string, limit int) (*ProductPage, error) {
 	u := c.BaseURL + "/api/webproductpagews/v6/product-pages?" + q.Encode()
 	if err := c.DoJSON("GET", u, nil, &pp); err != nil {
 		return nil, err
+	}
+	if pp.ProductGroups == nil {
+		return nil, fmt.Errorf("decode product page response: missing or null productGroups")
 	}
 	return &pp, nil
 }
@@ -180,6 +186,9 @@ func (c *Client) Categories(depth int) ([]Category, error) {
 	u := fmt.Sprintf("%s/api/webproductpagews/v1/categories?decoration=false&categoryDepth=%d", c.BaseURL, depth)
 	if err := c.DoJSON("GET", u, nil, &cats); err != nil {
 		return nil, err
+	}
+	if cats == nil {
+		return nil, fmt.Errorf("decode categories response: null category list")
 	}
 	return cats, nil
 }

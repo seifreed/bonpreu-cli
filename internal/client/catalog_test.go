@@ -78,7 +78,7 @@ func TestSearchTruncatesByRune(t *testing.T) {
 	var gotQ string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotQ = r.URL.Query().Get("q")
-		w.Write([]byte(`{}`))
+		w.Write([]byte(`{"productGroups":[]}`))
 	}))
 	defer srv.Close()
 	cl := testClient(srv)
@@ -116,6 +116,24 @@ func TestCategoryProductsShortAndUUID(t *testing.T) {
 	}
 }
 
+func TestCatalogMethodsRejectMissingOrNullProductGroups(t *testing.T) {
+	for _, body := range []string{`null`, `{}`, `{"productGroups":null}`} {
+		t.Run(body, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer srv.Close()
+			cl := testClient(srv)
+			if _, err := cl.Search("milk", 0); err == nil || !strings.Contains(err.Error(), "productGroups") {
+				t.Errorf("Search response %s error = %v; want shape error", body, err)
+			}
+			if _, err := cl.CategoryProducts("0301", 0); err == nil || !strings.Contains(err.Error(), "productGroups") {
+				t.Errorf("CategoryProducts response %s error = %v; want shape error", body, err)
+			}
+		})
+	}
+}
+
 func TestCategories(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`[{"retailerCategoryId":"0301","name":"Begudes"}]`))
@@ -124,6 +142,16 @@ func TestCategories(t *testing.T) {
 	cats, err := testClient(srv).Categories(0) // 0 clamps to depth 1
 	if err != nil || len(cats) != 1 || cats[0].Name != "Begudes" {
 		t.Fatalf("Categories = %+v, err %v", cats, err)
+	}
+}
+
+func TestCategoriesRejectsNullResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`null`))
+	}))
+	defer srv.Close()
+	if _, err := testClient(srv).Categories(1); err == nil || !strings.Contains(err.Error(), "categories") {
+		t.Fatalf("Categories null response error = %v; want shape error", err)
 	}
 }
 
