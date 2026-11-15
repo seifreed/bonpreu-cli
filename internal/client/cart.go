@@ -49,19 +49,16 @@ type cartShape struct {
 }
 
 // activeCart fetches the active-cart endpoint once and projects the fields the
-// cart and checkout views share. Raw is preserved for --json; a body that fails
-// to parse yields zero values (best effort), never an error.
+// cart and checkout views share. Raw is preserved for --json; malformed JSON is
+// returned as an error so callers cannot treat a broken response as an empty cart.
 func (c *Client) activeCart() (json.RawMessage, cartShape, error) {
 	raw, err := c.getRaw(c.BaseURL + cartActive)
 	if err != nil {
 		return nil, cartShape{}, err
 	}
 	var s cartShape
-	if uerr := json.Unmarshal(raw, &s); uerr != nil {
-		if c.Logger != nil {
-			c.Logger.Warn("active-cart response shape mismatch; returning empty projection",
-				"event_name", "cart.response.shape_mismatch", "component", "client", "error_type", fmt.Sprintf("%T", uerr))
-		}
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return nil, cartShape{}, fmt.Errorf("decode active cart response: %w", err)
 	}
 	return raw, s, nil
 }

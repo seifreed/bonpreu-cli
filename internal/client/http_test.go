@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -358,25 +359,20 @@ func TestTransportFallbackLogsOnce(t *testing.T) {
 	}
 }
 
-func TestCartProjectionMismatchLogs(t *testing.T) {
+func TestCartProjectionMismatchReturnsDecodeError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"items":"not-an-array"}`)) // valid JSON, wrong type for items
 	}))
 	defer srv.Close()
 
-	var logs bytes.Buffer
 	cl := testClient(srv)
-	cl.Logger = testLogger(&logs)
-
 	cart, err := cl.GetCart()
-	if err != nil {
-		t.Fatalf("GetCart should stay best-effort, got err: %v", err)
+	var shapeErr *json.UnmarshalTypeError
+	if !errors.As(err, &shapeErr) {
+		t.Fatalf("GetCart error = %v, want wrapped JSON type error", err)
 	}
-	if len(cart.Lines) != 0 {
-		t.Errorf("expected empty projection, got %+v", cart.Lines)
-	}
-	if strings.Count(logs.String(), "event_name=cart.response.shape_mismatch") != 1 {
-		t.Fatalf("expected one shape-mismatch event, got %q", logs.String())
+	if cart != nil {
+		t.Fatalf("GetCart returned a partial cart on decode error: %+v", cart)
 	}
 }
 

@@ -43,7 +43,6 @@ Events currently emitted:
 | `auth.cookie.saved` | INFO | operation only; no cookie value or length |
 | `auth.session.verified` | INFO | verification outcome; no cookie or user data |
 | `security.cookie_external_host` | WARN | parsed host; never cookie contents |
-| `cart.response.shape_mismatch` | WARN | error type; response body is omitted |
 | `config.load_failed` | WARN | `error_type`; defaults are used |
 | `auth.har.region_missing` | WARN | static remediation message |
 | `auth.cookie.may_be_anonymous` | WARN | static verification guidance |
