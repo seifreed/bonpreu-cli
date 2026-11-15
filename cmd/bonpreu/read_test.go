@@ -333,6 +333,25 @@ func TestBatchRejectsInvalidBrandModeBeforeSearching(t *testing.T) {
 	}
 }
 
+func TestBatchRejectsInvalidOfferModeBeforeSearching(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte(`{"productGroups":[]}`))
+	}))
+	defer srv.Close()
+	dir := useServer(t, srv, false)
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("[offers]\nmode = \"acpt\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := capture(t, func() error { return cmdBatch([]string{"--json", "x"}) }); err == nil || !strings.Contains(err.Error(), "invalid [offers].mode") {
+		t.Fatalf("batch with invalid offer mode error = %v", err)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("invalid offer mode made %d network request(s) before failing", got)
+	}
+}
+
 func TestTotalBadFileAndUnpriceable(t *testing.T) {
 	if err := cmdTotal([]string{"-f", filepath.Join(t.TempDir(), "nope")}); err == nil {
 		t.Error("total with a missing file should error")

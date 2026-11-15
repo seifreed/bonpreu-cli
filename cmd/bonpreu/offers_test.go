@@ -31,14 +31,23 @@ func TestClassifyOffer(t *testing.T) {
 }
 
 func TestResolveOffersMode(t *testing.T) {
-	cases := []struct{ flag, cfg, want string }{
-		{"", "", "alert"},              // default
-		{"", "ignore", "ignore"},       // config
-		{"accept", "ignore", "accept"}, // flag overrides config
-		{"bogus", "", "alert"},         // invalid → default
+	cases := []struct {
+		flag, cfg, want string
+		wantErr         bool
+	}{
+		{flag: "", cfg: "", want: "alert"},              // default
+		{flag: "", cfg: "ignore", want: "ignore"},       // config
+		{flag: "accept", cfg: "ignore", want: "accept"}, // flag overrides config
+		{flag: "bogus", cfg: "", wantErr: true},         // invalid flag is an error
+		{flag: "", cfg: "bogus", wantErr: true},         // invalid config is an error
+		{flag: "bogus", cfg: "ignore", wantErr: true},   // don't hide a bad flag
 	}
 	for _, c := range cases {
-		if got := resolveOffersMode(c.flag, c.cfg); got != c.want {
+		got, err := resolveOffersMode(c.flag, c.cfg)
+		if (err != nil) != c.wantErr {
+			t.Errorf("resolveOffersMode(%q,%q) error = %v, wantErr %v", c.flag, c.cfg, err, c.wantErr)
+		}
+		if !c.wantErr && got != c.want {
 			t.Errorf("resolveOffersMode(%q,%q) = %q, want %q", c.flag, c.cfg, got, c.want)
 		}
 	}

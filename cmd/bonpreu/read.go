@@ -167,7 +167,10 @@ func cmdBatch(args []string) error {
 		return fmt.Errorf("invalid [brands].mode %q (want cheapest_among or strict_priority)", mode)
 	}
 	override := splitBrands(*brand)
-	offersMode := resolveOffersMode(*offers, cfg.Offers.Mode)
+	offersMode, err := resolveOffersMode(*offers, cfg.Offers.Mode)
+	if err != nil {
+		return err
+	}
 
 	type hit struct {
 		Term       string          `json:"term"`

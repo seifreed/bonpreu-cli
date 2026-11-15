@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/seifreed/bonpreu-cli/internal/client"
@@ -47,12 +48,21 @@ func classifyOffer(promos []client.Promotion) (kind, label string) {
 
 // resolveOffersMode picks the offers behaviour: flag overrides config, else the
 // default "alert" (surface actionable offers and ask before taking them).
-func resolveOffersMode(flag, cfg string) string {
-	for _, m := range []string{flag, cfg} {
-		switch m {
-		case "alert", "ignore", "accept":
-			return m
-		}
+func resolveOffersMode(flag, cfg string) (string, error) {
+	valid := func(mode string) bool {
+		return mode == "alert" || mode == "ignore" || mode == "accept"
 	}
-	return "alert"
+	if flag != "" && !valid(flag) {
+		return "", fmt.Errorf("invalid --offers %q (want alert, ignore, or accept)", flag)
+	}
+	if cfg != "" && !valid(cfg) {
+		return "", fmt.Errorf("invalid [offers].mode %q (want alert, ignore, or accept)", cfg)
+	}
+	if flag != "" {
+		return flag, nil
+	}
+	if cfg != "" {
+		return cfg, nil
+	}
+	return "alert", nil
 }
