@@ -112,7 +112,7 @@ bonpreu product 01756
 | Command | Description |
 |---------|-------------|
 | `bonpreu search <term…>` | Full-text search. `--limit N`, `--fresh` (drop *Congelats* + *Conserves*), `--cheapest` (rank by €/kg·L·u, mark the best per unit) |
-| `bonpreu batch -f <file\|->` | Cheapest hit per term (one per line; `#` comments ok), or your preferred brand when `[brands]` is set. `--brand a,b`, `--no-brands`, `--offers`, `--fresh` |
+| `bonpreu batch -f <file\|->` | Cheapest available hit per term (one per line; `#` comments ok), or your preferred brand when `[brands]` is set. `--brand a,b`, `--no-brands`, `--offers`, `--fresh` |
 | `bonpreu total -f <file\|->` | Deterministic basket total from `<id> [qty]` lines |
 | `bonpreu product <id>` | Detail: price, brand, format, offers, ingredients/nutrition |
 | `bonpreu categories` | Category tree (`--depth N`); `--id <code>` lists a category's products (`--cheapest` ranks them by €/kg·L·u) |
@@ -122,7 +122,7 @@ Common flags (anywhere after the subcommand): `--lang ca|es`, `--json`, `--toon`
 
 #### Price a shopping list written in plain words
 
-`batch` bridges names → ids+prices in one command — the **cheapest** organic hit per term (sponsored placements skipped), or your preferred brand when `[brands]` is configured:
+`batch` bridges names → ids+prices in one command — the **cheapest available** organic hit per term (sponsored placements skipped), or your preferred brand when `[brands]` is configured:
 
 ```console
 $ printf 'pa\nllet\nous\nmantega\n' | bonpreu batch -f -
@@ -217,7 +217,7 @@ Cart writes resolve the short retailer id to the API's product UUID, then `POST 
 
 ### Preferred Brands
 
-By default `batch` resolves each item to the **cheapest** organic hit. Pin favourite brands in `~/.bonpreu/config.toml` and it buys those instead:
+By default `batch` resolves each item to the **cheapest available** organic hit. Pin favourite brands in `~/.bonpreu/config.toml` and it selects those instead:
 
 ```toml
 [brands]

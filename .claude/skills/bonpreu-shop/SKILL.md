@@ -94,7 +94,7 @@ photo-specific checkpoint: vision can misread a label or miss an item at the bac
 ### 2. Resolve names → real products (free, no login)
 
 Price the whole parsed list in one command with `batch` — one term per line. It picks the **cheapest**
-organic hit per term (sponsored placements skipped), or your **preferred brand** when `[brands]` is
+available organic hit per term (sponsored placements skipped), or your **preferred brand** when `[brands]` is
 configured (see "Brand preferences"):
 
 ```bash

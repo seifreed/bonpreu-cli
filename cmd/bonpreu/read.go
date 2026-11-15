@@ -84,8 +84,8 @@ func printProductLines(prods []client.Product, winners map[string]bool, cheapest
 // price (parseable amount + a known €/kg | €/L | €/u suffix) are stable-sorted
 // cheapest-first ahead of the rest, which keep their original order. winners holds
 // each unit group's cheapest (by RetailerProductID; ties all win), for marking.
-// Sponsored placements never win — the ★ "millor preu" badge marks the cheapest
-// organic item (see organic()), mirroring how batch skips paid results.
+// Sponsored and unavailable placements never win — the ★ "millor preu" badge marks
+// the cheapest available organic item, mirroring how batch skips unusable hits.
 func rankByUnit(prods []client.Product) (sorted []client.Product, winners map[string]bool) {
 	cents := func(p client.Product) (int64, bool) {
 		if unitSuffix(p.UnitPrice) == "" {
@@ -95,8 +95,8 @@ func rankByUnit(prods []client.Product) (sorted []client.Product, winners map[st
 		return c, err == nil
 	}
 
-	org := organic(prods)          // rank/mark among non-sponsored results only
-	minCents := map[string]int64{} // cheapest cents seen per unit suffix (not the builtin min)
+	org := organic(availableProducts(prods)) // only available, non-sponsored products can win
+	minCents := map[string]int64{}           // cheapest cents seen per unit suffix (not the builtin min)
 	for _, p := range org {
 		if c, ok := cents(p); ok {
 			suf := unitSuffix(p.UnitPrice)
@@ -114,6 +114,9 @@ func rankByUnit(prods []client.Product) (sorted []client.Product, winners map[st
 
 	sorted = append([]client.Product(nil), prods...)
 	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].Available != sorted[j].Available {
+			return sorted[i].Available
+		}
 		ci, oki := cents(sorted[i])
 		cj, okj := cents(sorted[j])
 		if oki != okj {
@@ -140,8 +143,8 @@ func filterFresh(in []client.Product, fresh bool) []client.Product {
 	return out
 }
 
-// cmdBatch: search many terms, print one hit per term — the preferred brand when
-// configured, else the cheapest organic hit. One request each, single command.
+// cmdBatch: search many terms, print one available hit per term — the preferred
+// brand when configured, else the cheapest organic hit. One request each, single command.
 // Bridges plain-word lists to ids+prices.
 func cmdBatch(args []string) error {
 	fs, cf := newCommonFlags("batch")
@@ -187,7 +190,7 @@ func cmdBatch(args []string) error {
 			searchErrors = append(searchErrors, serr)
 			continue
 		}
-		prods := filterFresh(pp.Products(), *fresh)
+		prods := availableProducts(filterFresh(pp.Products(), *fresh))
 		if len(prods) == 0 {
 			out = append(out, hit{Term: t})
 			missing++
@@ -242,7 +245,7 @@ func cmdBatch(args []string) error {
 		return fmt.Errorf("%d of %d term searches failed: %w", len(searchErrors), len(terms), errors.Join(searchErrors...))
 	}
 	if missing > 0 {
-		return fmt.Errorf("%d of %d terms returned no product", missing, len(terms))
+		return fmt.Errorf("%d of %d terms returned no eligible product", missing, len(terms))
 	}
 	return nil
 }
@@ -260,7 +263,7 @@ func splitBrands(s string) []string {
 
 // resolveBrandHit picks the product for a term honouring brand preferences:
 // --brand override wins, else the configured brands (global or per-term override);
-// with no preference (or --no-brands) it falls back to the cheapest organic hit
+// with no preference (or --no-brands) it falls back to the cheapest available organic hit
 // ("si no hay marca preferida, la más barata"). The returned tag
 // (preferred|override|none|off) lets callers/the skill know whether to ask before
 // substituting when a preferred brand wasn't stocked.

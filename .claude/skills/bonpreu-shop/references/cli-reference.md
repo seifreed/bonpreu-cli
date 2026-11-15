@@ -10,7 +10,7 @@ when an agent parses the output).
 | Command | What it does |
 |---|---|
 | `bonpreu search <term…>` | Full-text search. `--limit N`, `--fresh` (drop frozen *Congelats* + canned *Conserves*), `--cheapest` (rank by unit price €/kg·€/L·€/u and mark the best per unit with ★). |
-| `bonpreu batch -f <file\|->` | One hit per term (one term per line; `#` comments ok): the **cheapest** organic hit, or your preferred brand if `[brands]` is configured. `--fresh`; `--brand a,b` prefers brands for this run; `--no-brands` ignores config. |
+| `bonpreu batch -f <file\|->` | One available hit per term (one term per line; `#` comments ok): the **cheapest** organic hit, or your preferred brand if `[brands]` is configured. `--fresh`; `--brand a,b` prefers brands for this run; `--no-brands` ignores config. |
 | `bonpreu total -f <file\|->` | Deterministic basket total from `<id> [qty]` lines, summed in integer cents. |
 | `bonpreu product <id>` | Detail: price, brand, format, offers, and ingredients/nutrition text when present. |
 | `bonpreu categories` | Category tree (`--depth N`). `--id <retailerCategoryId>` lists that category's products (`--limit N`; `--cheapest` ranks them by unit price and marks the best per unit). |

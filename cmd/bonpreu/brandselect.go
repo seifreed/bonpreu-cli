@@ -105,6 +105,16 @@ func organic(prods []client.Product) []client.Product {
 	return out
 }
 
+func availableProducts(prods []client.Product) []client.Product {
+	out := make([]client.Product, 0, len(prods))
+	for _, p := range prods {
+		if p.Available {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // brandMatches returns the organic products whose brand normalizes to one of the
 // wanted (already-normalized) brands.
 func brandMatches(prods []client.Product, wanted []string) []client.Product {
@@ -122,8 +132,8 @@ func brandMatches(prods []client.Product, wanted []string) []client.Product {
 }
 
 // cheapestOrganic is the baseline pick when no brand preference applies: the
-// cheapest non-sponsored product (the user's "si no hay marca preferida, la más
-// barata"). Falls back to the first product if every result is sponsored.
+// cheapest available, non-sponsored product. Falls back to the first product if
+// every available result is sponsored.
 func cheapestOrganic(prods []client.Product) client.Product {
 	org := organic(prods)
 	if len(org) == 0 {

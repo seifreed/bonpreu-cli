@@ -21,9 +21,9 @@ func apiServer(t *testing.T) *httptest.Server {
 		p := r.URL.Path
 		switch {
 		case strings.Contains(p, "/product-pages/search"):
-			w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"23597","name":"Llet","price":{"amount":"1.69","currency":"EUR"}}]}]}`))
+			w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"23597","name":"Llet","available":true,"price":{"amount":"1.69","currency":"EUR"}}]}]}`))
 		case strings.HasSuffix(p, "/product-pages"):
-			w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"Aigua","price":{"amount":"0.50","currency":"EUR"}}]}]}`))
+			w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"Aigua","available":true,"price":{"amount":"0.50","currency":"EUR"}}]}]}`))
 		case strings.Contains(p, "/v1/categories"):
 			w.Write([]byte(`[{"retailerCategoryId":"0301","name":"Begudes","childCategories":[{"retailerCategoryId":"0302","name":"Aigua"}]}]`))
 		case strings.HasPrefix(p, "/products/"):

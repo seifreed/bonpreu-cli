@@ -22,11 +22,11 @@ func TestRankByUnit(t *testing.T) {
 		return client.UnitPrice{Price: client.Money{Amount: amount}, Unit: "fop.price.per.l", UnitName: "PER_1L"}
 	}
 	prods := []client.Product{
-		{RetailerProductID: "kg-mid", UnitPrice: perKg("9.80")},
-		{RetailerProductID: "no-unit"},                            // non-comparable, sinks to bottom
-		{RetailerProductID: "kg-low-a", UnitPrice: perKg("2.10")}, // tied group min
-		{RetailerProductID: "l-only", UnitPrice: perL("1.50")},
-		{RetailerProductID: "kg-low-b", UnitPrice: perKg("2.10")}, // tied group min
+		{RetailerProductID: "kg-mid", Available: true, UnitPrice: perKg("9.80")},
+		{RetailerProductID: "no-unit", Available: true},                            // non-comparable, sinks to bottom
+		{RetailerProductID: "kg-low-a", Available: true, UnitPrice: perKg("2.10")}, // tied group min
+		{RetailerProductID: "l-only", Available: true, UnitPrice: perL("1.50")},
+		{RetailerProductID: "kg-low-b", Available: true, UnitPrice: perKg("2.10")}, // tied group min
 	}
 
 	sorted, winners := rankByUnit(prods)
@@ -85,8 +85,8 @@ func TestRankByUnitSkipsSponsored(t *testing.T) {
 		return client.UnitPrice{Price: client.Money{Amount: amount}, Unit: "fop.price.per.kg", UnitName: "PER_1KG"}
 	}
 	prods := []client.Product{
-		{RetailerProductID: "ad", ExternalAdvertID: "x", UnitPrice: perKg("1.00")}, // cheapest but sponsored
-		{RetailerProductID: "organic", UnitPrice: perKg("2.00")},                   // cheapest organic
+		{RetailerProductID: "ad", Available: true, ExternalAdvertID: "x", UnitPrice: perKg("1.00")}, // cheapest but sponsored
+		{RetailerProductID: "organic", Available: true, UnitPrice: perKg("2.00")},                   // cheapest organic
 	}
 	_, winners := rankByUnit(prods)
 	if winners["ad"] {
@@ -94,6 +94,20 @@ func TestRankByUnitSkipsSponsored(t *testing.T) {
 	}
 	if !winners["organic"] {
 		t.Error("cheapest organic product should win")
+	}
+}
+
+func TestRankByUnitSkipsUnavailableProducts(t *testing.T) {
+	perKg := func(amount string) client.UnitPrice {
+		return client.UnitPrice{Price: client.Money{Amount: amount}, Unit: "fop.price.per.kg", UnitName: "PER_1KG"}
+	}
+	prods := []client.Product{
+		{RetailerProductID: "unavailable", UnitPrice: perKg("0.10")},
+		{RetailerProductID: "available", Available: true, UnitPrice: perKg("2.00")},
+	}
+	sorted, winners := rankByUnit(prods)
+	if sorted[0].RetailerProductID != "available" || !winners["available"] || winners["unavailable"] {
+		t.Fatalf("rankByUnit = %v, winners %v; want available product first and as sole winner", ids(sorted), winners)
 	}
 }
 
@@ -127,7 +141,7 @@ func TestCategoriesNotFound(t *testing.T) {
 
 func TestSearchLimitTruncation(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","price":{"amount":"1.00"}},{"retailerProductId":"2","name":"B","price":{"amount":"2.00"}}]}]}`))
+		w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","available":true,"price":{"amount":"1.00"}},{"retailerProductId":"2","name":"B","available":true,"price":{"amount":"2.00"}}]}]}`))
 	}))
 	defer srv.Close()
 	useServer(t, srv, false)
@@ -138,7 +152,7 @@ func TestSearchLimitTruncation(t *testing.T) {
 
 func TestSearchCheapest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","price":{"amount":"1.00"},"unitPrice":{"price":{"amount":"1.00"},"unit":"fop.price.per.kg"}},{"retailerProductId":"2","name":"B","price":{"amount":"2.00"}}]}]}`))
+		w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","available":true,"price":{"amount":"1.00"},"unitPrice":{"price":{"amount":"1.00"},"unit":"fop.price.per.kg"}},{"retailerProductId":"2","name":"B","available":true,"price":{"amount":"2.00"}}]}]}`))
 	}))
 	defer srv.Close()
 	useServer(t, srv, false)
@@ -150,7 +164,7 @@ func TestSearchCheapest(t *testing.T) {
 
 func TestCategoriesCheapest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","price":{"amount":"1.00"},"unitPrice":{"price":{"amount":"1.00"},"unit":"fop.price.per.kg"}}]}]}`))
+		w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","available":true,"price":{"amount":"1.00"},"unitPrice":{"price":{"amount":"1.00"},"unit":"fop.price.per.kg"}}]}]}`))
 	}))
 	defer srv.Close()
 	useServer(t, srv, false)
@@ -172,6 +186,37 @@ func TestBatchBadFileAndEmpty(t *testing.T) {
 	useServer(t, srv, false)
 	if _, err := capture(t, func() error { return cmdBatch([]string{"zzz"}) }); err == nil {
 		t.Error("batch where a term has no product should report it")
+	}
+}
+
+func TestBatchSkipsUnavailableProducts(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"productGroups":[{"decoratedProducts":[
+			{"retailerProductId":"unavailable","name":"Out of stock","available":false,"price":{"amount":"0.10"}},
+			{"retailerProductId":"available","name":"In stock","available":true,"price":{"amount":"2.00"}}
+		]}]}`))
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+
+	out, err := capture(t, func() error { return cmdBatch([]string{"--json", "x"}) })
+	if err != nil || !strings.Contains(out, `"retailerProductId": "available"`) || strings.Contains(out, `"retailerProductId": "unavailable"`) {
+		t.Fatalf("batch selection = %q, err %v; want the available product", out, err)
+	}
+}
+
+func TestBatchReportsWhenAllProductsAreUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"productGroups":[{"decoratedProducts":[
+			{"retailerProductId":"unavailable","name":"Out of stock","available":false,"price":{"amount":"0.10"}}
+		]}]}`))
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+
+	out, err := capture(t, func() error { return cmdBatch([]string{"--json", "x"}) })
+	if err == nil || !strings.Contains(err.Error(), "no eligible product") || !strings.Contains(out, `"product": null`) || strings.Contains(out, "unavailable") {
+		t.Fatalf("batch output = %q, err %v; want no selected product and an actionable error", out, err)
 	}
 }
 
@@ -201,7 +246,7 @@ func TestBatchPreservesSearchFailure(t *testing.T) {
 
 func TestBatchReportsResolvedOfferMode(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"X","brand":"B","price":{"amount":"1.00"},"promotions":[{"description":"2a unitat 50%"}]}]}]}`))
+		_, _ = w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"X","brand":"B","available":true,"price":{"amount":"1.00"},"promotions":[{"description":"2a unitat 50%"}]}]}]}`))
 	}))
 	defer srv.Close()
 	useServer(t, srv, false)
@@ -229,7 +274,7 @@ func TestBatchReportsResolvedOfferMode(t *testing.T) {
 
 func TestBatchWarnsForMissingBrandAndMultibuy(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","brand":"Other","price":{"amount":"1.00"},"promotions":[{"description":"2x1"}]}]}]}`))
+		w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","brand":"Other","available":true,"price":{"amount":"1.00"},"promotions":[{"description":"2x1"}]}]}]}`))
 	}))
 	defer srv.Close()
 	useServer(t, srv, false)
@@ -241,7 +286,7 @@ func TestBatchWarnsForMissingBrandAndMultibuy(t *testing.T) {
 
 func TestBatchReportsMissingBrandPolicy(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","brand":"Other","price":{"amount":"1.00"}}]}]}`))
+		_, _ = w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","brand":"Other","available":true,"price":{"amount":"1.00"}}]}]}`))
 	}))
 	defer srv.Close()
 	for _, tc := range []struct {
@@ -272,7 +317,7 @@ func TestBatchRejectsInvalidBrandModeBeforeSearching(t *testing.T) {
 	var requests atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
-		_, _ = w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","brand":"Second","price":{"amount":"1.00"}}]}]}`))
+		_, _ = w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","brand":"Second","available":true,"price":{"amount":"1.00"}}]}]}`))
 	}))
 	defer srv.Close()
 	dir := useServer(t, srv, false)
