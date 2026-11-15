@@ -26,6 +26,31 @@ func TestParseHAR(t *testing.T) {
 	}
 }
 
+func TestParseHARCombinesSplitCookieHeaders(t *testing.T) {
+	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x?regionId=r1","headers":[` +
+		`{"name":"cookie","value":"global_sid=SID"},` +
+		`{"name":"Cookie","value":"aws-waf-token=WAF; VISITORID=abc"}]}}]}}`
+	s, err := ParseHAR([]byte(har))
+	if err != nil {
+		t.Fatalf("ParseHAR: %v", err)
+	}
+	if s.Cookie != "global_sid=SID; aws-waf-token=WAF; VISITORID=abc" || s.RegionID != "r1" {
+		t.Fatalf("ParseHAR split cookies = %+v", s)
+	}
+}
+
+func TestParseHARRejectsConflictingAuthenticationCookies(t *testing.T) {
+	har := `{"log":{"entries":[` +
+		`{"request":{"url":"https://compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=old; aws-waf-token=old"}]}},` +
+		`{"request":{"url":"https://compraonline.bonpreuesclat.cat/x","headers":[` +
+		`{"name":"cookie","value":"global_sid=new"},` +
+		`{"name":"cookie","value":"global_sid=other; aws-waf-token=new"}]}}` +
+		`]}}`
+	if s, err := ParseHAR([]byte(har)); err == nil || s.Cookie != "" || !strings.Contains(err.Error(), "conflicting Bonpreu authentication cookies") {
+		t.Fatalf("ParseHAR conflicting session = %+v, %v", s, err)
+	}
+}
+
 func TestParseHARKeepsRegionFromAuthenticatedRequest(t *testing.T) {
 	har := `{"log":{"entries":[
  {"request":{"url":"https://www.compraonline.bonpreuesclat.cat/api/cart/v1/carts/active?regionId=logged-in-region","headers":[
@@ -151,6 +176,9 @@ func TestCookieLooksAuthed(t *testing.T) {
 		{name: "markers inside values", cookie: "visitor=global_sid=a; other=aws-waf-token=b"},
 		{name: "empty session value", cookie: "global_sid=; aws-waf-token=b"},
 		{name: "empty WAF value", cookie: "global_sid=a; aws-waf-token="},
+		{name: "conflicting session values", cookie: "global_sid=a; global_sid=b; aws-waf-token=c"},
+		{name: "conflicting WAF values", cookie: "global_sid=a; aws-waf-token=b; aws-waf-token=c"},
+		{name: "empty duplicate session value", cookie: "global_sid=a; global_sid=; aws-waf-token=c"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

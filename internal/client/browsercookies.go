@@ -59,7 +59,10 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 			}
 			continue
 		}
-		if c == nil || c.Browser == nil || c.Name == "" || c.Value == "" || !cookieAppliesToShopHome(c, now) {
+		if c == nil || c.Browser == nil || c.Name == "" || !cookieAppliesToShopHome(c, now) {
+			continue
+		}
+		if c.Value == "" && !isAuthCookieName(c.Name) {
 			continue
 		}
 		key := storeKey{

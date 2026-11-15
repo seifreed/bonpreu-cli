@@ -61,6 +61,7 @@ func ParseHAR(data []byte) (HARSession, error) {
 
 	var s HARSession
 	var sawBonpreuReq, sawCookieHeader, sawInsecureCookie bool
+	var sawConflictingAuthCookie bool
 	for _, e := range har.Log.Entries {
 		// Match on the parsed host, not a substring of the raw URL: otherwise a
 		// foreign request that merely mentions the domain in its path/query would be
@@ -70,14 +71,19 @@ func ParseHAR(data []byte) (HARSession, error) {
 			continue
 		}
 		sawBonpreuReq = true
+		var cookieParts []string
+		for _, h := range e.Request.Headers {
+			if strings.EqualFold(h.Name, "cookie") {
+				cookieParts = append(cookieParts, strings.TrimSpace(h.Value))
+			}
+		}
+		cookieHeader := strings.Join(cookieParts, "; ")
+		if len(cookieParts) > 0 {
+			sawCookieHeader = true
+		}
 		if !strings.EqualFold(u.Scheme, "https") {
-			for _, h := range e.Request.Headers {
-				if strings.EqualFold(h.Name, "cookie") {
-					sawCookieHeader = true
-					if CookieLooksAuthed(h.Value) {
-						sawInsecureCookie = true
-					}
-				}
+			if CookieLooksAuthed(cookieHeader) {
+				sawInsecureCookie = true
 			}
 			continue
 		}
@@ -101,23 +107,26 @@ func ParseHAR(data []byte) (HARSession, error) {
 		if ambiguousRegion {
 			requestRegion = ""
 		}
-		requestAuthed := false
-		for _, h := range e.Request.Headers {
-			if !strings.EqualFold(h.Name, "cookie") {
-				continue
-			}
-			sawCookieHeader = true
-			if CookieLooksAuthed(h.Value) {
-				s.Cookie = h.Value // last (freshest) authed request wins
-				requestAuthed = true
-			}
+		requestAuthed, conflictingAuthCookie := cookieAuthStatus(cookieHeader)
+		if conflictingAuthCookie {
+			// Do not fall back to an older session when the newest authenticated
+			// request contains contradictory copies of an auth cookie.
+			s.Cookie = ""
+			s.RegionID = ""
+			sawConflictingAuthCookie = true
+			continue
 		}
 		if requestAuthed {
+			s.Cookie = cookieHeader // last (freshest) authed request wins
 			s.RegionID = requestRegion
+			sawConflictingAuthCookie = false
 		}
 	}
 
 	if s.Cookie == "" {
+		if sawConflictingAuthCookie {
+			return s, fmt.Errorf("conflicting Bonpreu authentication cookies in the HAR; export a fresh request with one session")
+		}
 		if sawInsecureCookie {
 			return s, fmt.Errorf("refusing to import an authenticated cookie captured over a non-HTTPS request; export a HAR from the HTTPS Bonpreu site")
 		}
@@ -148,20 +157,31 @@ func harNoCookieErr(sawBonpreuReq, sawCookieHeader bool) error {
 // (global_sid) and WAF clearance (aws-waf-token). Used to skip anonymous
 // pre-login requests when reading a HAR, and to warn on a manually-set cookie.
 func CookieLooksAuthed(v string) bool {
+	authed, _ := cookieAuthStatus(v)
+	return authed
+}
+
+func cookieAuthStatus(v string) (authed, conflicting bool) {
 	req := &http.Request{Header: http.Header{"Cookie": []string{v}}}
+	values := make(map[string]string, 2)
 	var sid, waf bool
 	for _, cookie := range req.Cookies() {
-		if cookie.Value == "" {
-			continue
-		}
 		switch cookie.Name {
 		case "global_sid":
-			sid = true
+			if previous, ok := values[cookie.Name]; ok && previous != cookie.Value {
+				conflicting = true
+			}
+			values[cookie.Name] = cookie.Value
+			sid = sid || cookie.Value != ""
 		case "aws-waf-token":
-			waf = true
+			if previous, ok := values[cookie.Name]; ok && previous != cookie.Value {
+				conflicting = true
+			}
+			values[cookie.Name] = cookie.Value
+			waf = waf || cookie.Value != ""
 		}
 	}
-	return sid && waf
+	return sid && waf && !conflicting, conflicting
 }
 
 // SaveHARSession caches the imported session for the authenticated commands.

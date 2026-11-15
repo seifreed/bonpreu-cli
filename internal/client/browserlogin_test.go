@@ -111,14 +111,27 @@ func TestLoginViaBrowserCapturesBonpreuCookies(t *testing.T) {
 }
 
 func TestReadBonpreuCookiesRejectsConflictingAuthenticationCookies(t *testing.T) {
-	executor := &browserLoginExecutor{cookies: []*network.Cookie{
-		{Name: "global_sid", Value: "old", Domain: ".bonpreuesclat.cat"},
-		{Name: "global_sid", Value: "new", Domain: "www.bonpreuesclat.cat"},
-		{Name: "aws-waf-token", Value: "token", Domain: ".bonpreuesclat.cat"},
-	}}
-	useBrowserLoginFakes(t, executor)
-	if cookie, err := readBonpreuCookies(context.Background(), "https://www.bonpreuesclat.cat/"); err == nil || cookie != "" || !strings.Contains(err.Error(), "conflicting Bonpreu authentication cookies") {
-		t.Fatalf("readBonpreuCookies() = %q, %v; want conflicting-auth error", cookie, err)
+	for _, tc := range []struct {
+		name    string
+		cookies []*network.Cookie
+	}{
+		{name: "different values", cookies: []*network.Cookie{
+			{Name: "global_sid", Value: "old", Domain: ".bonpreuesclat.cat"},
+			{Name: "global_sid", Value: "new", Domain: "www.bonpreuesclat.cat"},
+			{Name: "aws-waf-token", Value: "token", Domain: ".bonpreuesclat.cat"},
+		}},
+		{name: "empty duplicate", cookies: []*network.Cookie{
+			{Name: "global_sid", Value: "session", Domain: ".bonpreuesclat.cat"},
+			{Name: "global_sid", Value: "", Domain: "www.bonpreuesclat.cat"},
+			{Name: "aws-waf-token", Value: "token", Domain: ".bonpreuesclat.cat"},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			useBrowserLoginFakes(t, &browserLoginExecutor{cookies: tc.cookies})
+			if cookie, err := readBonpreuCookies(context.Background(), "https://www.bonpreuesclat.cat/"); err == nil || cookie != "" || !strings.Contains(err.Error(), "conflicting Bonpreu authentication cookies") {
+				t.Fatalf("readBonpreuCookies() = %q, %v; want conflicting-auth error", cookie, err)
+			}
+		})
 	}
 }
 

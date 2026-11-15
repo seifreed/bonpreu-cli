@@ -94,13 +94,27 @@ func TestCookiesFromSequenceUsesOnlyCookiesApplicableToShopHome(t *testing.T) {
 }
 
 func TestCookiesFromSequenceRejectsConflictingAuthenticationCookies(t *testing.T) {
-	_, err := cookiesFromSequence("chrome", cookieSequence(
-		cookieItem{browserCookie("chrome", "global_sid", "old"), nil},
-		cookieItem{browserCookieForDomain("chrome", "global_sid", "new", ".www.compraonline.bonpreuesclat.cat"), nil},
-		cookieItem{browserCookie("chrome", "aws-waf-token", "token"), nil},
-	))
-	if err == nil || !strings.Contains(err.Error(), "conflicting Bonpreu authentication cookies") {
-		t.Fatalf("conflicting auth cookies error = %v", err)
+	for _, tc := range []struct {
+		name  string
+		items []cookieItem
+	}{
+		{name: "different values", items: []cookieItem{
+			{browserCookie("chrome", "global_sid", "old"), nil},
+			{browserCookieForDomain("chrome", "global_sid", "new", ".www.compraonline.bonpreuesclat.cat"), nil},
+			{browserCookie("chrome", "aws-waf-token", "token"), nil},
+		}},
+		{name: "empty duplicate", items: []cookieItem{
+			{browserCookie("chrome", "global_sid", "session"), nil},
+			{browserCookieForDomain("chrome", "global_sid", "", ".www.compraonline.bonpreuesclat.cat"), nil},
+			{browserCookie("chrome", "aws-waf-token", "token"), nil},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := cookiesFromSequence("chrome", cookieSequence(tc.items...))
+			if err == nil || !strings.Contains(err.Error(), "conflicting Bonpreu authentication cookies") {
+				t.Fatalf("conflicting auth cookies error = %v", err)
+			}
+		})
 	}
 }
 

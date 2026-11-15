@@ -203,13 +203,20 @@ func readBonpreuCookies(ctx context.Context, url string) (string, error) {
 		return "", err
 	}
 	val := map[string]string{}
+	authValues := map[string]string{}
 	var order []string
 	for _, c := range cks {
-		if c == nil || c.Name == "" || c.Value == "" || !isBonpreuCookieDomain(c.Domain) {
+		if c == nil || c.Name == "" || !isBonpreuCookieDomain(c.Domain) {
 			continue
 		}
-		if value, ok := val[c.Name]; ok && value != c.Value && isAuthCookieName(c.Name) {
-			return "", fmt.Errorf("conflicting Bonpreu authentication cookies apply to the requested page")
+		if isAuthCookieName(c.Name) {
+			if value, ok := authValues[c.Name]; ok && value != c.Value {
+				return "", fmt.Errorf("conflicting Bonpreu authentication cookies apply to the requested page")
+			}
+			authValues[c.Name] = c.Value
+		}
+		if c.Value == "" {
+			continue
 		}
 		if _, ok := val[c.Name]; !ok {
 			order = append(order, c.Name)
