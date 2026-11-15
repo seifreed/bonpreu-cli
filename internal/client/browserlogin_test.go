@@ -29,14 +29,20 @@ type browserLoginExecutor struct {
 }
 
 type blockingCheckoutReader struct {
-	started chan struct{}
-	release chan struct{}
+	started  chan struct{}
+	release  chan struct{}
+	closeErr error
 }
 
 func (r *blockingCheckoutReader) Read([]byte) (int, error) {
 	close(r.started)
 	<-r.release
 	return 0, io.EOF
+}
+
+func (r *blockingCheckoutReader) Close() error {
+	close(r.release)
+	return r.closeErr
 }
 
 func (e *browserLoginExecutor) Execute(_ context.Context, method string, params, result any) error {
@@ -421,16 +427,17 @@ func TestCheckoutInBrowserReturnsNavigationCookieAndWaitErrors(t *testing.T) {
 }
 
 func TestWaitForCheckoutReadsLineAndStopsOnCancellation(t *testing.T) {
-	if err := waitForCheckout(context.Background(), strings.NewReader("\n")); err != nil {
+	if err := waitForCheckout(context.Background(), io.NopCloser(strings.NewReader("\n"))); err != nil {
 		t.Fatalf("waitForCheckout with Enter = %v", err)
 	}
 	preCanceled, preCancel := context.WithCancel(context.Background())
 	preCancel()
-	if err := waitForCheckout(preCanceled, strings.NewReader("\n")); !errors.Is(err, context.Canceled) {
+	if err := waitForCheckout(preCanceled, io.NopCloser(strings.NewReader("\n"))); !errors.Is(err, context.Canceled) {
 		t.Fatalf("waitForCheckout with canceled context = %v", err)
 	}
 
-	reader := &blockingCheckoutReader{started: make(chan struct{}), release: make(chan struct{})}
+	closeErr := errors.New("stdin close failed")
+	reader := &blockingCheckoutReader{started: make(chan struct{}), release: make(chan struct{}), closeErr: closeErr}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- waitForCheckout(ctx, reader) }()
@@ -442,13 +449,12 @@ func TestWaitForCheckoutReadsLineAndStopsOnCancellation(t *testing.T) {
 	cancel()
 	select {
 	case err := <-done:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("waitForCheckout cancellation = %v", err)
+		if !errors.Is(err, context.Canceled) || !errors.Is(err, closeErr) {
+			t.Fatalf("waitForCheckout cancellation = %v; want cancellation and close error", err)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("waitForCheckout did not return after cancellation")
 	}
-	close(reader.release)
 }
 
 func TestDefaultCheckoutWaitReadsStdin(t *testing.T) {

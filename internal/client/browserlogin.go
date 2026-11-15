@@ -5,6 +5,7 @@ package client
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -161,7 +162,7 @@ func CheckoutInBrowser(baseURL, cookieHeader string) error {
 	return nil
 }
 
-func waitForCheckout(ctx context.Context, input io.Reader) error {
+func waitForCheckout(ctx context.Context, input io.ReadCloser) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -174,7 +175,12 @@ func waitForCheckout(ctx context.Context, input io.Reader) error {
 	case err := <-readDone:
 		return err
 	case <-ctx.Done():
-		return ctx.Err()
+		closeErr := input.Close()
+		readErr := <-readDone
+		if errors.Is(readErr, io.EOF) {
+			readErr = nil
+		}
+		return errors.Join(ctx.Err(), closeErr, readErr)
 	}
 }
 
