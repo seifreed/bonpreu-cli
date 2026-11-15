@@ -237,12 +237,24 @@ func cartUpdateLimitError(raw json.RawMessage, productID string) error {
 	if hasItems && result.Items == nil {
 		return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: items must be an array")
 	}
+	if hasLimited && result.LimitedItems == nil {
+		return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: limitedItems must be an array")
+	}
+	if hasUnavailable && result.UnavailableData == nil {
+		return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: unavailableData must be an array")
+	}
 	for _, item := range result.LimitedItems {
+		if strings.TrimSpace(item.ProductID) == "" {
+			return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: limited item is missing productId")
+		}
 		if item.ProductID == productID {
 			return fmt.Errorf("cart quantity was limited by the server (%s); inspect the cart before retrying", terminalText(firstNonEmpty(item.Reason, "quantity limit")))
 		}
 	}
 	for _, item := range result.UnavailableData {
+		if strings.TrimSpace(item.ProductID) == "" {
+			return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: unavailable item is missing productId")
+		}
 		if item.ProductID == productID {
 			return fmt.Errorf("cart product is unavailable (%s); inspect the cart before retrying", terminalText(firstNonEmpty(item.Reason, "unavailable")))
 		}

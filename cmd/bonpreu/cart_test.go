@@ -226,6 +226,24 @@ func TestCartUpdateLimitErrorHandlesMalformedResponse(t *testing.T) {
 	}
 }
 
+func TestCartUpdateLimitErrorRejectsUnidentifiableResultItems(t *testing.T) {
+	for _, raw := range []string{
+		`{"limitedItems":[{}]}`,
+		`{"limitedItems":[{"productId":"  "}]}`,
+		`{"limitedItems":null}`,
+		`{"unavailableData":[{}]}`,
+		`{"unavailableData":[{"productId":"  "}]}`,
+		`{"unavailableData":null}`,
+	} {
+		t.Run(raw, func(t *testing.T) {
+			err := cartUpdateLimitError(json.RawMessage(raw), "uuid-23597")
+			if err == nil || !strings.Contains(err.Error(), "check the cart before retrying") {
+				t.Fatalf("cart update result %s error = %v; want uncertain-result error", raw, err)
+			}
+		})
+	}
+}
+
 func TestCartUpdateLimitErrorReportsUnavailableProduct(t *testing.T) {
 	err := cartUpdateLimitError(json.RawMessage(`{"unavailableData":[{"productId":"uuid-23597","reason":"OUT_OF_STOCK"}]}`), "uuid-23597")
 	if err == nil || !strings.Contains(err.Error(), "OUT_OF_STOCK") {
