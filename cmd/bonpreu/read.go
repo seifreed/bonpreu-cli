@@ -162,7 +162,11 @@ func cmdBatch(args []string) error {
 	if len(terms) == 0 {
 		return fmt.Errorf("no terms (use -f file, stdin, or '<term>...' args)")
 	}
-	cl, cfg := newClient(cf)
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return fmt.Errorf("read batch preferences: %w", err)
+	}
+	cl := newClientWithConfig(cf, cfg)
 	if mode := cfg.Brands.Mode; mode != "" && mode != "cheapest_among" && mode != "strict_priority" {
 		return fmt.Errorf("invalid [brands].mode %q (want cheapest_among or strict_priority)", mode)
 	}

@@ -109,6 +109,16 @@ func addCommon(fs *flag.FlagSet) *common {
 // from the imported session. The session cookie (for cart/checkout) is likewise
 // loaded from config/cache by the authenticated commands, not here.
 func newClient(c *common) (*client.Client, config.Config) {
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		stderrWarn("config.load_failed", "config.toml could not be read; using defaults",
+			"operation", c.operation, "error_type", fmt.Sprintf("%T", err))
+		cfg = config.Config{}
+	}
+	return newClientWithConfig(c, cfg), cfg
+}
+
+func newClientWithConfig(c *common, cfg config.Config) *client.Client {
 	cl := client.New()
 	cl.Logger = clientLogger(os.Stderr, c.operation)
 	// BONPREU_BASE_URL points the client at an alternate host (a debugging proxy,
@@ -117,18 +127,13 @@ func newClient(c *common) (*client.Client, config.Config) {
 		cl.BaseURL = u
 	}
 	cl.AllowExternalCookieHost = os.Getenv("BONPREU_ALLOW_EXTERNAL_COOKIE_HOST") == "1"
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		stderrWarn("config.load_failed", "config.toml could not be read; using defaults",
-			"operation", c.operation, "error_type", fmt.Sprintf("%T", err))
-	}
 	if v := firstNonEmpty(c.lang, cfg.Defaults.Lang); v != "" {
 		cl.Lang = v
 	}
 	if cfg.Defaults.RegionID != "" {
 		cl.RegionID = cfg.Defaults.RegionID
 	}
-	return cl, cfg
+	return cl
 }
 
 func clientLogger(w io.Writer, operation string) *slog.Logger {

@@ -331,6 +331,25 @@ func TestBatchRejectsInvalidBrandModeBeforeSearching(t *testing.T) {
 	}
 }
 
+func TestBatchRejectsUnreadableConfigBeforeSearching(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte(`{"productGroups":[]}`))
+	}))
+	defer srv.Close()
+	dir := useServer(t, srv, false)
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("not valid = toml ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := capture(t, func() error { return cmdBatch([]string{"--json", "x"}) }); err == nil || !strings.Contains(err.Error(), "read batch preferences") {
+		t.Fatalf("batch with unreadable config error = %v", err)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("unreadable config made %d network request(s) before failing", got)
+	}
+}
+
 func TestBatchRejectsInvalidOfferModeBeforeSearching(t *testing.T) {
 	var requests atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
