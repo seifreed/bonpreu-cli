@@ -1,6 +1,6 @@
 module github.com/seifreed/bonpreu-cli
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -26,9 +26,9 @@ require (
 	github.com/klauspost/compress v1.20.2 // indirect
 	github.com/pierrec/lz4/v4 v4.1.26 // indirect
 	github.com/zalando/go-keyring v0.2.7 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/net v0.55.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.39.0 // indirect
+	golang.org/x/crypto v0.59.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/text v0.44.0 // indirect
 	gopkg.in/ini.v1 v1.67.1 // indirect
 )
