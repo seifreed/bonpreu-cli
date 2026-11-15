@@ -74,8 +74,7 @@ func TestSaveAndVerify(t *testing.T) {
 }
 
 func TestSaveAndVerifyReturnsUnreadableConfigError(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	dir := privateTestConfigDir(t)
 	t.Setenv("BONPREU_MAX_EUR", "")
 	previous := client.Session{Cookie: "previous=still-valid", RegionID: "old-region"}
 	if err := client.SaveSession(previous); err != nil {
@@ -181,7 +180,7 @@ func TestCmdLoginSelectsBrowserSource(t *testing.T) {
 
 func TestRunLoginLogsBrowserOpenFailure(t *testing.T) {
 	t.Setenv("BONPREU_BASE_URL", "https://login.example")
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateTestConfigDir(t)
 	t.Setenv("BONPREU_LOG_FORMAT", "json")
 	oldOpen := openLoginBrowser
 	defer func() { openLoginBrowser = oldOpen }()

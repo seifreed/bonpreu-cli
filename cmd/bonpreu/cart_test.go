@@ -31,8 +31,8 @@ func TestGuardLineAddRejectsOverflowWhenLimitSet(t *testing.T) {
 }
 
 func TestGuardLineAddSilentWithoutLimit(t *testing.T) {
-	t.Setenv("BONPREU_MAX_EUR", "")             // no limit from env
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir()) // no limit from a real config.toml
+	t.Setenv("BONPREU_MAX_EUR", "") // no limit from env
+	privateTestConfigDir(t)         // no limit from a real config.toml
 
 	pd := &client.ProductDetail{}
 	pd.Name = "Mystery item"
@@ -413,8 +413,7 @@ func TestAuthedClientSurfacesUnreadableAuthState(t *testing.T) {
 		{name: "malformed config", file: "config.toml", body: "not valid = toml ["},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			dir := t.TempDir()
-			t.Setenv("BONPREU_CONFIG_DIR", dir)
+			dir := privateTestConfigDir(t)
 			t.Setenv("BONPREU_MAX_EUR", "")
 			if err := os.WriteFile(filepath.Join(dir, tt.file), []byte(tt.body), 0o600); err != nil {
 				t.Fatal(err)

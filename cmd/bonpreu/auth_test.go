@@ -16,7 +16,7 @@ import (
 // (optional) regionId query param, capturing stderr diagnostics.
 func importHarWith(t *testing.T, cookie, regionURL string) []string {
 	t.Helper()
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateTestConfigDir(t)
 
 	har := fmt.Sprintf(`{"log":{"entries":[{"request":{"url":%q,"headers":[{"name":"cookie","value":%q}]}}]}}`, regionURL, cookie)
 	path := filepath.Join(t.TempDir(), "session.har")
@@ -55,7 +55,7 @@ func TestImportHarSilentWhenRegionPresent(t *testing.T) {
 }
 
 func TestSetCookieWarnsOnAnonymousCookie(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateTestConfigDir(t)
 	var logs []string
 	oldInfo, oldWarn := stderrInfo, stderrWarn
 	stderrInfo = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
@@ -71,7 +71,7 @@ func TestSetCookieWarnsOnAnonymousCookie(t *testing.T) {
 }
 
 func TestSetCookieSilentOnAuthedCookie(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateTestConfigDir(t)
 	var logs []string
 	oldInfo, oldWarn := stderrInfo, stderrWarn
 	stderrInfo = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
@@ -87,7 +87,7 @@ func TestSetCookieSilentOnAuthedCookie(t *testing.T) {
 }
 
 func TestSetCookieSaveEventDoesNotExposeCookie(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateTestConfigDir(t)
 	const secret = "global_sid=private-session-value"
 	var event string
 	oldInfo, oldWarn := stderrInfo, stderrWarn
@@ -110,7 +110,7 @@ func TestSetCookieSaveError(t *testing.T) {
 }
 
 func TestSetCookieReturnsSaveError(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateTestConfigDir(t)
 	oldSave := persistSession
 	persistSession = func(client.Session) error { return fmt.Errorf("disk write failed") }
 	t.Cleanup(func() { persistSession = oldSave })
@@ -160,7 +160,7 @@ func TestReadFileOrStdin(t *testing.T) {
 }
 
 func TestCmdSetCookieStdinAndEmpty(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateTestConfigDir(t)
 
 	withStdin(t, "global_sid=a; aws-waf-token=b\n", func() {
 		if err := cmdSetCookie([]string{"--stdin"}); err != nil {
@@ -181,7 +181,7 @@ func TestCmdImportHarUsageError(t *testing.T) {
 }
 
 func TestImportHarParseError(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateTestConfigDir(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "anon.har")
 	// bonpreu entry but the cookie is anonymous → ParseHAR errors.
@@ -226,7 +226,7 @@ func TestWhoamiCheckAuthError(t *testing.T) {
 }
 
 func TestImportHarFileMissing(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateTestConfigDir(t)
 	if err := cmdImportHar([]string{"--file", filepath.Join(t.TempDir(), "nope.har")}); err == nil {
 		t.Error("import-har with a missing file should error")
 	}
@@ -242,7 +242,7 @@ func TestWhoamiWithoutSession(t *testing.T) {
 }
 
 func TestSetCookieStdinReadError(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateTestConfigDir(t)
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)

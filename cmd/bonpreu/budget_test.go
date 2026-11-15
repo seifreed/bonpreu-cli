@@ -9,8 +9,7 @@ import (
 
 func TestResolveMaxPrecedence(t *testing.T) {
 	// Isolate config to a temp dir so a real ~/.bonpreu doesn't leak in.
-	dir := t.TempDir()
-	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	dir := privateTestConfigDir(t)
 
 	// flag wins over env.
 	t.Setenv("BONPREU_MAX_EUR", "100")
@@ -74,8 +73,7 @@ func TestCheckBudget(t *testing.T) {
 }
 
 func TestResolveMaxFailsOnMalformedConfig(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	dir := privateTestConfigDir(t)
 	t.Setenv("BONPREU_MAX_EUR", "") // force the config path
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("not valid = toml ["), 0o600); err != nil {
 		t.Fatal(err)

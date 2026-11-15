@@ -3,12 +3,23 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
-func TestLoadConfigParsesTOML(t *testing.T) {
-	dir := t.TempDir()
+func privateConfigTestDir(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "config")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	return dir
+}
+
+func TestLoadConfigParsesTOML(t *testing.T) {
+	dir := privateConfigTestDir(t)
 
 	const body = `[auth]
 cookie = "global_sid=abc; aws-waf-token=def"
@@ -51,13 +62,75 @@ on_missing = "ask"
 }
 
 func TestLoadConfigMissingIsEmpty(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateConfigTestDir(t)
 	c, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("missing config should not error: %v", err)
 	}
 	if c.Auth.Cookie != "" || c.Defaults.RegionID != "" || c.Limits.MaxEUR != 0 || c.Brands.Configured() {
 		t.Errorf("missing config should be zero value, got %+v", c)
+	}
+}
+
+func TestConfigReadsRejectPermissiveExistingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows ACLs are not represented by Go permission bits")
+	}
+	for _, read := range []struct {
+		name string
+		call func() error
+	}{
+		{name: "toml", call: func() error { _, err := LoadConfig(); return err }},
+		{name: "session", call: func() error { var state map[string]string; return Load("session.json", &state) }},
+	} {
+		t.Run(read.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "bonpreu")
+			if err := os.Mkdir(dir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, configFile), []byte("[auth]\ncookie = \"secret\"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "session.json"), []byte(`{"cookie":"secret"}`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("BONPREU_CONFIG_DIR", dir)
+
+			if err := read.call(); err == nil || !strings.Contains(err.Error(), "must have mode 0700") {
+				t.Fatalf("read config error = %v, want private-directory error", err)
+			}
+			info, err := os.Stat(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := info.Mode().Perm(); got != 0o755 {
+				t.Fatalf("config directory permissions = %04o, want unchanged 0755", got)
+			}
+		})
+	}
+}
+
+func TestSaveRejectsPermissiveExistingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows ACLs are not represented by Go permission bits")
+	}
+	dir := filepath.Join(t.TempDir(), "bonpreu")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BONPREU_CONFIG_DIR", dir)
+
+	if err := Save("session.json", map[string]string{"cookie": "secret"}); err == nil || !strings.Contains(err.Error(), "must have mode 0700") {
+		t.Fatalf("Save error = %v, want private-directory error", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "session.json")); !os.IsNotExist(err) {
+		t.Fatalf("session file stat error = %v, want no secret written", err)
 	}
 }
 
@@ -77,7 +150,7 @@ func TestLoadConfigStatErrorSurfaces(t *testing.T) {
 }
 
 func TestSaveLoadJSONState(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateConfigTestDir(t)
 	type state struct {
 		Cookie string `json:"cookie"`
 		Region string `json:"region"`

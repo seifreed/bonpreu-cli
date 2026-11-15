@@ -53,8 +53,7 @@ func apiServer(t *testing.T) *httptest.Server {
 func useServer(t *testing.T, srv *httptest.Server, authed bool) string {
 	t.Helper()
 	t.Setenv("BONPREU_BASE_URL", srv.URL)
-	dir := t.TempDir()
-	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	dir := privateTestConfigDir(t)
 	t.Setenv("BONPREU_MAX_EUR", "")
 	t.Setenv("BONPREU_ALLOW_EXTERNAL_COOKIE_HOST", "")
 	if authed {
@@ -226,7 +225,7 @@ func TestCmdCheckout(t *testing.T) {
 }
 
 func TestImportHarEndToEnd(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateTestConfigDir(t)
 	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/api/x?regionId=r-9","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
 	path := filepath.Join(t.TempDir(), "s.har")
 	if err := os.WriteFile(path, []byte(har), 0o600); err != nil {

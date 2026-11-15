@@ -45,8 +45,7 @@ func TestReorderArgs(t *testing.T) {
 }
 
 func TestNewClientWarnsOnMalformedConfig(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	dir := privateTestConfigDir(t)
 	t.Setenv("BONPREU_ALLOW_EXTERNAL_COOKIE_HOST", "")
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("bad = toml ["), 0o600); err != nil {
 		t.Fatal(err)
@@ -63,7 +62,7 @@ func TestNewClientWarnsOnMalformedConfig(t *testing.T) {
 }
 
 func TestNewClientSilentWithoutConfig(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir()) // no config.toml present
+	privateTestConfigDir(t) // no config.toml present
 	t.Setenv("BONPREU_ALLOW_EXTERNAL_COOKIE_HOST", "")
 	var logs []string
 	old := stderrWarn
@@ -159,8 +158,7 @@ func TestEmitWriteErrorsSurface(t *testing.T) {
 }
 
 func TestNewClientConfigDefaults(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	dir := privateTestConfigDir(t)
 	t.Setenv("BONPREU_BASE_URL", "")
 	t.Setenv("BONPREU_ALLOW_EXTERNAL_COOKIE_HOST", "1")
 	body := "[defaults]\nlang = \"es\"\nregion_id = \"r-1\"\n"

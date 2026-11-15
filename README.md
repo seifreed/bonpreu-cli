@@ -282,8 +282,12 @@ State lives in `~/.bonpreu/` (override with `BONPREU_CONFIG_DIR`):
 
 | File | Contents |
 |------|----------|
-| `config.toml` (`0600`) | `[defaults] region_id`/`lang`/`postal_code`, `[limits] max_eur`, `[auth] cookie`, `[brands]` favourites, `[offers] mode` |
-| `session.json` | Machine-managed session cache (cookie + region), written by `login`/`import-har`/`set-cookie` |
+| `config.toml` | User-managed settings; `[auth] cookie` may contain a session secret |
+| `session.json` (`0600`) | Machine-managed session cache (cookie + region), written by `login`/`import-har`/`set-cookie` |
+
+On Unix-like systems, the CLI reads and writes state only when the config directory is private
+(`0700`). If an existing directory is more accessible, restrict it with `chmod 700 <directory>`.
+On Windows, restrict the directory's ACL to the current user; Go's permission bits cannot verify it.
 
 The brand catalogue ships **in the repo/binary** (`internal/branddata/brands.json`), not under `~/.bonpreu/`.
 

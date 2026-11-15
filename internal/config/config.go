@@ -10,11 +10,17 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/BurntSushi/toml"
 )
 
 const configFile = "config.toml"
+
+var (
+	configStat     = os.Stat
+	openConfigRoot = os.OpenRoot
+)
 
 // Dir is ~/.bonpreu (or $BONPREU_CONFIG_DIR).
 func Dir() string {
@@ -70,8 +76,11 @@ func (b Brands) Configured() bool { return len(b.Preferred) > 0 || len(b.Overrid
 // disabling the spending guard, so only os.IsNotExist may be swallowed.
 func LoadConfig() (Config, error) {
 	var c Config
+	if err := ensureDir(); err != nil {
+		return c, fmt.Errorf("prepare config directory: %w", err)
+	}
 	p := filepath.Join(Dir(), configFile)
-	if _, err := os.Stat(p); err != nil {
+	if _, err := configStat(p); err != nil {
 		if os.IsNotExist(err) {
 			return c, nil
 		}
@@ -81,9 +90,21 @@ func LoadConfig() (Config, error) {
 	return c, err
 }
 
-// ensureDir creates the config dir (0700; it holds secrets) if absent.
+// ensureDir creates the config dir privately and rejects permissive existing dirs.
 func ensureDir() error {
-	return os.MkdirAll(Dir(), 0o700)
+	dir := Dir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	info, err := configStat(dir)
+	if err != nil {
+		return err
+	}
+	// Windows ACLs are not represented by Go's permission bits.
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
+		return fmt.Errorf("config directory %q must have mode 0700 (currently %04o); restrict its permissions before continuing", dir, info.Mode().Perm())
+	}
+	return nil
 }
 
 // Load reads a JSON state file (e.g. the session cache) from the config dir.
@@ -91,7 +112,10 @@ func Load(name string, v any) error {
 	if err := validateName(name); err != nil {
 		return err
 	}
-	root, err := os.OpenRoot(Dir())
+	if err := ensureDir(); err != nil {
+		return fmt.Errorf("prepare config directory: %w", err)
+	}
+	root, err := openConfigRoot(Dir())
 	if err != nil {
 		return fmt.Errorf("open config directory: %w", err)
 	}

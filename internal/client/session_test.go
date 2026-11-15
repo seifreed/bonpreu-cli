@@ -8,10 +8,19 @@ import (
 	"testing"
 )
 
+func privateClientConfigTestDir(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "config")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	return dir
+}
+
 func loadAuthResult(t *testing.T, writeSession []byte) (bool, string, error) {
 	t.Helper()
-	dir := t.TempDir()
-	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	dir := privateClientConfigTestDir(t)
 	if writeSession != nil {
 		if err := os.WriteFile(filepath.Join(dir, sessionFile), writeSession, 0o600); err != nil {
 			t.Fatal(err)
@@ -34,8 +43,7 @@ func TestLoadAuthReturnsCorruptSessionError(t *testing.T) {
 }
 
 func TestLoadAuthReturnsMalformedConfigError(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	dir := privateClientConfigTestDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("not valid = toml ["), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +65,7 @@ func TestLoadAuthSilentWhenNoSession(t *testing.T) {
 }
 
 func TestLoadAuthWarnsOnForeignBaseURL(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateClientConfigTestDir(t)
 	var logs bytes.Buffer
 	c := &Client{
 		BaseURL: "https://evil.example",
@@ -87,7 +95,7 @@ func TestLoadAuthWarnsOnForeignBaseURL(t *testing.T) {
 }
 
 func TestSessionRoundTripAndHARSave(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateClientConfigTestDir(t)
 	if err := SaveSession(Session{Cookie: "c", RegionID: "r"}); err != nil {
 		t.Fatal(err)
 	}
@@ -103,8 +111,7 @@ func TestSessionRoundTripAndHARSave(t *testing.T) {
 }
 
 func TestLoadAuthConfigFallback(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	dir := privateClientConfigTestDir(t)
 	body := "[auth]\ncookie = \"global_sid=x\"\n[defaults]\nregion_id = \"r-7\"\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)

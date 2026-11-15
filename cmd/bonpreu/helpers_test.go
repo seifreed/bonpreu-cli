@@ -26,6 +26,16 @@ func withStdin(t *testing.T, content string, fn func()) {
 	fn()
 }
 
+func privateTestConfigDir(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "config")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	return dir
+}
+
 // withFailingStdout points os.Stdout at a closed file so any write fails, to
 // exercise the emit error-return paths.
 func withFailingStdout(t *testing.T, fn func() error) error {

@@ -62,8 +62,7 @@ func TestWriteTempClosesAndReturnsFailures(t *testing.T) {
 }
 
 func TestSaveReportsTemporaryCleanupFailure(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	dir := privateConfigTestDir(t)
 	tmpPath := filepath.Join(dir, "session.json.tmp-test")
 	if err := os.Mkdir(tmpPath, 0o700); err != nil {
 		t.Fatal(err)
@@ -91,7 +90,7 @@ func TestDirNoHome(t *testing.T) {
 }
 
 func TestLoadMissingFileErrors(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateConfigTestDir(t)
 	var v map[string]any
 	if err := Load("does-not-exist.json", &v); err == nil {
 		t.Error("Load of a missing file should error")
@@ -108,6 +107,48 @@ func TestLoadReturnsConfigDirectoryOpenFailure(t *testing.T) {
 	var v map[string]any
 	if err := Load("session.json", &v); err == nil {
 		t.Fatal("Load should report an error when the config directory cannot be opened")
+	}
+}
+
+func TestEnsureDirPropagatesStatError(t *testing.T) {
+	privateConfigTestDir(t)
+	want := errors.New("directory stat failed")
+	old := configStat
+	configStat = func(string) (os.FileInfo, error) { return nil, want }
+	t.Cleanup(func() { configStat = old })
+
+	if err := ensureDir(); !errors.Is(err, want) {
+		t.Fatalf("ensureDir error = %v, want stat error", err)
+	}
+}
+
+func TestLoadConfigPropagatesConfigStatError(t *testing.T) {
+	privateConfigTestDir(t)
+	want := errors.New("config stat failed")
+	old := configStat
+	configStat = func(path string) (os.FileInfo, error) {
+		if filepath.Base(path) == configFile {
+			return nil, want
+		}
+		return old(path)
+	}
+	t.Cleanup(func() { configStat = old })
+
+	if _, err := LoadConfig(); !errors.Is(err, want) {
+		t.Fatalf("LoadConfig error = %v, want config stat error", err)
+	}
+}
+
+func TestLoadPropagatesOpenRootError(t *testing.T) {
+	privateConfigTestDir(t)
+	want := errors.New("open config directory failed")
+	old := openConfigRoot
+	openConfigRoot = func(string) (*os.Root, error) { return nil, want }
+	t.Cleanup(func() { openConfigRoot = old })
+
+	var v map[string]any
+	if err := Load("session.json", &v); !errors.Is(err, want) {
+		t.Fatalf("Load error = %v, want open-root error", err)
 	}
 }
 
@@ -166,21 +207,21 @@ func TestSaveMkdirFailure(t *testing.T) {
 }
 
 func TestSaveEncodeError(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateConfigTestDir(t)
 	if err := Save("x.json", make(chan int)); err == nil {
 		t.Error("an unmarshalable value should fail to save")
 	}
 }
 
 func TestSaveReturnsCreateTempFailure(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateConfigTestDir(t)
 	if err := Save("bad\x00name.json", map[string]any{"ok": true}); err == nil {
 		t.Fatal("Save should propagate the temporary-file creation error")
 	}
 }
 
 func TestSaveReturnsInjectedCreateTempFailure(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	privateConfigTestDir(t)
 	want := errors.New("temporary-file creation failed")
 	err := save("session.json", map[string]any{"cookie": "secret"}, func(string, string) (io.WriteCloser, string, error) {
 		return nil, "", want
@@ -191,8 +232,7 @@ func TestSaveReturnsInjectedCreateTempFailure(t *testing.T) {
 }
 
 func TestSaveCreateTempAndRenameFailures(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	dir := privateConfigTestDir(t)
 	if err := Save("nested/name.json", map[string]int{"a": 1}); err == nil {
 		t.Fatal("CreateTemp should reject a name containing a path separator")
 	}
@@ -215,8 +255,7 @@ func TestSaveCreateTempAndRenameFailures(t *testing.T) {
 }
 
 func TestSaveWriteFailureCleansUpTemporaryFile(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	dir := privateConfigTestDir(t)
 	tempPath := filepath.Join(dir, "session.json.tmp-test")
 	if err := os.WriteFile(tempPath, []byte("partial"), 0o600); err != nil {
 		t.Fatal(err)
