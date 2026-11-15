@@ -105,13 +105,17 @@ func priceCents(s string) (int64, error) {
 	if s == "" {
 		return 0, fmt.Errorf("empty price")
 	}
-	v, parseErr := strconv.ParseFloat(s, 64)
-	if parseErr == nil && (math.IsNaN(v) || math.IsInf(v, 0) || v < 0) {
-		return 0, fmt.Errorf("invalid price %q (want a finite, non-negative amount)", s)
+	v, err := strconv.ParseFloat(s, 64)
+	invalid := err == nil && (math.IsNaN(v) || math.IsInf(v, 0) || v < 0)
+	var amount *big.Rat
+	if err == nil && !invalid {
+		amount, err = ratFromDecimal(s)
 	}
-	amount, ratErr := ratFromDecimal(s)
-	if parseErr != nil || ratErr != nil {
+	if err != nil {
 		return 0, fmt.Errorf("unparseable price %q", s)
+	}
+	if invalid {
+		return 0, fmt.Errorf("invalid price %q (want a finite, non-negative amount)", s)
 	}
 	amount.Mul(amount, big.NewRat(100, 1))
 	cents := roundRat(amount)

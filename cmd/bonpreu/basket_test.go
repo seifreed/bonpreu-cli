@@ -23,7 +23,7 @@ func TestPriceCents(t *testing.T) {
 	if _, err := priceCents("abc"); err == nil {
 		t.Error("expected error for non-numeric price")
 	}
-	for _, bad := range []string{"NaN", "Inf", "+Inf", "-Inf", "-1.00", "1e308", "92233720368547760"} {
+	for _, bad := range []string{"NaN", "Inf", "+Inf", "-Inf", "-1.00", "1e308", "1e999999", "92233720368547760"} {
 		if cents, err := priceCents(bad); err == nil {
 			t.Errorf("priceCents(%q) = %d, want invalid-price error", bad, cents)
 		}
