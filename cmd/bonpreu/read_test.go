@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -39,13 +40,16 @@ func TestRankByUnit(t *testing.T) {
 		}
 	}
 
-	wantWinners := map[string]bool{"l-only": true, "kg-low-a": true, "kg-low-b": true}
+	wantWinners := map[string]bool{
+		unitWinnerKey("/L", big.NewRat(3, 2)):    true,
+		unitWinnerKey("/kg", big.NewRat(21, 10)): true,
+	}
 	if len(winners) != len(wantWinners) {
 		t.Fatalf("winners = %v, want %v", winners, wantWinners)
 	}
-	for id := range wantWinners {
-		if !winners[id] {
-			t.Errorf("expected %q to be a per-group winner", id)
+	for key := range wantWinners {
+		if !winners[key] {
+			t.Errorf("expected unit-price key %q to win", key)
 		}
 	}
 }
@@ -77,18 +81,18 @@ func TestRankByUnitComparesFractionalAmountsExactly(t *testing.T) {
 	if got := ids(sorted); !reflect.DeepEqual(got, []string{"lower", "higher"}) {
 		t.Fatalf("rankByUnit order = %v, want lower unit price first", got)
 	}
-	if !winners["lower"] || winners["higher"] {
+	if !winners[unitWinnerKey("/kg", big.NewRat(131, 1000))] || winners[unitWinnerKey("/kg", big.NewRat(67, 500))] {
 		t.Fatalf("rankByUnit winners = %v, want only lower", winners)
 	}
 }
 
 func TestPrintProductLinesMarksWinnersAndIndentation(t *testing.T) {
 	products := []client.Product{
-		{RetailerProductID: "winner", Name: "A", Available: true, UnitPrice: client.UnitPrice{Unit: "fop.price.per.kg"}},
+		{RetailerProductID: "winner", Name: "A", Available: true, UnitPrice: client.UnitPrice{Price: client.Money{Amount: "1.00"}, Unit: "fop.price.per.kg"}},
 		{RetailerProductID: "other", Name: "B"},
 	}
 	out, err := capture(t, func() error {
-		return printProductLines(products, map[string]bool{"winner": true}, true)
+		return printProductLines(products, map[string]bool{unitWinnerKey("/kg", big.NewRat(1, 1)): true}, true)
 	})
 	if err != nil || !strings.Contains(out, "  ★") || !strings.Contains(out, "    ") || !strings.Contains(out, "millor /kg") {
 		t.Fatalf("cheapest product output = %q, err %v", out, err)
@@ -103,12 +107,16 @@ func TestPrintProductLinesMarksWinnersAndIndentation(t *testing.T) {
 
 func TestPrintProductLinesDoesNotMarkSponsoredDuplicateAsWinner(t *testing.T) {
 	products := []client.Product{
-		{RetailerProductID: "same", Name: "Patrocinat", Available: true, ExternalAdvertID: "ad"},
-		{RetailerProductID: "same", Name: "Orgànic", Available: true},
-		{RetailerProductID: "out", Name: "No disponible", Available: false},
+		{RetailerProductID: "same", Name: "Patrocinat", Available: true, ExternalAdvertID: "ad", UnitPrice: client.UnitPrice{Price: client.Money{Amount: "1.00"}, Unit: "fop.price.per.kg"}},
+		{RetailerProductID: "same", Name: "Orgànic", Available: true, UnitPrice: client.UnitPrice{Price: client.Money{Amount: "2.00"}, Unit: "fop.price.per.kg"}},
+		{RetailerProductID: "out", Name: "No disponible", Available: false, UnitPrice: client.UnitPrice{Price: client.Money{Amount: "0.10"}, Unit: "fop.price.per.kg"}},
 	}
 	out, err := capture(t, func() error {
-		return printProductLines(products, map[string]bool{"same": true, "out": true}, true)
+		return printProductLines(products, map[string]bool{
+			unitWinnerKey("/kg", big.NewRat(1, 1)):  true,
+			unitWinnerKey("/kg", big.NewRat(1, 10)): true,
+			unitWinnerKey("/kg", big.NewRat(2, 1)):  true,
+		}, true)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -137,10 +145,10 @@ func TestRankByUnitSkipsSponsored(t *testing.T) {
 		{RetailerProductID: "organic", Available: true, UnitPrice: perKg("2.00")},                   // cheapest organic
 	}
 	_, winners := rankByUnit(prods)
-	if winners["ad"] {
+	if winners[unitWinnerKey("/kg", big.NewRat(1, 1))] {
 		t.Error("sponsored product must not be crowned cheapest")
 	}
-	if !winners["organic"] {
+	if !winners[unitWinnerKey("/kg", big.NewRat(2, 1))] {
 		t.Error("cheapest organic product should win")
 	}
 }
@@ -154,8 +162,27 @@ func TestRankByUnitSkipsUnavailableProducts(t *testing.T) {
 		{RetailerProductID: "available", Available: true, UnitPrice: perKg("2.00")},
 	}
 	sorted, winners := rankByUnit(prods)
-	if sorted[0].RetailerProductID != "available" || !winners["available"] || winners["unavailable"] {
+	if sorted[0].RetailerProductID != "available" || !winners[unitWinnerKey("/kg", big.NewRat(2, 1))] || winners[unitWinnerKey("/kg", big.NewRat(1, 10))] {
 		t.Fatalf("rankByUnit = %v, winners %v; want available product first and as sole winner", ids(sorted), winners)
+	}
+}
+
+func TestRankByUnitWinnerDoesNotCollideOnDuplicateRetailerIDs(t *testing.T) {
+	perKg := func(amount string) client.UnitPrice {
+		return client.UnitPrice{Price: client.Money{Amount: amount}, Unit: "fop.price.per.kg", UnitName: "PER_1KG"}
+	}
+	products := []client.Product{
+		{RetailerProductID: "same", Name: "Cheap", Available: true, UnitPrice: perKg("1.00")},
+		{RetailerProductID: "same", Name: "Expensive", Available: true, UnitPrice: perKg("2.00")},
+		{RetailerProductID: "", Name: "Empty ID expensive", Available: true, UnitPrice: perKg("3.00")},
+	}
+	sorted, winners := rankByUnit(products)
+	out, err := capture(t, func() error { return printProductLines(sorted, winners, true) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(out, "★") != 1 || !strings.Contains(out, "★ [same] Cheap") || strings.Contains(out, "★ [same] Expensive") || strings.Contains(out, "★ [] Empty ID expensive") {
+		t.Fatalf("winner stars collided by product ID: %q", out)
 	}
 }
 

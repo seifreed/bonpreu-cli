@@ -70,9 +70,11 @@ func cmdSearch(args []string) error {
 func printProductLines(prods []client.Product, winners map[string]bool, cheapest bool) error {
 	var output strings.Builder
 	for _, p := range prods {
-		if winners[p.RetailerProductID] && p.Available && !p.Sponsored() {
-			fmt.Fprintln(&output, "  ★ "+productLine(p)+"  ← millor "+unitSuffix(p.UnitPrice))
-			continue
+		if cheapest && p.Available && !p.Sponsored() {
+			if unit, amount, ok := unitPriceAmount(p); ok && winners[unitWinnerKey(unit, amount)] {
+				fmt.Fprintln(&output, "  ★ "+productLine(p)+"  ← millor "+unit)
+				continue
+			}
 		}
 		indent := "  "
 		if cheapest {
@@ -86,26 +88,14 @@ func printProductLines(prods []client.Product, winners map[string]bool, cheapest
 // rankByUnit ranks search results by real value: products with a parseable unit
 // price are grouped by unit in first-seen order, then sorted cheapest-first within
 // each group; non-comparable products keep their original order at the end.
-// winners holds each unit group's cheapest (by RetailerProductID; ties all win).
+// winners holds the cheapest exact unit-price key in each unit group; ties all win.
 // Sponsored and unavailable placements never win — the ★ "millor preu" badge marks
 // the cheapest available organic item, mirroring how batch skips unusable hits.
 func rankByUnit(prods []client.Product) (sorted []client.Product, winners map[string]bool) {
-	unitAmount := func(p client.Product) (*big.Rat, bool) {
-		if unitSuffix(p.UnitPrice) == "" {
-			return nil, false
-		}
-		if _, err := priceCents(p.UnitPrice.Price.Amount); err != nil {
-			return nil, false
-		}
-		amount, err := ratFromDecimal(strings.TrimSpace(p.UnitPrice.Price.Amount))
-		return amount, err == nil
-	}
-
 	org := organic(availableProducts(prods)) // only available, non-sponsored products can win
 	minAmounts := map[string]*big.Rat{}
 	for _, p := range org {
-		if amount, ok := unitAmount(p); ok {
-			suf := unitSuffix(p.UnitPrice)
+		if suf, amount, ok := unitPriceAmount(p); ok {
 			if m, seen := minAmounts[suf]; !seen || amount.Cmp(m) < 0 {
 				minAmounts[suf] = amount
 			}
@@ -113,18 +103,18 @@ func rankByUnit(prods []client.Product) (sorted []client.Product, winners map[st
 	}
 	unitOrder := make(map[string]int)
 	for _, p := range prods {
-		if _, ok := unitAmount(p); !ok {
+		suf, _, ok := unitPriceAmount(p)
+		if !ok {
 			continue
 		}
-		suf := unitSuffix(p.UnitPrice)
 		if _, seen := unitOrder[suf]; !seen {
 			unitOrder[suf] = len(unitOrder)
 		}
 	}
 	winners = map[string]bool{}
 	for _, p := range org {
-		if amount, ok := unitAmount(p); ok && amount.Cmp(minAmounts[unitSuffix(p.UnitPrice)]) == 0 {
-			winners[p.RetailerProductID] = true
+		if unit, amount, ok := unitPriceAmount(p); ok && amount.Cmp(minAmounts[unit]) == 0 {
+			winners[unitWinnerKey(unit, amount)] = true
 		}
 	}
 
@@ -133,21 +123,39 @@ func rankByUnit(prods []client.Product) (sorted []client.Product, winners map[st
 		if sorted[i].Available != sorted[j].Available {
 			return sorted[i].Available
 		}
-		ci, oki := unitAmount(sorted[i])
-		cj, okj := unitAmount(sorted[j])
+		suffixI, ci, oki := unitPriceAmount(sorted[i])
+		suffixJ, cj, okj := unitPriceAmount(sorted[j])
 		if oki != okj {
 			return oki // comparable products sort ahead of non-comparable
 		}
 		if !oki {
 			return false // both non-comparable: keep original order
 		}
-		suffixI, suffixJ := unitSuffix(sorted[i].UnitPrice), unitSuffix(sorted[j].UnitPrice)
 		if suffixI != suffixJ {
 			return unitOrder[suffixI] < unitOrder[suffixJ]
 		}
 		return ci.Cmp(cj) < 0
 	})
 	return sorted, winners
+}
+
+func unitPriceAmount(p client.Product) (string, *big.Rat, bool) {
+	unit := unitSuffix(p.UnitPrice)
+	if unit == "" {
+		return "", nil, false
+	}
+	if _, err := priceCents(p.UnitPrice.Price.Amount); err != nil {
+		return "", nil, false
+	}
+	amount, err := ratFromDecimal(strings.TrimSpace(p.UnitPrice.Price.Amount))
+	if err != nil {
+		return "", nil, false
+	}
+	return unit, amount, true
+}
+
+func unitWinnerKey(unit string, amount *big.Rat) string {
+	return unit + "\x00" + amount.RatString()
 }
 
 func filterFresh(in []client.Product, fresh bool) []client.Product {
