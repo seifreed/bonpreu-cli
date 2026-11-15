@@ -27,8 +27,8 @@ type brandCount struct {
 // menu for picking favourites for the `[brands]` config. By default it serves the
 // snapshot shipped with the binary (internal/branddata, instant, no network).
 // `--update` re-crawls the live catalogue and prints the fresh JSON to stdout —
-// redirect it back into internal/branddata/brands.json and rebuild to refresh the
-// shipped copy. Output: table (default), `--json`/`--toon`, or `--csv`.
+// write it to a temporary file before replacing internal/branddata/brands.json,
+// then rebuild to refresh the shipped copy. Output: table (default), `--json`/`--toon`, or `--csv`.
 func cmdBrands(args []string) error {
 	fs, cf := newCommonFlags("brands")
 	update := fs.Bool("update", false, "re-crawl the live catalogue and print fresh JSON (else use the shipped snapshot)")

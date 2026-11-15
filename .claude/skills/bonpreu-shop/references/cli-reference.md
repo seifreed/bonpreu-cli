@@ -14,7 +14,7 @@ when an agent parses the output).
 | `bonpreu total -f <file\|->` | Deterministic basket total from `<id> [qty]` lines, summed in integer cents. |
 | `bonpreu product <id>` | Detail: price, brand, format, offers, and ingredients/nutrition text when present. |
 | `bonpreu categories` | Category tree (`--depth N`). `--id <retailerCategoryId>` lists that category's products (`--limit N`; `--cheapest` ranks them by unit price and marks the best per unit). |
-| `bonpreu brands` | List product brands + counts from the **shipped snapshot** (instant, no network; `--csv`/`--json`). The menu for building `[brands]` favourites. `--update` re-crawls live and prints fresh JSON (redirect into `internal/branddata/brands.json` + rebuild to refresh). |
+| `bonpreu brands` | List product brands + counts from the **shipped snapshot** (instant, no network; `--csv`/`--json`). The menu for building `[brands]` favourites. `--update` re-crawls live and prints fresh JSON; write it to a temporary file before replacing `internal/branddata/brands.json`, then rebuild to refresh. |
 
 ### Product / search line shape (`--json`)
 
