@@ -168,9 +168,10 @@ func cmdBatch(args []string) error {
 		Product    *client.Product `json:"product"`
 		BrandMatch string          `json:"brandMatch,omitempty"` // preferred | override | none | off
 		Considered []string        `json:"consideredBrands,omitempty"`
-		Offer      string          `json:"offer,omitempty"`      // multibuy | price
-		OfferLabel string          `json:"offerLabel,omitempty"` // the promo text (e.g. "2a unitat 50%")
-		OfferMode  string          `json:"offerMode,omitempty"`  // resolved alert | ignore | accept policy
+		MissPolicy string          `json:"brandMissPolicy,omitempty"` // ask | cheapest, only when an explicit brand is unavailable
+		Offer      string          `json:"offer,omitempty"`           // multibuy | price
+		OfferLabel string          `json:"offerLabel,omitempty"`      // the promo text (e.g. "2a unitat 50%")
+		OfferMode  string          `json:"offerMode,omitempty"`       // resolved alert | ignore | accept policy
 		Error      string          `json:"error,omitempty"`
 	}
 	out := make([]hit, 0, len(terms))
@@ -190,7 +191,14 @@ func cmdBatch(args []string) error {
 			continue
 		}
 		p, match, considered := resolveBrandHit(prods, t, cfg.Brands, override, *noBrands)
-		h := hit{Term: t, Product: &p, BrandMatch: match, Considered: considered, OfferMode: offersMode}
+		missPolicy := ""
+		if match == "none" {
+			missPolicy = cfg.Brands.OnMissing
+			if missPolicy != "cheapest" {
+				missPolicy = "ask"
+			}
+		}
+		h := hit{Term: t, Product: &p, BrandMatch: match, Considered: considered, MissPolicy: missPolicy, OfferMode: offersMode}
 		if offersMode != "ignore" {
 			h.Offer, h.OfferLabel = classifyOffer(p.Promotions)
 		}

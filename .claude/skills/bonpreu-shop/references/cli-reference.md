@@ -40,11 +40,12 @@ when an agent parses the output).
 ```json
 { "term": "maionesa", "product": { … },
   "brandMatch": "preferred",          // preferred (global) | override (per-term/--brand) | none | off
-  "consideredBrands": ["Hellmann's"] }
+  "consideredBrands": ["Hellmann's"],
+  "brandMissPolicy": "ask" }          // ask | cheapest, only when brandMatch = none
 ```
 
-`none` = an explicit override/`--brand` brand wasn't stocked → **ask the user before substituting**
-(see SKILL "Brand preferences"). `off`/`preferred`/`override` need no prompt.
+`none` = an explicit override/`--brand` brand wasn't stocked; `brandMissPolicy` carries the effective
+`[brands].on_missing` (`ask` by default, or `cheapest`). `off`/`preferred`/`override` need no prompt.
 
 Hits carry `offerMode` with the resolved `[offers] mode` (`alert` default | `ignore` | `accept`) or
 `--offers`. When not ignored, `offer` + `offerLabel` classify the chosen product's promotion as

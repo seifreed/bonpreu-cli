@@ -219,10 +219,11 @@ just read the result and handle the one case that needs a human:
 - Each `batch --json` hit carries `brandMatch`: `preferred`/`override` (got a wanted brand) or `off`
   (no preference applied) → nothing to do. **`none`** means an *explicit* per-term override (or
   `--brand`) brand wasn't stocked.
-- On `none`, **ask before substituting** (this is the wife's point): show the cheapest/top hit you'd
-  otherwise use and offer alternatives, via **AskUserQuestion** (e.g. "Finish no está — ¿la más barata
-  (Bonpreu 2,10€), otra marca, o lo salto?"). Only add to the cart after the user picks. Respect
-  `on_missing = "cheapest"` if set (auto-fallback, no prompt) — but in an interactive shop, default to asking.
+- On `none`, follow `brandMissPolicy`: when it is `ask` or absent, show the cheapest/top hit and
+  alternatives via **AskUserQuestion** (e.g. "Finish no está — ¿la más barata (Bonpreu 2,10€), otra
+  marca, o lo salto?"). When it is `cheapest`, use the cheapest fallback without that extra prompt.
+  In both cases, include the resolved product in the Gate 1 plan and wait for the user's overall OK
+  before adding it to the cart. Always respect the spending cap.
 - A global-favourite simply not making a product (Hellmann's doesn't make milk) is **not** a `none` and
   needs no prompt — it's `off`, pick normally.
 - No `[brands]` config → behave exactly as before: cheapest/top organic hit.

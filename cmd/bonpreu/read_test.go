@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -235,6 +236,35 @@ func TestBatchWarnsForMissingBrandAndMultibuy(t *testing.T) {
 	out, err := capture(t, func() error { return cmdBatch([]string{"--brand", "Preferred", "x"}) })
 	if err != nil || !strings.Contains(out, "marca preferida no disponible") || !strings.Contains(out, "oferta: aprofitable per quantitat") {
 		t.Fatalf("batch diagnostic output = %q, err %v", out, err)
+	}
+}
+
+func TestBatchReportsMissingBrandPolicy(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","brand":"Other","price":{"amount":"1.00"}}]}]}`))
+	}))
+	defer srv.Close()
+	for _, tc := range []struct {
+		name       string
+		config     string
+		wantPolicy string
+	}{
+		{name: "default asks", wantPolicy: "ask"},
+		{name: "configured fallback", config: "[brands]\non_missing = \"cheapest\"\n", wantPolicy: "cheapest"},
+		{name: "invalid policy defaults to ask", config: "[brands]\non_missing = \"unknown\"\n", wantPolicy: "ask"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := useServer(t, srv, false)
+			if tc.config != "" {
+				if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(tc.config), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			out, err := capture(t, func() error { return cmdBatch([]string{"--json", "--brand", "Preferred", "x"}) })
+			if err != nil || !strings.Contains(out, `"brandMissPolicy": "`+tc.wantPolicy+`"`) {
+				t.Fatalf("batch missing-brand policy output = %q, err %v", out, err)
+			}
+		})
 	}
 }
 
