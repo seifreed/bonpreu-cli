@@ -58,10 +58,11 @@ func cmdBrands(args []string) error {
 	if done, err := emitStructured(cf, ranked); done {
 		return err
 	}
+	var output strings.Builder
 	for _, b := range ranked {
-		fmt.Printf("%5d  %s\n", b.Count, terminalText(b.Brand))
+		fmt.Fprintf(&output, "%5d  %s\n", b.Count, terminalText(b.Brand))
 	}
-	return nil
+	return writeStdout("%s", output.String())
 }
 
 // writeBrandsCSV emits the tally as RFC 4180 CSV. Uses encoding/csv, not fmt %q:

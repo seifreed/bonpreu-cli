@@ -56,28 +56,28 @@ func cmdSearch(args []string) error {
 		return err
 	}
 	if len(prods) == 0 {
-		fmt.Println("(sense resultats)")
-		return nil
+		return writeStdoutln("(sense resultats)")
 	}
-	printProductLines(prods, winners, *cheapest)
-	return nil
+	return printProductLines(prods, winners, *cheapest)
 }
 
 // printProductLines renders one product per line. With cheapest set, each unit
 // group's winner (per winners) gets a ★ and a "← millor /kg" tag, and the rest are
 // indented to align under it.
-func printProductLines(prods []client.Product, winners map[string]bool, cheapest bool) {
+func printProductLines(prods []client.Product, winners map[string]bool, cheapest bool) error {
+	var output strings.Builder
 	for _, p := range prods {
 		if winners[p.RetailerProductID] {
-			fmt.Println("  ★ " + productLine(p) + "  ← millor " + unitSuffix(p.UnitPrice))
+			fmt.Fprintln(&output, "  ★ "+productLine(p)+"  ← millor "+unitSuffix(p.UnitPrice))
 			continue
 		}
 		indent := "  "
 		if cheapest {
 			indent = "    " // align under the ★ winners
 		}
-		fmt.Println(indent + productLine(p))
+		fmt.Fprintln(&output, indent+productLine(p))
 	}
+	return writeStdout("%s", output.String())
 }
 
 // rankByUnit ranks search results by real value: products with a comparable unit
@@ -219,6 +219,7 @@ func cmdBatch(args []string) error {
 		return emitErr
 	}
 	if !structured {
+		var output strings.Builder
 		w := 0
 		for _, h := range out {
 			if len(h.Term) > w {
@@ -228,10 +229,10 @@ func cmdBatch(args []string) error {
 		for _, h := range out {
 			if h.Product == nil {
 				if h.Error != "" {
-					fmt.Printf("• %-*s → ERROR: %s\n", w, terminalText(h.Term), terminalText(h.Error))
+					fmt.Fprintf(&output, "• %-*s → ERROR: %s\n", w, terminalText(h.Term), terminalText(h.Error))
 					continue
 				}
-				fmt.Printf("• %-*s → (sense resultats)\n", w, terminalText(h.Term))
+				fmt.Fprintf(&output, "• %-*s → (sense resultats)\n", w, terminalText(h.Term))
 				continue
 			}
 			line := productLine(*h.Product)
@@ -241,7 +242,12 @@ func cmdBatch(args []string) error {
 			if h.Offer == "multibuy" {
 				line += "  💡 oferta: aprofitable per quantitat"
 			}
-			fmt.Printf("• %-*s → %s\n", w, terminalText(h.Term), line)
+			fmt.Fprintf(&output, "• %-*s → %s\n", w, terminalText(h.Term), line)
+		}
+		if output.Len() > 0 {
+			if err := writeStdout("%s", output.String()); err != nil {
+				return err
+			}
 		}
 	}
 	if len(searchErrors) > 0 {
@@ -373,14 +379,18 @@ func cmdTotal(args []string) error {
 		}
 		return nil
 	}
+	var output strings.Builder
 	for _, r := range results {
 		if r.Error != "" {
-			fmt.Printf("  [%s] %s  ERROR: %s\n", terminalText(r.ID), terminalText(firstNonEmpty(r.Name, "?")), terminalText(r.Error))
+			fmt.Fprintf(&output, "  [%s] %s  ERROR: %s\n", terminalText(r.ID), terminalText(firstNonEmpty(r.Name, "?")), terminalText(r.Error))
 			continue
 		}
-		fmt.Printf("  [%s] %s — %s × %s€ = %s€\n", terminalText(r.ID), terminalText(r.Name), fmtQty(r.Qty), terminalText(r.Price), terminalText(r.Subtotal))
+		fmt.Fprintf(&output, "  [%s] %s — %s × %s€ = %s€\n", terminalText(r.ID), terminalText(r.Name), fmtQty(r.Qty), terminalText(r.Price), terminalText(r.Subtotal))
 	}
-	fmt.Printf("  total: %s€  (%s)\n", centsStr(totalCents), plural(len(lines), "línia", "línies"))
+	fmt.Fprintf(&output, "  total: %s€  (%s)\n", centsStr(totalCents), plural(len(lines), "línia", "línies"))
+	if err := writeStdout("%s", output.String()); err != nil {
+		return err
+	}
 	if failed > 0 {
 		return fmt.Errorf("%d of %d lines could not be priced (excluded from the total) — check the ids exist", failed, len(lines))
 	}
@@ -403,33 +413,34 @@ func cmdProduct(args []string) error {
 	if done, err := emitStructured(cf, pd); done {
 		return err
 	}
-	fmt.Printf("[%s] %s\n", terminalText(pd.RetailerProductID), terminalText(pd.Name))
+	var output strings.Builder
+	fmt.Fprintf(&output, "[%s] %s\n", terminalText(pd.RetailerProductID), terminalText(pd.Name))
 	if pd.Brand != "" {
-		fmt.Printf("  marca: %s\n", terminalText(pd.Brand))
+		fmt.Fprintf(&output, "  marca: %s\n", terminalText(pd.Brand))
 	}
-	fmt.Printf("  preu: %s", money(pd.Price))
+	fmt.Fprintf(&output, "  preu: %s", money(pd.Price))
 	if pd.UnitPrice.Price.Amount != "" {
-		fmt.Printf("  (%s%s)", money(pd.UnitPrice.Price), unitSuffix(pd.UnitPrice))
+		fmt.Fprintf(&output, "  (%s%s)", money(pd.UnitPrice.Price), unitSuffix(pd.UnitPrice))
 	}
-	fmt.Println()
+	fmt.Fprintln(&output)
 	if pd.PackSizeDescription != "" {
-		fmt.Printf("  format: %s\n", terminalText(pd.PackSizeDescription))
+		fmt.Fprintf(&output, "  format: %s\n", terminalText(pd.PackSizeDescription))
 	}
 	for _, pr := range pd.Promotions {
 		if pr.Description != "" {
-			fmt.Printf("  oferta: %s\n", terminalText(pr.Description))
+			fmt.Fprintf(&output, "  oferta: %s\n", terminalText(pr.Description))
 		}
 	}
-	fmt.Printf("  url: %s/products/%s\n", terminalText(cl.BaseURL), terminalText(pd.RetailerProductID))
+	fmt.Fprintf(&output, "  url: %s/products/%s\n", terminalText(cl.BaseURL), terminalText(pd.RetailerProductID))
 	for _, d := range pd.Details {
-		fmt.Printf("  %s:\n", terminalText(d.Title))
+		fmt.Fprintf(&output, "  %s:\n", terminalText(d.Title))
 		for _, ln := range strings.Split(d.Content, "\n") {
 			if s := strings.TrimSpace(ln); s != "" {
-				fmt.Printf("    %s\n", terminalText(s))
+				fmt.Fprintf(&output, "    %s\n", terminalText(s))
 			}
 		}
 	}
-	return nil
+	return writeStdout("%s", output.String())
 }
 
 // cmdCategories: the category tree, or one category's products with --id.
@@ -458,8 +469,7 @@ func cmdCategories(args []string) error {
 		if done, err := emitStructured(cf, prods); done {
 			return err
 		}
-		printProductLines(prods, winners, *cheapest)
-		return nil
+		return printProductLines(prods, winners, *cheapest)
 	}
 
 	cats, err := cl.Categories(*depth)
@@ -469,14 +479,19 @@ func cmdCategories(args []string) error {
 	if done, err := emitStructured(cf, cats); done {
 		return err
 	}
-	printCats(cats, 0)
-	return nil
+	return printCats(cats, 0)
 }
 
-func printCats(cats []client.Category, indent int) {
+func printCats(cats []client.Category, indent int) error {
+	var output strings.Builder
+	printCatsTo(&output, cats, indent)
+	return writeStdout("%s", output.String())
+}
+
+func printCatsTo(output *strings.Builder, cats []client.Category, indent int) {
 	pad := strings.Repeat("  ", indent)
 	for _, c := range cats {
-		fmt.Printf("%s%s  %s\n", pad, terminalText(c.RetailerCategoryID), terminalText(c.Name))
-		printCats(c.ChildCategories, indent+1)
+		fmt.Fprintf(output, "%s%s  %s\n", pad, terminalText(c.RetailerCategoryID), terminalText(c.Name))
+		printCatsTo(output, c.ChildCategories, indent+1)
 	}
 }

@@ -112,6 +112,23 @@ func TestSaveAndVerifyReturnsSessionWriteError(t *testing.T) {
 	}
 }
 
+func TestSaveAndVerifySurfacesOutputFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/order/v6/orders") {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+	if err := withFailingStdout(t, func() error {
+		return saveAndVerify(&common{operation: "login"}, client.Session{Cookie: "global_sid=s; aws-waf-token=t"})
+	}); err == nil {
+		t.Fatal("login should report a failed success message write")
+	}
+}
+
 func TestCmdLoginSelectsBrowserSource(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/order/v6/orders") {

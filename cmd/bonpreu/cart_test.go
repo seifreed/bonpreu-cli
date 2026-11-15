@@ -90,6 +90,19 @@ func TestCartAddDoesNotCheckoutOrPlaceOrder(t *testing.T) {
 	}
 }
 
+func TestCartAddSurfacesOutputFailureAfterCartWrite(t *testing.T) {
+	srv := apiServer(t)
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	err := withFailingStdout(t, func() error {
+		return cmdCart([]string{"add", "23597", "1"})
+	})
+	if err == nil {
+		t.Fatal("cart add should report that its success output could not be written")
+	}
+}
+
 func TestCartAddDoesNotWriteWhenLimitCannotBeEnforced(t *testing.T) {
 	var cartWrite bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

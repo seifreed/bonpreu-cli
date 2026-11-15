@@ -55,15 +55,13 @@ func TestPrintProductLinesMarksWinnersAndIndentation(t *testing.T) {
 		{RetailerProductID: "other", Name: "B"},
 	}
 	out, err := capture(t, func() error {
-		printProductLines(products, map[string]bool{"winner": true}, true)
-		return nil
+		return printProductLines(products, map[string]bool{"winner": true}, true)
 	})
 	if err != nil || !strings.Contains(out, "  ★") || !strings.Contains(out, "    ") || !strings.Contains(out, "millor /kg") {
 		t.Fatalf("cheapest product output = %q, err %v", out, err)
 	}
 	out, err = capture(t, func() error {
-		printProductLines(products[1:], nil, false)
-		return nil
+		return printProductLines(products[1:], nil, false)
 	})
 	if err != nil || !strings.HasPrefix(out, "  ") || strings.HasPrefix(out, "    ") {
 		t.Fatalf("ordinary product output = %q, err %v", out, err)

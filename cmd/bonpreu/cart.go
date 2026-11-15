@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"strings"
 
 	"github.com/seifreed/bonpreu-cli/internal/client"
 )
@@ -63,17 +64,18 @@ func cartGet(args []string) error {
 	if done, err := emitStructured(cf, cart.Raw); done {
 		return err
 	}
+	var output strings.Builder
 	if len(cart.Lines) == 0 {
-		fmt.Println("(cistella buida)")
-		return nil
+		fmt.Fprintln(&output, "(cistella buida)")
+	} else {
+		for _, l := range cart.Lines {
+			fmt.Fprintf(&output, "  %s — %s × %s€ = %s€\n", terminalText(l.ProductID), fmtQty(l.Quantity), terminalText(l.FinalPrice.Amount), terminalText(l.TotalPrices.FinalPrice.Amount))
+		}
+		if cart.Total.Amount != "" {
+			fmt.Fprintf(&output, "  total: %s€\n", terminalText(cart.Total.Amount))
+		}
 	}
-	for _, l := range cart.Lines {
-		fmt.Printf("  %s — %s × %s€ = %s€\n", terminalText(l.ProductID), fmtQty(l.Quantity), terminalText(l.FinalPrice.Amount), terminalText(l.TotalPrices.FinalPrice.Amount))
-	}
-	if cart.Total.Amount != "" {
-		fmt.Printf("  total: %s€\n", terminalText(cart.Total.Amount))
-	}
-	return nil
+	return writeStdout("%s", output.String())
 }
 
 // cartWrite implements `cart add <id> <qty>` (delta +qty) and `cart set <id> <qty>`
@@ -152,8 +154,7 @@ func cartWrite(args []string, set bool) error {
 	if done, err := emitStructured(cf, cart.Raw); done {
 		return err
 	}
-	fmt.Printf("ok — %s [%s] %s (Δ%+g) — %s\n", verb, terminalText(retailerID), fmtQty(qty), delta, terminalText(pd.Name))
-	return nil
+	return writeStdout("ok — %s [%s] %s (Δ%+g) — %s\n", verb, terminalText(retailerID), fmtQty(qty), delta, terminalText(pd.Name))
 }
 
 func cartClear(args []string) error {
@@ -182,8 +183,7 @@ func cartClear(args []string) error {
 		return err
 	}
 	stderrInfo("cart.clear.completed", "cart lines cleared", "operation", cf.operation, "line_count", len(items))
-	fmt.Printf("ok — removed %d line(s)\n", len(items))
-	return nil
+	return writeStdout("ok — removed %d line(s)\n", len(items))
 }
 
 // currentQty returns the summed quantity of a product already in the active cart

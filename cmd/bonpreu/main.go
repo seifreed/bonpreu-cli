@@ -85,7 +85,9 @@ func run(args []string) int {
 	case "checkout":
 		err = cmdCheckout(args[1:])
 	case "version", "--version", "-v":
-		fmt.Println(versionString())
+		if err := writeStdoutln(versionString()); err != nil {
+			return 1
+		}
 		return 0
 	case "help", "-h", "--help":
 		usage()

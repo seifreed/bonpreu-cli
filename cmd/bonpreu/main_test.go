@@ -178,6 +178,17 @@ func TestRunDispatch(t *testing.T) {
 	}
 }
 
+func TestRunVersionOutputFailure(t *testing.T) {
+	if err := withFailingStdout(t, func() error {
+		if run([]string{"version"}) != 1 {
+			return io.ErrUnexpectedEOF
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("run(version) should fail when stdout cannot be written: %v", err)
+	}
+}
+
 func TestRunUnknownCommandLogsWithoutInput(t *testing.T) {
 	t.Setenv("BONPREU_LOG_FORMAT", "json")
 	const input = "unknown\nprivate-token"

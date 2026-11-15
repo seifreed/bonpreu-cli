@@ -237,6 +237,16 @@ func emitTOON(v any) error {
 	return err
 }
 
+func writeStdout(format string, args ...any) error {
+	_, err := fmt.Fprintf(os.Stdout, format, args...)
+	return err
+}
+
+func writeStdoutln(args ...any) error {
+	_, err := fmt.Fprintln(os.Stdout, args...)
+	return err
+}
+
 // emitRawStructured emits a raw API response as TOON (--toon) or pretty JSON
 // (the default) for endpoints that have no human-readable view of their own.
 func emitRawStructured(cf *common, raw json.RawMessage) error {

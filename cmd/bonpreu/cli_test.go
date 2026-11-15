@@ -157,6 +157,30 @@ func TestEmitWriteErrorsSurface(t *testing.T) {
 	}
 }
 
+func TestHumanOutputWriteErrorsSurface(t *testing.T) {
+	srv := apiServer(t)
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	handlers := map[string]func() error{
+		"search":     func() error { return cmdSearch([]string{"llet"}) },
+		"batch":      func() error { return cmdBatch([]string{"llet"}) },
+		"total":      func() error { return cmdTotal([]string{"23597", "2"}) },
+		"product":    func() error { return cmdProduct([]string{"23597"}) },
+		"categories": func() error { return cmdCategories(nil) },
+		"category":   func() error { return cmdCategories([]string{"--id", "0301"}) },
+		"cart get":   func() error { return cmdCart([]string{"get"}) },
+		"checkout":   func() error { return cmdCheckout([]string{"status"}) },
+		"brands":     func() error { return cmdBrands(nil) },
+		"whoami":     func() error { return cmdWhoami(nil) },
+	}
+	for name, h := range handlers {
+		if err := withFailingStdout(t, h); err == nil {
+			t.Errorf("%s: a human-readable stdout write failure should surface as an error", name)
+		}
+	}
+}
+
 func TestNewClientConfigDefaults(t *testing.T) {
 	dir := privateTestConfigDir(t)
 	t.Setenv("BONPREU_BASE_URL", "")

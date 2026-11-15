@@ -50,8 +50,7 @@ func checkoutBrowser(args []string) error {
 	if done, err := emitStructured(cf, map[string]any{"browser_closed": true, "order_placed": nil}); done {
 		return err
 	}
-	fmt.Println("navegador cerrado; el CLI no ha confirmado si se realizó la compra")
-	return nil
+	return writeStdoutln("navegador cerrado; el CLI no ha confirmado si se realizó la compra")
 }
 
 func checkoutReserve(args []string) error {
@@ -80,8 +79,7 @@ func checkoutReserve(args []string) error {
 	if done, err := emitStructured(cf, result); done {
 		return err
 	}
-	fmt.Printf("franja %s reservada para la dirección %s\n", terminalText(*slot), terminalText(*address))
-	return nil
+	return writeStdout("franja %s reservada para la dirección %s\n", terminalText(*slot), terminalText(*address))
 }
 
 // checkoutStatus reports whether the active cart can be checked out, and if not,
@@ -102,13 +100,14 @@ func checkoutStatus(args []string) error {
 	if done, err := emitStructured(cf, raw); done {
 		return err
 	}
-	fmt.Printf("total: %s€  (mínim %s€)\n", terminalText(firstNonEmpty(total.Amount, "0.00")), terminalText(firstNonEmpty(acg.MinimumCheckoutThreshold.Amount, "?")))
+	var output strings.Builder
+	fmt.Fprintf(&output, "total: %s€  (mínim %s€)\n", terminalText(firstNonEmpty(total.Amount, "0.00")), terminalText(firstNonEmpty(acg.MinimumCheckoutThreshold.Amount, "?")))
 	if acg.CanCheckout {
-		fmt.Println("es pot validar la compra ✓")
+		fmt.Fprintln(&output, "es pot validar la compra ✓")
 	} else {
-		fmt.Printf("NO es pot validar encara — manca: %s\n", terminalText(restrictionsCa(acg.CheckoutRestrictions)))
+		fmt.Fprintf(&output, "NO es pot validar encara — manca: %s\n", terminalText(restrictionsCa(acg.CheckoutRestrictions)))
 	}
-	return nil
+	return writeStdout("%s", output.String())
 }
 
 // restrictionsCa renders the API restriction codes as readable Catalan reasons.
