@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -10,7 +11,15 @@ import (
 	"github.com/seifreed/bonpreu-cli/internal/client"
 )
 
-var persistSession = client.SaveSession
+const (
+	maxHARInputBytes    int64 = 64 << 20
+	maxCookieInputBytes int64 = 64 << 10
+)
+
+var (
+	persistSession = client.SaveSession
+	openHARInput   = func(path string) (io.ReadCloser, error) { return os.Open(path) }
+)
 
 // cmdImportHar imports a browser session from a DevTools HAR export: the Cookie
 // header (login + AWS WAF clearance) and the resolved region. This is the
@@ -51,7 +60,7 @@ func cmdSetCookie(args []string) error {
 	if !*stdin || fs.NArg() != 0 {
 		return fmt.Errorf("usage: bonpreu set-cookie --stdin")
 	}
-	b, err := io.ReadAll(os.Stdin)
+	b, err := readLimited(os.Stdin, maxCookieInputBytes, "cookie input")
 	if err != nil {
 		return err
 	}
@@ -99,7 +108,26 @@ func cmdWhoami(args []string) error {
 
 func readFileOrStdin(path string) ([]byte, error) {
 	if path == "-" {
-		return io.ReadAll(os.Stdin)
+		return readLimited(os.Stdin, maxHARInputBytes, "HAR input")
 	}
-	return os.ReadFile(path)
+	f, err := openHARInput(path)
+	if err != nil {
+		return nil, err
+	}
+	b, readErr := readLimited(f, maxHARInputBytes, "HAR input")
+	if closeErr := f.Close(); closeErr != nil {
+		return nil, errors.Join(readErr, closeErr)
+	}
+	return b, readErr
+}
+
+func readLimited(r io.Reader, maxBytes int64, label string) ([]byte, error) {
+	b, err := io.ReadAll(io.LimitReader(r, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > maxBytes {
+		return nil, fmt.Errorf("%s exceeds the %d-byte limit", label, maxBytes)
+	}
+	return b, nil
 }

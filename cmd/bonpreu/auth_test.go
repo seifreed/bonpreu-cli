@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -68,6 +70,23 @@ func TestSetCookieRejectsAnonymousCookieWithoutReplacingSession(t *testing.T) {
 	got, err := client.LoadSession()
 	if err != nil || got != previous {
 		t.Fatalf("session after rejected cookie = %+v, %v; want unchanged %+v", got, err, previous)
+	}
+}
+
+func TestSetCookieRejectsOversizedInputWithoutReplacingSession(t *testing.T) {
+	privateTestConfigDir(t)
+	previous := client.Session{Cookie: "global_sid=old; aws-waf-token=old-token", RegionID: "old-region"}
+	if err := client.SaveSession(previous); err != nil {
+		t.Fatal(err)
+	}
+	withStdin(t, strings.Repeat("x", int(maxCookieInputBytes+1)), func() {
+		if err := cmdSetCookie([]string{"--stdin"}); err == nil || !strings.Contains(err.Error(), "cookie input exceeds") {
+			t.Fatalf("oversized cookie input error = %v; want size limit", err)
+		}
+	})
+	got, err := client.LoadSession()
+	if err != nil || got != previous {
+		t.Fatalf("session after oversized cookie input = %+v, %v; want unchanged %+v", got, err, previous)
 	}
 }
 
@@ -215,6 +234,31 @@ func TestReadFileOrStdin(t *testing.T) {
 			t.Fatalf("stdin read = %q, err %v", b, err)
 		}
 	})
+}
+
+type closeErrorReader struct {
+	*strings.Reader
+	err error
+}
+
+func (r closeErrorReader) Close() error { return r.err }
+
+func TestReadFileOrStdinReturnsCloseError(t *testing.T) {
+	closeErr := errors.New("close failed")
+	oldOpen := openHARInput
+	openHARInput = func(string) (io.ReadCloser, error) {
+		return closeErrorReader{Reader: strings.NewReader("har"), err: closeErr}, nil
+	}
+	t.Cleanup(func() { openHARInput = oldOpen })
+	if _, err := readFileOrStdin("session.har"); !errors.Is(err, closeErr) {
+		t.Fatalf("readFileOrStdin error = %v; want close error", err)
+	}
+}
+
+func TestReadLimitedRejectsOversizedData(t *testing.T) {
+	if b, err := readLimited(strings.NewReader("12345"), 4, "HAR input"); err == nil || len(b) != 0 || !strings.Contains(err.Error(), "HAR input exceeds") {
+		t.Fatalf("oversized read = %q, %v; want limit error", b, err)
+	}
 }
 
 func TestCmdSetCookieStdinAndEmpty(t *testing.T) {
