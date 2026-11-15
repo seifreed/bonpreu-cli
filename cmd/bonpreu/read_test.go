@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/seifreed/bonpreu-cli/internal/client"
@@ -283,6 +284,25 @@ func TestCmdProductRichDetail(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("product detail missing %q in:\n%s", want, out)
 		}
+	}
+}
+
+func TestCmdProductRejectsSurplusArgumentsBeforeNetwork(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+
+	for _, args := range [][]string{nil, {"23597", "unexpected"}} {
+		if _, err := capture(t, func() error { return cmdProduct(args) }); err == nil || !strings.Contains(err.Error(), "usage:") {
+			t.Errorf("product %v error = %v, want usage error", args, err)
+		}
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("invalid product command made %d requests, want none", got)
 	}
 }
 

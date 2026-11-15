@@ -375,7 +375,7 @@ func cmdTotal(args []string) error {
 func cmdProduct(args []string) error {
 	fs, cf := newCommonFlags("product")
 	parseFlags(fs, args)
-	if fs.NArg() < 1 {
+	if fs.NArg() != 1 {
 		return fmt.Errorf("usage: bonpreu product <id>")
 	}
 	cl, _ := newClient(cf)
