@@ -32,7 +32,7 @@ func TestRankByUnit(t *testing.T) {
 
 	sorted, winners := rankByUnit(prods)
 
-	wantOrder := []string{"l-only", "kg-low-a", "kg-low-b", "kg-mid", "no-unit"}
+	wantOrder := []string{"kg-low-a", "kg-low-b", "kg-mid", "l-only", "no-unit"}
 	for i, id := range wantOrder {
 		if sorted[i].RetailerProductID != id {
 			t.Errorf("order[%d] = %q, want %q (got %v)", i, sorted[i].RetailerProductID, id, ids(sorted))
@@ -47,6 +47,20 @@ func TestRankByUnit(t *testing.T) {
 		if !winners[id] {
 			t.Errorf("expected %q to be a per-group winner", id)
 		}
+	}
+}
+
+func TestRankByUnitDoesNotCompareDifferentUnits(t *testing.T) {
+	perKg := client.UnitPrice{Price: client.Money{Amount: "5.00"}, Unit: "fop.price.per.kg", UnitName: "PER_1KG"}
+	perL := client.UnitPrice{Price: client.Money{Amount: "0.10"}, Unit: "fop.price.per.l", UnitName: "PER_1L"}
+	prods := []client.Product{
+		{RetailerProductID: "kg", Available: true, UnitPrice: perKg},
+		{RetailerProductID: "l", Available: true, UnitPrice: perL},
+	}
+
+	sorted, _ := rankByUnit(prods)
+	if got := ids(sorted); !reflect.DeepEqual(got, []string{"kg", "l"}) {
+		t.Fatalf("rankByUnit order = %v, want unit groups to retain first-seen order", got)
 	}
 }
 

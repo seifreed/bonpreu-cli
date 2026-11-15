@@ -83,10 +83,10 @@ func printProductLines(prods []client.Product, winners map[string]bool, cheapest
 	return writeStdout("%s", output.String())
 }
 
-// rankByUnit ranks search results by real value: products with a comparable unit
-// price (parseable amount + a known €/kg | €/L | €/u suffix) are stable-sorted
-// cheapest-first ahead of the rest, which keep their original order. winners holds
-// each unit group's cheapest (by RetailerProductID; ties all win), for marking.
+// rankByUnit ranks search results by real value: products with a parseable unit
+// price are grouped by unit in first-seen order, then sorted cheapest-first within
+// each group; non-comparable products keep their original order at the end.
+// winners holds each unit group's cheapest (by RetailerProductID; ties all win).
 // Sponsored and unavailable placements never win — the ★ "millor preu" badge marks
 // the cheapest available organic item, mirroring how batch skips unusable hits.
 func rankByUnit(prods []client.Product) (sorted []client.Product, winners map[string]bool) {
@@ -111,6 +111,16 @@ func rankByUnit(prods []client.Product) (sorted []client.Product, winners map[st
 			}
 		}
 	}
+	unitOrder := make(map[string]int)
+	for _, p := range prods {
+		if _, ok := unitAmount(p); !ok {
+			continue
+		}
+		suf := unitSuffix(p.UnitPrice)
+		if _, seen := unitOrder[suf]; !seen {
+			unitOrder[suf] = len(unitOrder)
+		}
+	}
 	winners = map[string]bool{}
 	for _, p := range org {
 		if amount, ok := unitAmount(p); ok && amount.Cmp(minAmounts[unitSuffix(p.UnitPrice)]) == 0 {
@@ -130,6 +140,10 @@ func rankByUnit(prods []client.Product) (sorted []client.Product, winners map[st
 		}
 		if !oki {
 			return false // both non-comparable: keep original order
+		}
+		suffixI, suffixJ := unitSuffix(sorted[i].UnitPrice), unitSuffix(sorted[j].UnitPrice)
+		if suffixI != suffixJ {
+			return unitOrder[suffixI] < unitOrder[suffixJ]
 		}
 		return ci.Cmp(cj) < 0
 	})
