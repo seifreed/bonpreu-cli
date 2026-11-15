@@ -71,6 +71,16 @@ func TestCookiesFromSequenceExplainsMissingSession(t *testing.T) {
 	}
 }
 
+func TestCookiesFromSequenceReturnsStoreErrorsWhenNoSession(t *testing.T) {
+	_, err := cookiesFromSequence("chrome", cookieSequence(
+		cookieItem{nil, errors.New("profile decryption failed")},
+		cookieItem{browserCookie("chrome", "global_sid", "half-session"), nil},
+	))
+	if err == nil || !strings.Contains(err.Error(), "profile decryption failed") {
+		t.Fatalf("browser cookie error = %v; want underlying profile-read failure", err)
+	}
+}
+
 func TestCookiesFromBrowserUsesIsolatedProfile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

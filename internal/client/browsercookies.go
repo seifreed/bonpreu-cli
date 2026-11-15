@@ -2,7 +2,9 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"sort"
 	"strings"
 
@@ -40,8 +42,15 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 	}
 	stores := map[string]*store{}
 	var storeOrder []string
+	var storeErrors []error
 	for c, err := range cookies {
-		if err != nil || c == nil || c.Name == "" || c.Value == "" {
+		if err != nil {
+			if !errors.Is(err, fs.ErrNotExist) && !strings.Contains(strings.ToLower(err.Error()), "not implemented") {
+				storeErrors = append(storeErrors, err)
+			}
+			continue
+		}
+		if c == nil || c.Name == "" || c.Value == "" {
 			continue
 		}
 		bname := ""
@@ -79,6 +88,9 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 	where := "your browser"
 	if browser != "" {
 		where = browser
+	}
+	if len(storeErrors) > 0 {
+		return Session{}, fmt.Errorf("could not read browser cookie stores: %w", errors.Join(storeErrors...))
 	}
 	return Session{}, fmt.Errorf("no Bonpreu session found in %s — "+
 		"log in at compraonline.bonpreuesclat.cat in that browser first "+
