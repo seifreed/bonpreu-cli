@@ -738,6 +738,31 @@ func TestGetTextNon2xx(t *testing.T) {
 	}
 }
 
+func TestGetTextRetriesRateLimit(t *testing.T) {
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if r.Header.Get("Accept") != "text/html,application/xhtml+xml" {
+			t.Errorf("Accept = %q, want HTML", r.Header.Get("Accept"))
+		}
+		if hits == 1 {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = io.WriteString(w, "<html>csrf page</html>")
+	}))
+	defer srv.Close()
+
+	got, err := testClient(srv).GetText(srv.URL + "/")
+	if err != nil {
+		t.Fatalf("GetText after throttling: %v", err)
+	}
+	if got != "<html>csrf page</html>" || hits != 2 {
+		t.Fatalf("GetText = %q after %d requests; want HTML after one retry", got, hits)
+	}
+}
+
 func TestGetTextRejectsBodyOverLimit(t *testing.T) {
 	body := strings.Repeat("x", maxBodyBytes+1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

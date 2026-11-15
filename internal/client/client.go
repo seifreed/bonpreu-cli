@@ -233,9 +233,15 @@ func (c *Client) DoJSON(method, url string, body, out any) error {
 // doJSONHeaders is DoJSON with extra request headers (e.g. the X-CSRF-TOKEN and
 // ecom-request-source the cart write endpoints require).
 func (c *Client) doJSONHeaders(method, url string, body, out any, extra map[string]string) error {
+	return c.retryThrottled(method, func() error {
+		return c.doOnce(method, url, body, out, extra)
+	})
+}
+
+func (c *Client) retryThrottled(method string, request func() error) error {
 	backoff := defaultRetryBase
 	for attempt := 0; ; attempt++ {
-		err := c.doOnce(method, url, body, out, extra)
+		err := request()
 		if (method != http.MethodGet && method != http.MethodHead) || !isRateLimited(err) || attempt >= maxRetries {
 			return err
 		}
@@ -391,12 +397,16 @@ func (c *Client) getRaw(url string) (json.RawMessage, error) {
 // GetText fetches a URL and returns the raw body (used to scrape SSR HTML for
 // product detail, which the API only serves over WAF-gated GraphQL).
 func (c *Client) GetText(url string) (string, error) {
-	req, err := c.newReq("GET", url, nil, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("accept", "text/html,application/xhtml+xml")
-	data, err := c.do(req)
+	var data []byte
+	err := c.retryThrottled(http.MethodGet, func() error {
+		req, err := c.newReq(http.MethodGet, url, nil, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("accept", "text/html,application/xhtml+xml")
+		data, err = c.do(req)
+		return err
+	})
 	if err != nil {
 		return "", err
 	}
