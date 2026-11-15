@@ -120,8 +120,9 @@ func cartWrite(args []string, set bool) error {
 		return fmt.Errorf("product %s has no cart product ID", retailerID)
 	}
 
+	var limit float64
 	if set {
-		limit, err := resolveMax(*maxEUR, maxSet)
+		limit, err = resolveMax(*maxEUR, maxSet)
 		if err != nil {
 			return err
 		}
@@ -142,7 +143,7 @@ func cartWrite(args []string, set bool) error {
 			return nil
 		}
 	} else if delta > 0 {
-		limit, err := resolveMax(*maxEUR, maxSet)
+		limit, err = resolveMax(*maxEUR, maxSet)
 		if err != nil {
 			return err
 		}
@@ -171,6 +172,20 @@ func cartWrite(args []string, set bool) error {
 		}
 		if actual != qty {
 			return fmt.Errorf("cart set was accepted but resulting quantity is %s, not requested %s; inspect the cart before retrying", fmtQty(actual), fmtQty(qty))
+		}
+	}
+	if !set && delta > 0 && limit > 0 && limitErr == nil {
+		actual, err := currentQty(cl, pd.ProductID)
+		if err != nil {
+			return fmt.Errorf("cart add was accepted but the result could not be verified; inspect the cart before retrying: %w", err)
+		}
+		lineCents, err := resultingLineCents(pd, actual)
+		if err != nil {
+			return fmt.Errorf("cart add was accepted but the spending limit could not be checked after the write; inspect the cart before retrying: %w", err)
+		}
+		lineEUR := float64(lineCents) / 100
+		if lineEUR > limit {
+			return fmt.Errorf("cart add was accepted but the resulting line exceeds --max: %.2f€ > %.2f€; inspect the cart before retrying", lineEUR, limit)
 		}
 	}
 	if limitErr == nil {
@@ -306,16 +321,24 @@ func guardResultingLine(maxEUR float64, pd *client.ProductDetail, qty float64) e
 	if maxEUR == 0 {
 		return nil
 	}
-	cents, err := priceCents(pd.Price.Amount)
+	lineCents, err := resultingLineCents(pd, qty)
 	if err != nil {
-		return fmt.Errorf("cannot enforce spending limit for an unpriceable cart line: %w", err)
-	}
-	lineCents, err := lineCents(cents, qty)
-	if err != nil {
-		return fmt.Errorf("cannot enforce spending limit for cart line: %w", err)
+		return err
 	}
 	line := float64(lineCents) / 100
 	return checkBudget(line, maxEUR, "cart line")
+}
+
+func resultingLineCents(pd *client.ProductDetail, qty float64) (int64, error) {
+	cents, err := priceCents(pd.Price.Amount)
+	if err != nil {
+		return 0, fmt.Errorf("cannot enforce spending limit for an unpriceable cart line: %w", err)
+	}
+	lineCents, err := lineCents(cents, qty)
+	if err != nil {
+		return 0, fmt.Errorf("cannot enforce spending limit for cart line: %w", err)
+	}
+	return lineCents, nil
 }
 
 func parsePositiveQty(s string, allowZero bool) (float64, error) {

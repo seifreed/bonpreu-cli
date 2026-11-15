@@ -422,6 +422,61 @@ func TestCartSetReportsReadbackErrorAfterAcceptedWrite(t *testing.T) {
 	}
 }
 
+func TestCartAddMaxVerifiesResultAfterAcceptedWrite(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		readback500      bool
+		overflowQuantity bool
+		want             string
+	}{
+		{name: "concurrent addition exceeds limit", want: "accepted but the resulting line exceeds --max"},
+		{name: "readback fails", readback500: true, want: "accepted but the result could not be verified"},
+		{name: "result cannot be priced", overflowQuantity: true, want: "accepted but the spending limit could not be checked after the write"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var cartReads, writes atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case strings.HasPrefix(r.URL.Path, "/products/"):
+					w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+				case r.URL.Path == "/api/cart/v1/carts/active":
+					switch {
+					case cartReads.Add(1) == 1:
+						w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":1}]}`))
+					case tc.readback500:
+						w.WriteHeader(http.StatusInternalServerError)
+					case tc.overflowQuantity:
+						w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":1e300}]}`))
+					default:
+						// A concurrent writer adds lines after the preflight read.
+						w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":4}]}`))
+					}
+				case r.URL.Path == "/":
+					w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+				case strings.Contains(r.URL.Path, "/apply-quantity"):
+					writes.Add(1)
+					w.Write([]byte(`{"items":[]}`))
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+			useServer(t, srv, true)
+
+			out, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1", "--max", "5"}) })
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("cart add output %q, error = %v; want %q", out, err, tc.want)
+			}
+			if strings.Contains(out, "ok — add") {
+				t.Fatalf("cart add reported success: %q", out)
+			}
+			if got := writes.Load(); got != 1 {
+				t.Fatalf("cart add sent %d writes, want one accepted write", got)
+			}
+		})
+	}
+}
+
 func TestCartAddMaxSumsDuplicateExistingLines(t *testing.T) {
 	var writes atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
