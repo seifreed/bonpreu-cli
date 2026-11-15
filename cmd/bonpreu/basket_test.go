@@ -76,6 +76,19 @@ func TestLineCentsRejectsOverflow(t *testing.T) {
 	}
 }
 
+func TestLineAmountCentsRoundsAfterMultiplyingExactUnitPrice(t *testing.T) {
+	for _, tc := range []struct {
+		amount string
+		qty    float64
+		want   int64
+	}{{"0.334", 3, 100}, {"0.335", 3, 101}} {
+		got, err := lineAmountCents(tc.amount, tc.qty)
+		if err != nil || got != tc.want {
+			t.Errorf("lineAmountCents(%q, %v) = %d, %v; want %d", tc.amount, tc.qty, got, err, tc.want)
+		}
+	}
+}
+
 func TestCentsStr(t *testing.T) {
 	cases := map[int64]string{
 		169: "1.69", 5: "0.05", 1000: "10.00", 0: "0.00",

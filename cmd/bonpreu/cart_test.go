@@ -34,6 +34,17 @@ func TestGuardResultingLineRejectsOverflowWhenLimitSet(t *testing.T) {
 	}
 }
 
+func TestGuardResultingLineUsesExactUnitPriceBeforeRounding(t *testing.T) {
+	pd := &client.ProductDetail{}
+	pd.Price.Amount = "0.334"
+	if err := guardResultingLine(0.99, pd, 3); err == nil || !strings.Contains(err.Error(), "1.00€") {
+		t.Fatalf("exact line value should exceed 0.99€ as 1.00€, got %v", err)
+	}
+	if err := guardResultingLine(1, pd, 3); err != nil {
+		t.Fatalf("exact line value should fit 1.00€: %v", err)
+	}
+}
+
 func TestGuardResultingLineSilentWithoutLimit(t *testing.T) {
 	t.Setenv("BONPREU_MAX_EUR", "") // no limit from env
 	privateTestConfigDir(t)         // no limit from a real config.toml
@@ -466,6 +477,34 @@ func TestCartWriteLimitAppliesToResultingLine(t *testing.T) {
 				t.Fatalf("cart %s sent %d writes despite resulting line exceeding limit", tc.name, got)
 			}
 		})
+	}
+}
+
+func TestCartAddSubcentPriceDoesNotWritePastMax(t *testing.T) {
+	var writes atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/products/"):
+			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Product","price":{"amount":"0.334"}}}</html>`))
+		case r.URL.Path == "/api/cart/v1/carts/active":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		case strings.Contains(r.URL.Path, "/apply-quantity"):
+			writes.Add(1)
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	if _, err := capture(t, func() error {
+		return cmdCart([]string{"add", "23597", "3", "--max", "0.99"})
+	}); err == nil || !strings.Contains(err.Error(), "1.00€") {
+		t.Fatalf("cart add error = %v, want preflight rejection at 1.00€", err)
+	}
+	if got := writes.Load(); got != 0 {
+		t.Fatalf("cart add sent %d writes despite exceeding --max", got)
 	}
 }
 

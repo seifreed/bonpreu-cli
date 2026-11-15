@@ -379,13 +379,7 @@ func cmdTotal(args []string) error {
 			failed++
 			continue
 		}
-		cents, cerr := priceCents(pd.Price.Amount)
-		if cerr != nil {
-			results = append(results, lineResult{ID: bl.id, Name: pd.Name, Qty: bl.qty, Error: cerr.Error()})
-			failed++
-			continue
-		}
-		sub, serr := lineCents(cents, bl.qty)
+		sub, serr := lineAmountCents(pd.Price.Amount, bl.qty)
 		if serr != nil || sub > math.MaxInt64-totalCents {
 			if serr == nil {
 				serr = fmt.Errorf("basket total exceeds the supported range")

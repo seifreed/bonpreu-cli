@@ -107,9 +107,22 @@ func parseBasketLine(s string) (basketLine, error) {
 // priceCents parses a "1.69"-style euro price into integer cents, so totals sum
 // exactly with no floating-point drift across many lines.
 func priceCents(s string) (int64, error) {
+	amount, err := priceAmount(s)
+	if err != nil {
+		return 0, err
+	}
+	amount.Mul(amount, big.NewRat(100, 1))
+	cents := roundRat(amount)
+	if !cents.IsInt64() {
+		return 0, fmt.Errorf("price %q exceeds the supported range", s)
+	}
+	return cents.Int64(), nil
+}
+
+func priceAmount(s string) (*big.Rat, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return 0, fmt.Errorf("empty price")
+		return nil, fmt.Errorf("empty price")
 	}
 	v, err := strconv.ParseFloat(s, 64)
 	invalid := err == nil && (math.IsNaN(v) || math.IsInf(v, 0) || v < 0)
@@ -118,17 +131,12 @@ func priceCents(s string) (int64, error) {
 		amount, err = ratFromDecimal(s)
 	}
 	if err != nil {
-		return 0, fmt.Errorf("unparseable price %q", s)
+		return nil, fmt.Errorf("unparseable price %q", s)
 	}
 	if invalid {
-		return 0, fmt.Errorf("invalid price %q (want a finite, non-negative amount)", s)
+		return nil, fmt.Errorf("invalid price %q (want a finite, non-negative amount)", s)
 	}
-	amount.Mul(amount, big.NewRat(100, 1))
-	cents := roundRat(amount)
-	if !cents.IsInt64() {
-		return 0, fmt.Errorf("price %q exceeds the supported range", s)
-	}
-	return cents.Int64(), nil
+	return amount, nil
 }
 
 func ratFromDecimal(s string) (*big.Rat, error) {
@@ -155,11 +163,23 @@ func lineCents(unitCents int64, qty float64) (int64, error) {
 	if unitCents < 0 || qty < 0 {
 		return 0, fmt.Errorf("invalid price or quantity")
 	}
+	return lineAmountCents(centsStr(unitCents), qty)
+}
+
+func lineAmountCents(unitAmount string, qty float64) (int64, error) {
+	if qty < 0 {
+		return 0, fmt.Errorf("invalid price or quantity")
+	}
+	amount, err := priceAmount(unitAmount)
+	if err != nil {
+		return 0, err
+	}
 	quantity, err := ratFromDecimal(strconv.FormatFloat(qty, 'g', -1, 64))
 	if err != nil {
 		return 0, fmt.Errorf("invalid price or quantity: %w", err)
 	}
-	subtotal := new(big.Rat).Mul(big.NewRat(unitCents, 1), quantity)
+	subtotal := new(big.Rat).Mul(amount, quantity)
+	subtotal.Mul(subtotal, big.NewRat(100, 1))
 	cents := roundRat(subtotal)
 	if !cents.IsInt64() {
 		return 0, fmt.Errorf("line subtotal exceeds the supported range")

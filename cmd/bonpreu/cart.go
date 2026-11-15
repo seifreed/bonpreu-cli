@@ -442,11 +442,7 @@ func guardResultingLine(maxEUR float64, pd *client.ProductDetail, qty float64) e
 }
 
 func resultingLineCents(pd *client.ProductDetail, qty float64) (int64, error) {
-	cents, err := priceCents(pd.Price.Amount)
-	if err != nil {
-		return 0, fmt.Errorf("cannot enforce spending limit for an unpriceable cart line: %w", err)
-	}
-	lineCents, err := lineCents(cents, qty)
+	lineCents, err := lineAmountCents(pd.Price.Amount, qty)
 	if err != nil {
 		return 0, fmt.Errorf("cannot enforce spending limit for cart line: %w", err)
 	}
