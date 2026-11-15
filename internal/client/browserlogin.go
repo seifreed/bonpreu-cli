@@ -73,10 +73,13 @@ func LoginViaBrowser(loginURL string) (Session, error) {
 			return Session{Cookie: cookie}, nil
 		}
 		if loginNow().After(deadline) {
+			if err != nil {
+				return Session{}, fmt.Errorf("timed out waiting for login (%s) — the session cookie never appeared: %w", loginTimeout, err)
+			}
 			return Session{}, fmt.Errorf("timed out waiting for login (%s) — the session cookie never appeared", loginTimeout)
 		}
 		if err := loginSleep(ctx, loginPollEvery); err != nil {
-			return Session{}, fmt.Errorf("login aborted (Ctrl-C or browser closed) before the session appeared")
+			return Session{}, fmt.Errorf("login aborted (Ctrl-C or browser closed) before the session appeared: %w", err)
 		}
 	}
 }

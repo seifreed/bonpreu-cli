@@ -150,13 +150,30 @@ func TestLoginViaBrowserTimeoutAndCancellation(t *testing.T) {
 			t.Fatalf("LoginViaBrowser error = %v, want timeout", err)
 		}
 	})
+	t.Run("cookie read failure is preserved on timeout", func(t *testing.T) {
+		executor := &browserLoginExecutor{cookiesError: errors.New("cookie query failed")}
+		useBrowserLoginFakes(t, executor)
+		base := time.Unix(1, 0)
+		calls := 0
+		loginNow = func() time.Time {
+			calls++
+			if calls == 1 {
+				return base
+			}
+			return base.Add(loginTimeout + time.Second)
+		}
+		_, err := LoginViaBrowser("https://www.bonpreuesclat.cat/")
+		if err == nil || !strings.Contains(err.Error(), "cookie query failed") {
+			t.Fatalf("LoginViaBrowser error = %v, want cookie read failure", err)
+		}
+	})
 
 	t.Run("browser closed", func(t *testing.T) {
 		executor := &browserLoginExecutor{}
 		useBrowserLoginFakes(t, executor)
 		loginSleep = func(context.Context, time.Duration) error { return context.Canceled }
 		_, err := LoginViaBrowser("https://www.bonpreuesclat.cat/")
-		if err == nil || !strings.Contains(err.Error(), "login aborted") {
+		if err == nil || !strings.Contains(err.Error(), "login aborted") || !errors.Is(err, context.Canceled) {
 			t.Fatalf("LoginViaBrowser error = %v, want cancellation", err)
 		}
 	})
