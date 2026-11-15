@@ -245,13 +245,13 @@ The skill alerts on these and asks before bumping quantity (e.g. "2a unitat 50% 
 
 ## Claude Skill — Shop From a Photo
 
-This repo bundles a Claude Code skill, **`bonpreu-shop`** (`.claude/skills/bonpreu-shop/`), that drives this CLI to do the grocery shop — including from a **photo** of a basket, fridge, receipt or handwritten list:
+This repo bundles a Claude Code skill, **`bonpreu-shop`** (`.claude/skills/bonpreu-shop/`), that drives this CLI to build and verify a cart — including from a **photo** of a basket, fridge, receipt or handwritten list:
 
 1. Claude reads the image into an item list and shows you what it parsed.
 2. Resolves each item to a real Bonpreu product with `batch`/`search`.
 3. Shows the plan with a code-computed total.
 4. After your OK, fills the cart with a hard `--max` spending cap.
-5. Reports checkout readiness (35€ minimum) — you can list and reserve a delivery slot, then validate the order and pay in the browser.
+5. Verifies the cart and stops. It does not start checkout, reserve a delivery slot, or place a purchase.
 
 The vision step lives in the agent, not the binary — so any provider drives the same clean primitives, no LLM SDKs baked into the CLI. Install it where your Claude reads skills (symlink or copy `.claude/skills/bonpreu-shop` into `~/.claude/skills/`); build the CLI first.
 

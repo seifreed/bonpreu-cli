@@ -70,7 +70,9 @@ manual fallback. The `aws-waf-token` rotates, so re-run `login --from-browser` w
 | `bonpreu cart clear` | Empty the cart. |
 | `bonpreu checkout [status]` | Checkout readiness: total, 35€ minimum, blockers. |
 | `bonpreu checkout addresses` | List saved delivery destinations (`--json`). |
-| `bonpreu checkout slots --address <id>` | List delivery slots for a destination (`--json`). Often returns "no slots offered right now" even for a valid id — Bonpreu's slot service, not a CLI bug; book slots in the browser. |
+| `bonpreu checkout slots --address <id>` | List delivery slots for a destination (`--json`). Often returns "no slots offered right now" even for a valid id — Bonpreu's slot service, not a CLI bug. |
+
+These checkout commands are separate CLI features. For the `bonpreu-shop` workflow, stop after `cart get` verifies the requested lines; do not call checkout commands, reserve slots, or open a browser.
 
 ### Cart line shape (`cart get --json` → `items[]`)
 
@@ -108,8 +110,8 @@ Cart total is at `totals.itemPriceAfterPromos.amount`.
 
 ## Notes
 
-- **No order placement.** There is no `submit`. The CLI prepares the cart and reports readiness; the
-  user books a slot and pays in the browser.
+- **Cart-only shopping workflow.** The skill stops after verifying the cart. The CLI has separate
+  checkout inspection commands, but the skill does not invoke them or place orders.
 - **Per-region prices.** The region comes from the imported session; reads use a default region.
 - **Bot-sensitivity.** Reads work from any IP (uTLS clears the WAF). The cart **write** path is
   bot-sensitive — run it from a residential IP with a freshly exported session.

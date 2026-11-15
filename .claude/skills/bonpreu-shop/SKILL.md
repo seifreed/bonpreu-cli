@@ -1,16 +1,16 @@
 ---
 name: bonpreu-shop
 description: >-
-  Do the grocery shop at Bonpreu i Esclat online (compraonline.bonpreuesclat.cat) by driving the
-  local `bonpreu` CLI: turn a shopping list — or a PHOTO of a basket, fridge, receipt or handwritten
-  list — into real priced Bonpreu products, confirm them, and fill the cart with a hard spending cap.
+  Build a Bonpreu i Esclat cart (compraonline.bonpreuesclat.cat) by driving the local `bonpreu` CLI:
+  turn a shopping list — or a PHOTO of a basket, fridge, receipt or handwritten list — into real priced
+  Bonpreu products, confirm them, and fill the cart with a hard spending cap.
   Use whenever the user wants to shop, price a grocery list, build a cart, or "do the Bonpreu shop" —
   including when they just paste a list or drop an image and mention Bonpreu/Esclat. Spanish/Catalan
   phrasings: "hazme la compra del Bonpreu", "fes la compra", "añade X al carrito", "¿cuánto cuesta
   esta lista en Bonpreu?", "compra estos productos", "mira esta foto de la cesta y pídelo". English:
   "do my Bonpreu shop", "price this list at Bonpreu", "fill my Bonpreu cart", "shop this fridge photo
   at Bonpreu". Always confirm the resolved products before touching the cart, always cap spend with
-  --max, and never claim an order was placed — this CLI prepares the cart but does NOT submit orders.
+  --max. Stop after verifying the cart: never start checkout, reserve a delivery slot, or place an order.
   Do NOT use for other supermarkets (Mercadona, Carrefour, Lidl) — Bonpreu/Esclat only.
 ---
 
@@ -34,10 +34,9 @@ This touches a real account and real money, so:
    fat-fingered quantity can't run up the order. Use the user's stated budget, else the agreed plan
    total rounded up with a little margin. A line over the cap fails with `error: BUDGET EXCEEDED …` and
    a non-zero exit — treat that as **stop-and-report**, don't raise the cap unless the user does.
-3. **This CLI does NOT place orders.** There is no `submit`. The skill prepares the cart and reports
-   checkout readiness (`bonpreu checkout`), but the user finishes the order themselves in the browser
-   (slot + payment). Never tell the user you "placed the order" — you can't. Say the cart is ready and
-   point them to the web to book a slot and pay.
+3. **Stop at the cart.** The task is complete after the confirmed items are in the cart and verified
+   with `bonpreu cart get`. Never run checkout commands, reserve a delivery slot, open the checkout
+   browser, or place an order. Tell the user the cart is ready; do not prompt them to continue buying.
 
 ## Locate the binary
 
@@ -86,7 +85,7 @@ You have vision. Extract the grocery items from the photo into a plain list of *
 in the user's language. Be literal about what you can see; don't invent items. For a receipt/printed
 list, transcribe it; for a fridge/basket photo, name the products you recognise (e.g. "llet entera",
 "ous", "tomàquets", "iogurt natural"). If parts are ambiguous or unreadable, list your best guess and
-flag it — you'll confirm everything before buying anyway.
+flag it — you'll confirm everything before changing the cart.
 
 **Show the user what you parsed** and let them correct it *before* you price anything. This is the
 photo-specific checkpoint: vision can misread a label or miss an item at the back of the shelf.
@@ -161,21 +160,15 @@ the user added himself). After writing, `cart get` and reconcile against the pla
 > it; it converges in a second or two. Don't infer a bug. (Two short ids can also resolve to the same
 > product UUID and merge into one line — a smaller line count than items isn't a bug.)
 
-### 5. Hand off for checkout (the CLI stops here)
+### 5. Stop after verifying the cart
 
 ```bash
-bonpreu checkout              # readiness: total, 35€ minimum, what's blocking (min/slot/empty)
+bonpreu cart get              # verify the saved lines and total
 ```
 
-The **minimum order is 35€** — if `checkout` says `no s'arriba al mínim`, tell the user and offer to
-add items. The CLI is **read-only at checkout**: it can't book a slot or pay. Tell the user the cart is
-ready and they finish in the browser (choose a delivery slot + pay). Never claim the order was placed.
-
-`bonpreu checkout addresses` lists saved delivery destinations and `checkout slots --address <id>` the
-slots for one. Note `slots` often returns **"no slots offered right now"** even for a valid address —
-the CLI hits the exact endpoint the site does, and Bonpreu's slot service frequently returns nothing
-(the website shows a "slot service down" card for the same case). It's not a bad id or a CLI bug;
-slot-booking lives in the browser anyway, so just hand off.
+Compare the verified cart with the confirmed plan. If it differs, report the discrepancy and stop; do
+not run checkout, reserve a slot, or open a browser. Report that the requested products are in the cart
+and that no purchase was made.
 
 ## Plain lists, recipes, and clarifying
 
