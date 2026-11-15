@@ -152,9 +152,15 @@ func cartWrite(args []string, set bool) error {
 	}
 	stderrInfo("cart.quantity.changed", "cart line quantity updated", "operation", cf.operation, "quantity_delta", delta)
 	if done, err := emitStructured(cf, cart.Raw); done {
-		return err
+		if err != nil {
+			return fmt.Errorf("cart quantity was updated but confirmation output failed; inspect the cart before retrying: %w", err)
+		}
+		return nil
 	}
-	return writeStdout("ok — %s [%s] %s (Δ%+g) — %s\n", verb, terminalText(retailerID), fmtQty(qty), delta, terminalText(pd.Name))
+	if err := writeStdout("ok — %s [%s] %s (Δ%+g) — %s\n", verb, terminalText(retailerID), fmtQty(qty), delta, terminalText(pd.Name)); err != nil {
+		return fmt.Errorf("cart quantity was updated but confirmation output failed; inspect the cart before retrying: %w", err)
+	}
+	return nil
 }
 
 func cartClear(args []string) error {

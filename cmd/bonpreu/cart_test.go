@@ -91,15 +91,40 @@ func TestCartAddDoesNotCheckoutOrPlaceOrder(t *testing.T) {
 }
 
 func TestCartAddSurfacesOutputFailureAfterCartWrite(t *testing.T) {
-	srv := apiServer(t)
+	var cartWrites atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/products/23597":
+			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case "/":
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active/apply-quantity":
+			cartWrites.Add(1)
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
 	defer srv.Close()
 	useServer(t, srv, true)
 
 	err := withFailingStdout(t, func() error {
 		return cmdCart([]string{"add", "23597", "1"})
 	})
-	if err == nil {
-		t.Fatal("cart add should report that its success output could not be written")
+	if err == nil || !strings.Contains(err.Error(), "inspect the cart before retrying") {
+		t.Fatalf("cart add error = %v, want output failure with retry guidance", err)
+	}
+	if got := cartWrites.Load(); got != 1 {
+		t.Fatalf("cart writes = %d, want one successful cart update", got)
+	}
+	err = withFailingStdout(t, func() error {
+		return cmdCart([]string{"add", "23597", "1", "--json"})
+	})
+	if err == nil || !strings.Contains(err.Error(), "inspect the cart before retrying") {
+		t.Fatalf("JSON cart add error = %v, want output failure with retry guidance", err)
+	}
+	if got := cartWrites.Load(); got != 2 {
+		t.Fatalf("cart writes = %d, want two successful cart updates", got)
 	}
 }
 
