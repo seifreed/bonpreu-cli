@@ -98,6 +98,60 @@ func TestLoadMissingFileErrors(t *testing.T) {
 	}
 }
 
+func TestLoadReturnsConfigDirectoryOpenFailure(t *testing.T) {
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BONPREU_CONFIG_DIR", filepath.Join(blocker, "nested"))
+	var v map[string]any
+	if err := Load("session.json", &v); err == nil {
+		t.Fatal("Load should report an error when the config directory cannot be opened")
+	}
+}
+
+func TestReadFileErrorPreservesFailuresWithoutHidingCloseError(t *testing.T) {
+	readErr := errors.New("read failed")
+	closeErr := errors.New("close failed")
+	if err := readFileError("session.json", readErr, nil); !errors.Is(err, readErr) {
+		t.Fatalf("read error = %v, want original read error", err)
+	}
+	if err := readFileError("session.json", nil, closeErr); !errors.Is(err, closeErr) {
+		t.Fatalf("close error = %v, want original close error", err)
+	}
+	combined := readFileError("session.json", readErr, closeErr)
+	if !errors.Is(combined, readErr) || !errors.Is(combined, closeErr) {
+		t.Fatalf("combined error = %v, want both causes", combined)
+	}
+	missingAndClose := readFileError("session.json", os.ErrNotExist, closeErr)
+	if errors.Is(missingAndClose, os.ErrNotExist) || !errors.Is(missingAndClose, closeErr) {
+		t.Fatalf("missing plus close error = %v; close error must prevent treating this as a missing session", missingAndClose)
+	}
+}
+
+func TestLoadAndSaveRejectPathsOutsideConfigDir(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "config")
+	if err := os.Mkdir(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BONPREU_CONFIG_DIR", configDir)
+
+	for _, name := range []string{"../outside.json", filepath.Join("nested", "state.json"), ".."} {
+		var v map[string]any
+		if err := Load(name, &v); err == nil {
+			t.Errorf("Load(%q) unexpectedly accepted a path outside the config file namespace", name)
+		}
+		if err := Save(name, map[string]any{"secret": true}); err == nil {
+			t.Errorf("Save(%q) unexpectedly accepted a path outside the config file namespace", name)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "outside.json")); !os.IsNotExist(err) {
+		t.Fatalf("path traversal created outside file, stat error = %v", err)
+	}
+}
+
 func TestSaveMkdirFailure(t *testing.T) {
 	dir := t.TempDir()
 	blocker := filepath.Join(dir, "blocker")
@@ -115,6 +169,24 @@ func TestSaveEncodeError(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
 	if err := Save("x.json", make(chan int)); err == nil {
 		t.Error("an unmarshalable value should fail to save")
+	}
+}
+
+func TestSaveReturnsCreateTempFailure(t *testing.T) {
+	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	if err := Save("bad\x00name.json", map[string]any{"ok": true}); err == nil {
+		t.Fatal("Save should propagate the temporary-file creation error")
+	}
+}
+
+func TestSaveReturnsInjectedCreateTempFailure(t *testing.T) {
+	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	want := errors.New("temporary-file creation failed")
+	err := save("session.json", map[string]any{"cookie": "secret"}, func(string, string) (io.WriteCloser, string, error) {
+		return nil, "", want
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("save error = %v, want temporary-file failure", err)
 	}
 }
 

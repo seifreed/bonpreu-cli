@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,22 @@ import (
 
 	utls "github.com/refraction-networking/utls"
 )
+
+type closeErrorConn struct {
+	net.Conn
+	err error
+}
+
+func (c closeErrorConn) Close() error { return c.err }
+
+func TestCloseConnWithCausePreservesCleanupError(t *testing.T) {
+	cause := errors.New("TLS handshake failed")
+	closeErr := errors.New("socket close failed")
+	err := closeConnWithCause(closeErrorConn{err: closeErr}, cause)
+	if !errors.Is(err, cause) || !errors.Is(err, closeErr) {
+		t.Fatalf("closeConnWithCause error = %v; want both original and cleanup failures", err)
+	}
+}
 
 func TestChromeDialBranches(t *testing.T) {
 	ctx := context.Background()

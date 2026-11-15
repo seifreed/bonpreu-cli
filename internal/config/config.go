@@ -88,11 +88,35 @@ func ensureDir() error {
 
 // Load reads a JSON state file (e.g. the session cache) from the config dir.
 func Load(name string, v any) error {
-	b, err := os.ReadFile(filepath.Join(Dir(), name))
+	if err := validateName(name); err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(Dir())
 	if err != nil {
+		return fmt.Errorf("open config directory: %w", err)
+	}
+	b, readErr := root.ReadFile(name)
+	closeErr := root.Close()
+	if err := readFileError(name, readErr, closeErr); err != nil {
 		return err
 	}
 	return json.Unmarshal(b, v)
+}
+
+func readFileError(name string, readErr, closeErr error) error {
+	if readErr != nil && closeErr != nil {
+		if errors.Is(readErr, os.ErrNotExist) {
+			return fmt.Errorf("read config file %s failed (%v); close config directory: %w", name, readErr, closeErr)
+		}
+		return fmt.Errorf("read config file %s: %w", name, errors.Join(readErr, closeErr))
+	}
+	if readErr != nil {
+		return fmt.Errorf("read config file %s: %w", name, readErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close config directory after reading %s: %w", name, closeErr)
+	}
+	return nil
 }
 
 // Save writes v as pretty JSON to name in the config dir, 0600 (secrets). The
@@ -100,6 +124,9 @@ func Load(name string, v any) error {
 // disk-full mid-write cannot truncate the credential store (session.json) and
 // leave the user with a corrupt, half-written session.
 func Save(name string, v any) error {
+	if err := validateName(name); err != nil {
+		return err
+	}
 	return save(name, v, func(dir, pattern string) (io.WriteCloser, string, error) {
 		tmp, err := os.CreateTemp(dir, pattern)
 		if err != nil {
@@ -107,6 +134,13 @@ func Save(name string, v any) error {
 		}
 		return tmp, tmp.Name(), nil
 	})
+}
+
+func validateName(name string) error {
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
+		return fmt.Errorf("invalid config filename %q: expected a file name within %s", name, Dir())
+	}
+	return nil
 }
 
 func save(name string, v any, createTemp func(string, string) (io.WriteCloser, string, error)) (resultErr error) {

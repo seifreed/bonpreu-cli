@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -55,19 +56,23 @@ func chromeDial(ctx context.Context, network, addr string,
 	// Fresh spec per dial — ApplyPreset may mutate it (GREASE/randomization).
 	spec, err := specFn()
 	if err != nil {
-		raw.Close()
-		return nil, err
+		return nil, closeConnWithCause(raw, err)
 	}
 	u := utls.UClient(raw, cfgFn(host), utls.HelloCustom)
 	if err := u.ApplyPreset(&spec); err != nil {
-		raw.Close()
-		return nil, fmt.Errorf("utls preset: %w", err)
+		return nil, closeConnWithCause(raw, fmt.Errorf("utls preset: %w", err))
 	}
 	if err := u.HandshakeContext(ctx); err != nil {
-		raw.Close()
-		return nil, fmt.Errorf("utls handshake: %w", err)
+		return nil, closeConnWithCause(raw, fmt.Errorf("utls handshake: %w", err))
 	}
 	return u, nil
+}
+
+func closeConnWithCause(conn net.Conn, cause error) error {
+	if err := conn.Close(); err != nil {
+		return errors.Join(cause, err)
+	}
+	return cause
 }
 
 // chromeHelloID is the uTLS ClientHello id presented to the server; a package

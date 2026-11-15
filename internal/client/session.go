@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -23,7 +24,7 @@ type Session struct {
 func LoadSession() (Session, error) {
 	var s Session
 	if err := config.Load(sessionFile, &s); err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return s, nil
 		}
 		return s, fmt.Errorf("read cached session: %w", err)
