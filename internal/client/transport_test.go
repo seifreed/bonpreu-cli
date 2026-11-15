@@ -34,6 +34,10 @@ func TestChromeDialBranches(t *testing.T) {
 	if _, err := chromeDial(ctx, "tcp", addr, badSpec, cfg); err == nil {
 		t.Error("a spec build error should propagate")
 	}
+	badConfig := func(host string) *utls.Config { return &utls.Config{ServerName: host, NextProtos: []string{""}} }
+	if _, err := chromeDial(ctx, "tcp", addr, spec, badConfig); err == nil || !strings.Contains(err.Error(), "utls preset") {
+		t.Errorf("invalid TLS preset error = %v, want ApplyPreset failure", err)
+	}
 	// Successful handshake: trust the test cert via InsecureSkipVerify.
 	skip := func(host string) *utls.Config { return &utls.Config{ServerName: host, InsecureSkipVerify: true} }
 	conn, err := chromeDial(ctx, "tcp", addr, spec, skip)

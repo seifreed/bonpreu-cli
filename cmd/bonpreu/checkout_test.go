@@ -28,6 +28,29 @@ func TestCheckoutSlotsMissingAddress(t *testing.T) {
 	}
 }
 
+func TestCheckoutSlotsServiceErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		want   string
+	}{
+		{name: "no slots offered", status: http.StatusNotFound, want: "no slots offered"},
+		{name: "other service error", status: http.StatusInternalServerError, want: "HTTP 500"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+			}))
+			defer srv.Close()
+			useServer(t, srv, true)
+			_, err := capture(t, func() error { return cmdCheckout([]string{"slots", "--address", "address-1"}) })
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("checkout slots error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestCheckoutRawToonVariants(t *testing.T) {
 	srv := apiServer(t)
 	defer srv.Close()

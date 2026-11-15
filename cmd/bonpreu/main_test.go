@@ -42,6 +42,14 @@ func TestRunDispatch(t *testing.T) {
 			t.Errorf("run(%q) = %d, want %d", arg, got, want)
 		}
 	}
+	for _, alias := range []string{"--version", "-v", "-h", "--help"} {
+		want := 0
+		var got int
+		_, _ = capture(t, func() error { got = run([]string{alias}); return nil })
+		if got != want {
+			t.Errorf("run(%q) = %d, want %d", alias, got, want)
+		}
+	}
 
 	// Every command name dispatches without panicking (exit 0 or 1 both fine).
 	for _, name := range []string{"search", "batch", "total", "product", "categories", "import-har", "set-cookie", "whoami", "cart", "checkout"} {

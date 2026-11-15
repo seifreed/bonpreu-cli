@@ -62,6 +62,29 @@ func TestAPIErrorOnNon2xx(t *testing.T) {
 	}
 }
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+type brokenBody struct{}
+
+func (brokenBody) Read([]byte) (int, error) { return 0, errors.New("stream broke") }
+func (brokenBody) Close() error             { return nil }
+
+func TestDoReturnsSuccessfulResponseReadError(t *testing.T) {
+	cl := New()
+	cl.HTTP = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: brokenBody{}, Header: make(http.Header)}, nil
+	})}
+	req, err := http.NewRequest(http.MethodGet, "https://example.invalid/data", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.do(req); err == nil || !strings.Contains(err.Error(), "read response body") {
+		t.Fatalf("successful response read error = %v", err)
+	}
+}
+
 func TestRetryOnRateLimit(t *testing.T) {
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
