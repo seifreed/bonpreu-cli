@@ -73,6 +73,62 @@ func TestSaveAndVerify(t *testing.T) {
 	}
 }
 
+func TestSaveAndVerifyPreservesOrReplacesRegion(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		captured   string
+		wantRegion string
+	}{
+		{name: "preserves existing region when capture has none", wantRegion: "old-region"},
+		{name: "uses region from capture", captured: "new-region", wantRegion: "new-region"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			privateTestConfigDir(t)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.Contains(r.URL.Path, "/order/v6/orders") {
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				http.NotFound(w, r)
+			}))
+			defer srv.Close()
+			useServer(t, srv, false)
+			if err := client.SaveSession(client.Session{Cookie: "previous=still-valid", RegionID: "old-region"}); err != nil {
+				t.Fatal(err)
+			}
+
+			out, err := capture(t, func() error {
+				return saveAndVerify(&common{operation: "login"}, client.Session{
+					Cookie: "global_sid=new; aws-waf-token=new-token", RegionID: tc.captured,
+				})
+			})
+			if err != nil || !strings.Contains(out, "region "+tc.wantRegion) {
+				t.Fatalf("login output = %q, error %v; want region %q", out, err, tc.wantRegion)
+			}
+			got, err := client.LoadSession()
+			if err != nil || got.Cookie != "global_sid=new; aws-waf-token=new-token" || got.RegionID != tc.wantRegion {
+				t.Fatalf("saved session = %+v, error %v; want new cookie and region %q", got, err, tc.wantRegion)
+			}
+		})
+	}
+}
+
+func TestSaveAndVerifyReturnsPreviousSessionReadError(t *testing.T) {
+	dir := privateTestConfigDir(t)
+	badSession := []byte("{broken session")
+	if err := os.WriteFile(filepath.Join(dir, "session.json"), badSession, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := saveAndVerify(&common{operation: "login"}, client.Session{Cookie: "global_sid=new; aws-waf-token=new-token"})
+	if err == nil || !strings.Contains(err.Error(), "read previous session region") {
+		t.Fatalf("saveAndVerify error = %v; want prior-session read error", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "session.json"))
+	if err != nil || string(got) != string(badSession) {
+		t.Fatalf("corrupt session changed to %q, error %v; want it preserved", got, err)
+	}
+}
+
 func TestSaveAndVerifyReturnsUnreadableConfigError(t *testing.T) {
 	dir := privateTestConfigDir(t)
 	t.Setenv("BONPREU_MAX_EUR", "")

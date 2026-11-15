@@ -64,6 +64,13 @@ func saveAndVerify(cf *common, s client.Session) error {
 	if s.Cookie == "" {
 		return fmt.Errorf("captured session carried no cookie")
 	}
+	if s.RegionID == "" {
+		previous, err := client.LoadSession()
+		if err != nil {
+			return fmt.Errorf("read previous session region: %w", err)
+		}
+		s.RegionID = previous.RegionID
+	}
 	cl, _ := newClient(cf)
 	if s.RegionID != "" {
 		cl.RegionID = s.RegionID
