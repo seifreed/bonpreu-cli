@@ -79,7 +79,18 @@ func (c *Client) GetCart() (*Cart, error) {
 // CheckAuth reports whether the current cookie is an authenticated session, by
 // hitting an endpoint that returns 401 for anonymous callers (the orders list).
 func (c *Client) CheckAuth() (bool, error) {
-	err := c.DoJSON("GET", c.BaseURL+"/api/order/v6/orders", nil, nil)
+	return c.checkAuth(nil)
+}
+
+// CheckAuthWithCookie verifies a candidate cookie without mutating the client's
+// cached cookie or persisting it.
+func (c *Client) CheckAuthWithCookie(cookie string) (bool, error) {
+	c.warnExternalCookieHost(cookie)
+	return c.checkAuth(map[string]string{"cookie": cookie})
+}
+
+func (c *Client) checkAuth(extra map[string]string) (bool, error) {
+	err := c.doJSONHeaders("GET", c.BaseURL+"/api/order/v6/orders", nil, nil, extra)
 	if err == nil {
 		return true, nil
 	}

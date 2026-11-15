@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/seifreed/bonpreu-cli/internal/client"
+	"github.com/seifreed/bonpreu-cli/internal/config"
 )
 
 var (
@@ -51,27 +52,28 @@ func cmdLoginWith(args []string, readBrowser func(string) (client.Session, error
 	return saveAndVerify(cf, s)
 }
 
-// saveAndVerify persists a freshly captured session, then confirms the cookie is
-// actually accepted by hitting an authenticated endpoint — mirrors cmdWhoami so
-// `login` proves itself rather than silently saving a dud cookie.
+// saveAndVerify confirms a freshly captured session before persisting it, so a
+// stale browser cookie cannot replace a previously valid session.
 func saveAndVerify(cf *common, s client.Session) error {
-	if err := client.SaveSession(s); err != nil {
-		return err
+	if _, err := config.LoadConfig(); err != nil {
+		return fmt.Errorf("read authentication config: %w", err)
+	}
+	if s.Cookie == "" {
+		return fmt.Errorf("captured session carried no cookie")
 	}
 	cl, _ := newClient(cf)
-	loaded, err := cl.LoadAuth()
-	if err != nil {
-		return err
+	if s.RegionID != "" {
+		cl.RegionID = s.RegionID
 	}
-	if !loaded {
-		return fmt.Errorf("session saved but carried no cookie")
-	}
-	ok, err := cl.CheckAuth()
+	ok, err := cl.CheckAuthWithCookie(s.Cookie)
 	if err != nil {
 		return fmt.Errorf("could not verify session: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("cookie saved but NOT authenticated — it may be expired or anonymous; log in again")
+		return fmt.Errorf("cookie NOT authenticated — the previous session was kept; log in again")
+	}
+	if err := persistSession(s); err != nil {
+		return err
 	}
 	stderrInfo("auth.session.verified", "saved session was accepted", "operation", cf.operation)
 	if done, err := emitStructured(cf, map[string]any{"authenticated": ok, "region": cl.RegionID}); done {

@@ -224,6 +224,27 @@ func TestCheckAuth(t *testing.T) {
 	}
 }
 
+func TestCheckAuthWithCookieUsesCandidateWithoutChangingClient(t *testing.T) {
+	var gotCookie string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCookie = r.Header.Get("Cookie")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	cl := testClient(srv)
+	cl.Cookie = "cached=old"
+	got, err := cl.CheckAuthWithCookie("candidate=new")
+	if err != nil || !got {
+		t.Fatalf("CheckAuthWithCookie = %v, %v; want true, nil", got, err)
+	}
+	if gotCookie != "candidate=new" {
+		t.Errorf("verification cookie = %q, want candidate cookie", gotCookie)
+	}
+	if cl.Cookie != "cached=old" {
+		t.Errorf("candidate verification changed cached cookie to %q", cl.Cookie)
+	}
+}
+
 func TestApplyQuantityFetchesCSRF(t *testing.T) {
 	var gotCSRF, gotSource string
 	var gotBody []byte

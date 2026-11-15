@@ -67,17 +67,20 @@ func (c *Client) LoadAuth() (bool, error) {
 	// before any authed request ships that secret to a non-Bonpreu host, so a typo
 	// or a poisoned env doesn't silently exfiltrate the session. The override stays
 	// allowed (localhost proxies are a legitimate use); it's just no longer silent.
-	if c.Cookie != "" && c.BaseURL != "" {
-		host := ""
-		if u, err := url.Parse(c.BaseURL); err == nil {
-			host = u.Hostname()
-		}
-		if !isBonpreuHost(host) {
-			if c.Logger != nil {
-				c.Logger.Warn("session cookie targets a non-Bonpreu host",
-					"event_name", "security.cookie_external_host", "component", "client", "host", host)
-			}
-		}
-	}
+	c.warnExternalCookieHost(c.Cookie)
 	return c.Cookie != "", nil
+}
+
+func (c *Client) warnExternalCookieHost(cookie string) {
+	if cookie == "" || c.BaseURL == "" {
+		return
+	}
+	host := ""
+	if u, err := url.Parse(c.BaseURL); err == nil {
+		host = u.Hostname()
+	}
+	if !isBonpreuHost(host) && c.Logger != nil {
+		c.Logger.Warn("session cookie targets a non-Bonpreu host",
+			"event_name", "security.cookie_external_host", "component", "client", "host", host)
+	}
 }

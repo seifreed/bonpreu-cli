@@ -41,6 +41,12 @@ func TestSaveAndVerify(t *testing.T) {
 			oldInfo := stderrInfo
 			stderrInfo = func(event, _ string, _ ...any) { events = append(events, event) }
 			defer func() { stderrInfo = oldInfo }()
+			previous := client.Session{Cookie: "previous=still-valid", RegionID: "old-region"}
+			if tc.wantErr != "" {
+				if err := client.SaveSession(previous); err != nil {
+					t.Fatal(err)
+				}
+			}
 			out, err := capture(t, func() error {
 				return saveAndVerify(cf, client.Session{Cookie: tc.cookie, RegionID: "r1"})
 			})
@@ -50,6 +56,10 @@ func TestSaveAndVerify(t *testing.T) {
 				}
 				if len(events) != 0 {
 					t.Errorf("failed verification emitted success events: %v", events)
+				}
+				got, loadErr := client.LoadSession()
+				if loadErr != nil || got != previous {
+					t.Errorf("failed login changed cached session = %+v, err %v; want %+v", got, loadErr, previous)
 				}
 				return
 			}
@@ -67,6 +77,10 @@ func TestSaveAndVerifyReturnsUnreadableConfigError(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("BONPREU_CONFIG_DIR", dir)
 	t.Setenv("BONPREU_MAX_EUR", "")
+	previous := client.Session{Cookie: "previous=still-valid", RegionID: "old-region"}
+	if err := client.SaveSession(previous); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("not valid = toml ["), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -74,13 +88,28 @@ func TestSaveAndVerifyReturnsUnreadableConfigError(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "read authentication config") {
 		t.Fatalf("saveAndVerify error = %v; want config error", err)
 	}
+	got, loadErr := client.LoadSession()
+	if loadErr != nil || got != previous {
+		t.Fatalf("invalid config changed cached session = %+v, err %v; want %+v", got, loadErr, previous)
+	}
 }
 
 func TestSaveAndVerifyReturnsSessionWriteError(t *testing.T) {
-	t.Setenv("BONPREU_CONFIG_DIR", unwritableConfigDir(t))
-	err := saveAndVerify(&common{}, client.Session{Cookie: "global_sid=s; aws-waf-token=t"})
-	if err == nil {
-		t.Fatal("saveAndVerify should return session persistence failure")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/order/v6/orders") {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+	oldPersist := persistSession
+	persistSession = func(client.Session) error { return errors.New("disk write failed") }
+	t.Cleanup(func() { persistSession = oldPersist })
+	err := saveAndVerify(&common{operation: "login"}, client.Session{Cookie: "global_sid=s; aws-waf-token=t"})
+	if err == nil || !strings.Contains(err.Error(), "disk write failed") {
+		t.Fatalf("saveAndVerify error = %v, want persistence failure", err)
 	}
 }
 
