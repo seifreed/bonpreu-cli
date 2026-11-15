@@ -61,7 +61,7 @@ func ParseHAR(data []byte) (HARSession, error) {
 
 	var s HARSession
 	var sawBonpreuReq, sawCookieHeader, sawInsecureCookie bool
-	var sawConflictingAuthCookie bool
+	var sawConflictingAuthCookie, sawInvalidRegionQuery bool
 	for _, e := range har.Log.Entries {
 		// Match on the parsed host, not a substring of the raw URL: otherwise a
 		// foreign request that merely mentions the domain in its path/query would be
@@ -89,9 +89,29 @@ func ParseHAR(data []byte) (HARSession, error) {
 			}
 			continue
 		}
+		requestAuthed, conflictingAuthCookie := cookieAuthStatus(cookieHeader)
+		if conflictingAuthCookie {
+			// Do not fall back to an older session when the newest authenticated
+			// request contains contradictory copies of an auth cookie.
+			s.Cookie = ""
+			s.RegionID = ""
+			sawConflictingAuthCookie = true
+			continue
+		}
+		if !requestAuthed {
+			continue
+		}
+		sawConflictingAuthCookie = false
+		query, queryErr := neturl.ParseQuery(u.RawQuery)
+		if queryErr != nil {
+			s.Cookie = ""
+			s.RegionID = ""
+			sawInvalidRegionQuery = true
+			continue
+		}
 		var requestRegion string
 		ambiguousRegion := false
-		for k, vs := range u.Query() {
+		for k, vs := range query {
 			if !regionIDRE.MatchString(k) {
 				continue
 			}
@@ -107,27 +127,22 @@ func ParseHAR(data []byte) (HARSession, error) {
 			}
 		}
 		if ambiguousRegion {
-			requestRegion = ""
-		}
-		requestAuthed, conflictingAuthCookie := cookieAuthStatus(cookieHeader)
-		if conflictingAuthCookie {
-			// Do not fall back to an older session when the newest authenticated
-			// request contains contradictory copies of an auth cookie.
 			s.Cookie = ""
 			s.RegionID = ""
-			sawConflictingAuthCookie = true
+			sawInvalidRegionQuery = true
 			continue
 		}
-		if requestAuthed {
-			s.Cookie = cookieHeader // last (freshest) authed request wins
-			s.RegionID = requestRegion
-			sawConflictingAuthCookie = false
-		}
+		s.Cookie = cookieHeader // last (freshest) authed request wins
+		s.RegionID = requestRegion
+		sawInvalidRegionQuery = false
 	}
 
 	if s.Cookie == "" {
 		if sawConflictingAuthCookie {
 			return s, fmt.Errorf("conflicting Bonpreu authentication cookies in the HAR; export a fresh request with one session")
+		}
+		if sawInvalidRegionQuery {
+			return s, fmt.Errorf("malformed or conflicting region values in the authenticated HAR request; export a fresh request")
 		}
 		if sawInsecureCookie {
 			return s, fmt.Errorf("refusing to import an authenticated cookie captured over a non-HTTPS request; export a HAR from the HTTPS Bonpreu site")

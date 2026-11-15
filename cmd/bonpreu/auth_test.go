@@ -96,6 +96,26 @@ func TestImportHarDoesNotReplaceSessionFromOtherBonpreuHost(t *testing.T) {
 	}
 }
 
+func TestImportHarDoesNotReplaceSessionFromMalformedRegionQuery(t *testing.T) {
+	privateTestConfigDir(t)
+	previous := client.Session{Cookie: "global_sid=shop; aws-waf-token=shop-waf", RegionID: "shop-region"}
+	if err := client.SaveSession(previous); err != nil {
+		t.Fatal(err)
+	}
+	har := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/api/x?regionId=%ZZ","headers":[{"name":"cookie","value":"global_sid=new; aws-waf-token=new-waf"}]}}]}}`
+	path := filepath.Join(t.TempDir(), "malformed-region.har")
+	if err := os.WriteFile(path, []byte(har), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdImportHar([]string{"--file", path}); err == nil {
+		t.Fatal("import-har accepted malformed authenticated region query")
+	}
+	got, err := client.LoadSession()
+	if err != nil || got != previous {
+		t.Fatalf("session after malformed-region HAR = %+v, %v; want unchanged %+v", got, err, previous)
+	}
+}
+
 func TestImportHarRejectsUnexpectedArgumentsBeforeReadingOrSaving(t *testing.T) {
 	privateTestConfigDir(t)
 	previous := client.Session{Cookie: "previous=session", RegionID: "r-previous"}

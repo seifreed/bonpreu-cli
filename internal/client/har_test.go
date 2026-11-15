@@ -237,22 +237,36 @@ func TestParseHARIgnoresRelatedButDifferentRegionQueryKeys(t *testing.T) {
 	}
 }
 
-func TestParseHARIgnoresConflictingRegionAliases(t *testing.T) {
+func TestParseHARRejectsConflictingRegionAliases(t *testing.T) {
 	for _, tc := range []struct {
-		query string
-		want  string
+		query   string
+		want    string
+		wantErr bool
 	}{
-		{"regionId=region-a&region_id=region-b", ""},
-		{"regionId=region-a&region_id=region-a", "region-a"},
+		{"regionId=region-a&region_id=region-b", "", true},
+		{"regionId=region-a&region_id=region-a", "region-a", false},
 	} {
 		har := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x?` + tc.query + `","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
 		s, err := ParseHAR([]byte(har))
+		if tc.wantErr {
+			if err == nil || !strings.Contains(err.Error(), "conflicting region values") {
+				t.Fatalf("ParseHAR(%q) error = %v; want conflicting-region error", tc.query, err)
+			}
+			continue
+		}
 		if err != nil {
 			t.Fatalf("ParseHAR(%q): %v", tc.query, err)
 		}
 		if s.RegionID != tc.want {
 			t.Errorf("ParseHAR(%q) region = %q, want %q", tc.query, s.RegionID, tc.want)
 		}
+	}
+}
+
+func TestParseHARRejectsMalformedAuthenticatedRegionQuery(t *testing.T) {
+	har := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x?regionId=%ZZ","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
+	if _, err := ParseHAR([]byte(har)); err == nil || !strings.Contains(err.Error(), "malformed or conflicting region values") {
+		t.Fatalf("ParseHAR malformed region query error = %v; want rejection", err)
 	}
 }
 
