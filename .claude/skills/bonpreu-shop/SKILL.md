@@ -154,17 +154,20 @@ bonpreu cart get                      # verify lines + total
 If the CLI reports an actual line over the cap after the write, stop and report it; do not retry the
 add, raise the cap, or proceed to checkout. The CLI does not place purchases.
 
-**For a big list, fill with `cart set`, not `cart add`.** Each write is slow (it resolves the short id
-to a UUID by scraping, then applies the delta), so a long fill can outlast a shell timeout — and
-re-running `cart add` after a partial fill **double-adds**. `cart set <id> <qty>` is **idempotent**:
-re-run the whole list and already-correct lines are no-ops (`already at target quantity`), missing ones
-get added — so it resumes cleanly after any interruption. Run it as a background job for long lists.
+**For a big list, prefer `cart set` over `cart add` when reconciling known quantities.** Each write is
+slow (it resolves the short id to a UUID by scraping, then applies a delta), so a long fill can
+outlast a shell timeout — and re-running `cart add` after a partial fill **double-adds**. `cart set`
+is not server-side idempotent: it reads the current quantity and sends the difference as an additive
+delta. It is a no-op only when that read already matches the target. Run long fills with enough time
+and verify with `cart get` after each completed batch. If a write times out, returns an error, or a
+read looks stale, stop and inspect the cart; wait for it to settle and reconcile actual quantities
+before issuing another write. Never blindly rerun the whole list after an uncertain write outcome.
 To start from a known-empty cart, `bonpreu cart clear` first (check `cart get` so you don't wipe items
 the user added himself). After writing, `cart get` and reconcile against the plan.
 
-> The cart backend can lag a write by a beat — if a `cart get` right after a write looks stale, re-run
-> it; it converges in a second or two. Don't infer a bug. (Two short ids can also resolve to the same
-> product UUID and merge into one line — a smaller line count than items isn't a bug.)
+> The cart backend can lag a write by a beat. If a `cart get` right after a write looks stale, wait a
+> second or two and inspect again before writing. (Two short ids can also resolve to the same product
+> UUID and merge into one line — a smaller line count than items isn't a bug.)
 
 ### 5. Stop after verifying the cart
 
