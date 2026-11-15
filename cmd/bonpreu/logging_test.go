@@ -12,7 +12,7 @@ func TestDiagnosticLoggerJSONAndLevel(t *testing.T) {
 	var out bytes.Buffer
 	logger := newLogger(&out)
 	logger.Warn("request failed\nforged", "service", "bonpreu", "component", "cli")
-	if !strings.Contains(out.String(), `"level":"WARN"`) || !strings.Contains(out.String(), `\nforged`) {
+	if !strings.Contains(out.String(), `"level":"WARN"`) || !strings.Contains(out.String(), `\nforged`) || !strings.Contains(out.String(), `Z"`) {
 		t.Fatalf("expected structured, escaped warning, got %q", out.String())
 	}
 	out.Reset()
