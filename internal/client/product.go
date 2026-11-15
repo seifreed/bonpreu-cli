@@ -139,9 +139,19 @@ func appendJSON(dst []any, s string) []any {
 // embeddedStates returns each window.__…__ JSON blob, plus the JSON decoded from
 // any nested double-encoded `data` strings (URQL stores query results that way).
 func embeddedStates(html string) []any {
+	// shortcut: cap aggregate state rescans at 2× body size; raise if real product pages require more.
+	return embeddedStatesWithinBudget(html, 2*maxBodyBytes)
+}
+
+func embeddedStatesWithinBudget(html string, scanBudget int) []any {
 	var blobs []any
 	for _, loc := range stateVarRE.FindAllStringIndex(html, -1) {
-		if obj, ok := braceObject(html, loc[1]); ok {
+		if scanBudget <= 0 {
+			break
+		}
+		obj, ok, scanned := braceObjectWithinBudget(html, loc[1], scanBudget)
+		scanBudget -= scanned
+		if ok {
 			blobs = appendJSON(blobs, obj)
 		}
 	}
@@ -159,11 +169,20 @@ func embeddedStates(html string) []any {
 
 // braceObject extracts a balanced {...} starting at i, respecting strings/escapes.
 func braceObject(s string, i int) (string, bool) {
-	if i >= len(s) || s[i] != '{' {
-		return "", false
+	obj, ok, _ := braceObjectWithinBudget(s, i, len(s))
+	return obj, ok
+}
+
+func braceObjectWithinBudget(s string, i, scanBudget int) (string, bool, int) {
+	if i < 0 || i >= len(s) || s[i] != '{' || scanBudget <= 0 {
+		return "", false, 0
+	}
+	end := len(s)
+	if scanBudget < end-i {
+		end = i + scanBudget
 	}
 	depth, inStr, esc := 0, false, false
-	for j := i; j < len(s); j++ {
+	for j := i; j < end; j++ {
 		ch := s[j]
 		switch {
 		case esc:
@@ -178,11 +197,11 @@ func braceObject(s string, i int) (string, bool) {
 		case ch == '}':
 			depth--
 			if depth == 0 {
-				return s[i : j+1], true
+				return s[i : j+1], true, j + 1 - i
 			}
 		}
 	}
-	return "", false
+	return "", false, end - i
 }
 
 // walkMaps invokes fn on every map encountered in an arbitrary JSON value tree.

@@ -104,6 +104,17 @@ func TestBraceObjectAndAppendJSONEdges(t *testing.T) {
 	}
 }
 
+func TestEmbeddedStatesHonorsCombinedScanBudget(t *testing.T) {
+	html := `window.__INITIAL_STATE__={` + strings.Repeat("x", 40) +
+		`window.__INITIAL_STATE__={"retailerProductId":"1","name":"x"}`
+	if got := embeddedStatesWithinBudget(html, 16); len(got) != 0 {
+		t.Fatalf("states with exhausted scan budget = %d; want no additional scans", len(got))
+	}
+	if got := embeddedStatesWithinBudget(html, len(html)*2); len(got) != 1 {
+		t.Fatalf("states with sufficient scan budget = %d; want the valid later state", len(got))
+	}
+}
+
 // Product also resolves nodes from URQL's nested double-encoded `data` strings.
 func TestProductFromNestedData(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
