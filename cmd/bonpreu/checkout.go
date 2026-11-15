@@ -45,11 +45,11 @@ func checkoutStatus(args []string) error {
 	if done, err := emitStructured(cf, raw); done {
 		return err
 	}
-	fmt.Printf("total: %s€  (mínim %s€)\n", firstNonEmpty(total.Amount, "0.00"), firstNonEmpty(acg.MinimumCheckoutThreshold.Amount, "?"))
+	fmt.Printf("total: %s€  (mínim %s€)\n", terminalText(firstNonEmpty(total.Amount, "0.00")), terminalText(firstNonEmpty(acg.MinimumCheckoutThreshold.Amount, "?")))
 	if acg.CanCheckout {
 		fmt.Println("es pot validar la compra ✓")
 	} else {
-		fmt.Printf("NO es pot validar encara — manca: %s\n", restrictionsCa(acg.CheckoutRestrictions))
+		fmt.Printf("NO es pot validar encara — manca: %s\n", terminalText(restrictionsCa(acg.CheckoutRestrictions)))
 	}
 	return nil
 }

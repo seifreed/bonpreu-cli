@@ -55,7 +55,7 @@ func cmdBrands(args []string) error {
 		return err
 	}
 	for _, b := range ranked {
-		fmt.Printf("%5d  %s\n", b.Count, b.Brand)
+		fmt.Printf("%5d  %s\n", b.Count, terminalText(b.Brand))
 	}
 	return nil
 }

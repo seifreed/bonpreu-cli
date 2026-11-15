@@ -69,3 +69,31 @@ func TestProductLineVariants(t *testing.T) {
 		}
 	}
 }
+
+func TestTerminalTextEscapesControlsAndPreservesUnicode(t *testing.T) {
+	got := terminalText("Cafè\x1b]0;owned\a\n\u202e")
+	want := "Cafè\\x1b]0;owned\\a\\n\\u202e"
+	if got != want {
+		t.Fatalf("terminalText() = %q, want %q", got, want)
+	}
+}
+
+func TestProductLineEscapesRemoteTerminalControls(t *testing.T) {
+	p := client.Product{
+		RetailerProductID: "49637\nforged",
+		Name:              "Product\x1b[2J",
+		Price:             client.Money{Amount: "1.00"},
+		Promotions:        []client.Promotion{{Description: "Offer\rforged"}},
+	}
+	line := productLine(p)
+	for _, want := range []string{`49637\nforged`, `Product\x1b[2J`, `Offer\rforged`} {
+		if !strings.Contains(line, want) {
+			t.Errorf("productLine missing escaped text %q: %q", want, line)
+		}
+	}
+	for _, control := range []rune{'\n', '\r', '\x1b'} {
+		if strings.ContainsRune(line, control) {
+			t.Errorf("productLine contains terminal control %U: %q", control, line)
+		}
+	}
+}

@@ -96,7 +96,7 @@ func cmdWhoami(args []string) error {
 	if done, err := emitStructured(cf, map[string]any{"authenticated": ok, "region": cl.RegionID}); done {
 		return err
 	}
-	fmt.Printf("ok — authenticated (region %s)\n", firstNonEmpty(cl.RegionID, "default"))
+	fmt.Printf("ok — authenticated (region %s)\n", terminalText(firstNonEmpty(cl.RegionID, "default")))
 	return nil
 }
 

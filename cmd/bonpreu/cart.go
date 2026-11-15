@@ -67,10 +67,10 @@ func cartGet(args []string) error {
 		return nil
 	}
 	for _, l := range cart.Lines {
-		fmt.Printf("  %s — %s × %s€ = %s€\n", l.ProductID, fmtQty(l.Quantity), l.FinalPrice.Amount, l.TotalPrices.FinalPrice.Amount)
+		fmt.Printf("  %s — %s × %s€ = %s€\n", terminalText(l.ProductID), fmtQty(l.Quantity), terminalText(l.FinalPrice.Amount), terminalText(l.TotalPrices.FinalPrice.Amount))
 	}
 	if cart.Total.Amount != "" {
-		fmt.Printf("  total: %s€\n", cart.Total.Amount)
+		fmt.Printf("  total: %s€\n", terminalText(cart.Total.Amount))
 	}
 	return nil
 }
@@ -130,7 +130,7 @@ func cartWrite(args []string, set bool) error {
 	if done, err := emitStructured(cf, cart.Raw); done {
 		return err
 	}
-	fmt.Printf("ok — %s [%s] %s (Δ%+g) — %s\n", verb, retailerID, fmtQty(qty), delta, pd.Name)
+	fmt.Printf("ok — %s [%s] %s (Δ%+g) — %s\n", verb, terminalText(retailerID), fmtQty(qty), delta, terminalText(pd.Name))
 	return nil
 }
 

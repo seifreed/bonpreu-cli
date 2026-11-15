@@ -105,7 +105,7 @@ func run(args []string) int {
 			attrs = append(attrs, "error_type", fmt.Sprintf("%T", err))
 		}
 		defaultLogger().Error("command failed", attrs...)
-		fmt.Fprintln(os.Stderr, "error:", err)
+		fmt.Fprintln(os.Stderr, "error:", terminalText(err.Error()))
 		return 1
 	}
 	defaultLogger().Info("command completed",

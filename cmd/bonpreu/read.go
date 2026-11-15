@@ -204,7 +204,7 @@ func cmdBatch(args []string) error {
 	}
 	for _, h := range out {
 		if h.Product == nil {
-			fmt.Printf("• %-*s → (sense resultats)\n", w, h.Term)
+			fmt.Printf("• %-*s → (sense resultats)\n", w, terminalText(h.Term))
 			continue
 		}
 		line := productLine(*h.Product)
@@ -214,7 +214,7 @@ func cmdBatch(args []string) error {
 		if h.Offer == "multibuy" {
 			line += "  💡 oferta: aprofitable per quantitat"
 		}
-		fmt.Printf("• %-*s → %s\n", w, h.Term, line)
+		fmt.Printf("• %-*s → %s\n", w, terminalText(h.Term), line)
 	}
 	if missing > 0 {
 		return fmt.Errorf("%d of %d terms returned no product", missing, len(terms))
@@ -338,10 +338,10 @@ func cmdTotal(args []string) error {
 	}
 	for _, r := range results {
 		if r.Error != "" {
-			fmt.Printf("  [%s] %s  ERROR: %s\n", r.ID, firstNonEmpty(r.Name, "?"), r.Error)
+			fmt.Printf("  [%s] %s  ERROR: %s\n", terminalText(r.ID), terminalText(firstNonEmpty(r.Name, "?")), terminalText(r.Error))
 			continue
 		}
-		fmt.Printf("  [%s] %s — %s × %s€ = %s€\n", r.ID, r.Name, fmtQty(r.Qty), r.Price, r.Subtotal)
+		fmt.Printf("  [%s] %s — %s × %s€ = %s€\n", terminalText(r.ID), terminalText(r.Name), fmtQty(r.Qty), terminalText(r.Price), terminalText(r.Subtotal))
 	}
 	fmt.Printf("  total: %s€  (%s)\n", centsStr(totalCents), plural(len(lines), "línia", "línies"))
 	if failed > 0 {
@@ -366,9 +366,9 @@ func cmdProduct(args []string) error {
 	if done, err := emitStructured(cf, pd); done {
 		return err
 	}
-	fmt.Printf("[%s] %s\n", pd.RetailerProductID, pd.Name)
+	fmt.Printf("[%s] %s\n", terminalText(pd.RetailerProductID), terminalText(pd.Name))
 	if pd.Brand != "" {
-		fmt.Printf("  marca: %s\n", pd.Brand)
+		fmt.Printf("  marca: %s\n", terminalText(pd.Brand))
 	}
 	fmt.Printf("  preu: %s", money(pd.Price))
 	if pd.UnitPrice.Price.Amount != "" {
@@ -376,19 +376,19 @@ func cmdProduct(args []string) error {
 	}
 	fmt.Println()
 	if pd.PackSizeDescription != "" {
-		fmt.Printf("  format: %s\n", pd.PackSizeDescription)
+		fmt.Printf("  format: %s\n", terminalText(pd.PackSizeDescription))
 	}
 	for _, pr := range pd.Promotions {
 		if pr.Description != "" {
-			fmt.Printf("  oferta: %s\n", pr.Description)
+			fmt.Printf("  oferta: %s\n", terminalText(pr.Description))
 		}
 	}
-	fmt.Printf("  url: %s/products/%s\n", cl.BaseURL, pd.RetailerProductID)
+	fmt.Printf("  url: %s/products/%s\n", terminalText(cl.BaseURL), terminalText(pd.RetailerProductID))
 	for _, d := range pd.Details {
-		fmt.Printf("  %s:\n", d.Title)
+		fmt.Printf("  %s:\n", terminalText(d.Title))
 		for _, ln := range strings.Split(d.Content, "\n") {
 			if s := strings.TrimSpace(ln); s != "" {
-				fmt.Printf("    %s\n", s)
+				fmt.Printf("    %s\n", terminalText(s))
 			}
 		}
 	}
@@ -439,7 +439,7 @@ func cmdCategories(args []string) error {
 func printCats(cats []client.Category, indent int) {
 	pad := strings.Repeat("  ", indent)
 	for _, c := range cats {
-		fmt.Printf("%s%s  %s\n", pad, c.RetailerCategoryID, c.Name)
+		fmt.Printf("%s%s  %s\n", pad, terminalText(c.RetailerCategoryID), terminalText(c.Name))
 		printCats(c.ChildCategories, indent+1)
 	}
 }
