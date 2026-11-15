@@ -48,7 +48,7 @@ func (c *Client) Product(retailerProductID string) (*ProductDetail, error) {
 	if err := json.Unmarshal(b, &pd.Product); err != nil {
 		return nil, fmt.Errorf("decode product %s: %w", retailerProductID, err)
 	}
-	pd.Details = collectDetails(html)
+	pd.Details = collectDetails(html, retailerProductID)
 	return &pd, nil
 }
 
@@ -74,27 +74,53 @@ func findProductNode(html, id string) map[string]any {
 	return best
 }
 
-// collectDetails gathers every {title, content} info block on the page, in order,
-// de-duplicated by title. These hold ingredients / nutrition / allergens text.
-func collectDetails(html string) []Detail {
+// collectDetails gathers {title, content} blocks from state containing the selected
+// product, skipping nested data for other products. These hold ingredients / nutrition / allergens.
+func collectDetails(html, productID string) []Detail {
 	var out []Detail
 	seen := map[string]bool{}
-	for _, blob := range embeddedStates(html) {
-		walkMaps(blob, func(m map[string]any) {
-			t, okT := m["title"].(string)
-			ct, okC := m["content"].(string)
-			if t == "brand" { // already shown as the product's marca
-				return
+	appendDetail := func(m map[string]any) {
+		t, okT := m["title"].(string)
+		ct, okC := m["content"].(string)
+		if t == "brand" { // already shown as the product's marca
+			return
+		}
+		if okT && okC && t != "" && !seen[t] {
+			if content := stripHTML(ct); content != "" { // skip blocks that strip to nothing
+				seen[t] = true
+				out = append(out, Detail{Title: t, Content: content})
 			}
-			if okT && okC && t != "" && !seen[t] {
-				if content := stripHTML(ct); content != "" { // skip blocks that strip to nothing
-					seen[t] = true
-					out = append(out, Detail{Title: t, Content: content})
-				}
+		}
+	}
+	for _, blob := range embeddedStates(html) {
+		containsProduct := false
+		walkMaps(blob, func(m map[string]any) {
+			if id, _ := m["retailerProductId"].(string); id == productID {
+				containsProduct = true
 			}
 		})
+		if containsProduct {
+			walkProductTree(blob, productID, appendDetail)
+		}
 	}
 	return out
+}
+
+func walkProductTree(v any, productID string, fn func(map[string]any)) {
+	switch x := v.(type) {
+	case map[string]any:
+		if id, ok := x["retailerProductId"].(string); ok && id != productID {
+			return
+		}
+		fn(x)
+		for _, child := range x {
+			walkProductTree(child, productID, fn)
+		}
+	case []any:
+		for _, child := range x {
+			walkProductTree(child, productID, fn)
+		}
+	}
 }
 
 // appendJSON parses s and appends the decoded value to dst, skipping s when it

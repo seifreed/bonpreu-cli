@@ -35,8 +35,7 @@ func FuzzScrapePipeline(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(_ *testing.T, html string) {
-		_ = findProductNode(html, "1")
-		_ = collectDetails(html)
+		_ = collectDetails(html, "1")
 	})
 }
 

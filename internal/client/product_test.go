@@ -32,7 +32,7 @@ func TestFindProductNode(t *testing.T) {
 }
 
 func TestCollectDetails(t *testing.T) {
-	ds := collectDetails(fixturePage)
+	ds := collectDetails(fixturePage, "49637")
 	if len(ds) != 1 {
 		t.Fatalf("got %d details, want 1 (brand dropped)", len(ds))
 	}
@@ -99,6 +99,21 @@ func TestProductFromNestedData(t *testing.T) {
 	pd, err := testClient(srv).Product("5")
 	if err != nil || pd.Name != "Iogurt" {
 		t.Fatalf("nested-data product = %+v, err %v", pd, err)
+	}
+}
+
+func TestProductDetailsAreScopedToRequestedProduct(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<html><script>window.__INITIAL_STATE__={"product":{"retailerProductId":"5","name":"Iogurt","details":[{"title":"ingredients","content":"llet"}]},"recommendations":[{"retailerProductId":"6","name":"Cereals","details":[{"title":"nutrition","content":"unrelated data"}]}]}</script></html>`))
+	}))
+	defer srv.Close()
+
+	pd, err := testClient(srv).Product("5")
+	if err != nil {
+		t.Fatalf("Product: %v", err)
+	}
+	if len(pd.Details) != 1 || pd.Details[0].Title != "ingredients" || pd.Details[0].Content != "llet" {
+		t.Fatalf("product details = %+v; want only the requested product's details", pd.Details)
 	}
 }
 
