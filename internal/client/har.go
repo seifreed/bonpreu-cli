@@ -58,7 +58,7 @@ func ParseHAR(data []byte) (HARSession, error) {
 	}
 
 	var s HARSession
-	var sawBonpreuReq, sawCookieHeader bool
+	var sawBonpreuReq, sawCookieHeader, sawInsecureCookie bool
 	for _, e := range har.Log.Entries {
 		// Match on the parsed host, not a substring of the raw URL: otherwise a
 		// foreign request that merely mentions the domain in its path/query would be
@@ -68,6 +68,17 @@ func ParseHAR(data []byte) (HARSession, error) {
 			continue
 		}
 		sawBonpreuReq = true
+		if !strings.EqualFold(u.Scheme, "https") {
+			for _, h := range e.Request.Headers {
+				if strings.EqualFold(h.Name, "cookie") {
+					sawCookieHeader = true
+					if CookieLooksAuthed(h.Value) {
+						sawInsecureCookie = true
+					}
+				}
+			}
+			continue
+		}
 		var requestRegion string
 		ambiguousRegion := false
 		for k, vs := range u.Query() {
@@ -105,6 +116,9 @@ func ParseHAR(data []byte) (HARSession, error) {
 	}
 
 	if s.Cookie == "" {
+		if sawInsecureCookie {
+			return s, fmt.Errorf("refusing to import an authenticated cookie captured over a non-HTTPS request; export a HAR from the HTTPS Bonpreu site")
+		}
 		return s, harNoCookieErr(sawBonpreuReq, sawCookieHeader)
 	}
 	return s, nil

@@ -63,6 +63,24 @@ func TestParseHARDoesNotReuseRegionFromOlderAuthenticatedRequest(t *testing.T) {
 	}
 }
 
+func TestParseHARRejectsCookiesCapturedOverHTTP(t *testing.T) {
+	har := `{"log":{"entries":[{"request":{"url":"http://compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=INSECURE; aws-waf-token=INSECURE"}]}}]}}`
+	if _, err := ParseHAR([]byte(har)); err == nil || !strings.Contains(err.Error(), "HTTPS") {
+		t.Fatalf("HTTP cookie import error = %v; want HTTPS requirement", err)
+	}
+}
+
+func TestParseHARIgnoresInsecureCookieWhenHTTPSSessionExists(t *testing.T) {
+	har := `{"log":{"entries":[` +
+		`{"request":{"url":"https://compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=SECURE; aws-waf-token=SECURE"}]}},` +
+		`{"request":{"url":"http://compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=INSECURE; aws-waf-token=INSECURE"}]}}` +
+		`]}}`
+	s, err := ParseHAR([]byte(har))
+	if err != nil || s.Cookie != "global_sid=SECURE; aws-waf-token=SECURE" {
+		t.Fatalf("ParseHAR = %+v, %v; want HTTPS session", s, err)
+	}
+}
+
 func TestParseHARNoSession(t *testing.T) {
 	anon := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/","headers":[{"name":"Cookie","value":"VISITORID=abc"}]}}]}}`
 	if _, err := ParseHAR([]byte(anon)); err == nil {
