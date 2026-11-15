@@ -153,6 +153,16 @@ func TestRankByUnitSkipsSponsored(t *testing.T) {
 	}
 }
 
+func TestRankByUnitSkipsInvalidUnitPrice(t *testing.T) {
+	p := client.Product{
+		Available: true,
+		UnitPrice: client.UnitPrice{Price: client.Money{Amount: "not-a-price"}, Unit: "fop.price.per.kg"},
+	}
+	if _, _, ok := unitPriceAmount(p); ok {
+		t.Fatal("invalid unit price must not be comparable")
+	}
+}
+
 func TestRankByUnitSkipsUnavailableProducts(t *testing.T) {
 	perKg := func(amount string) client.UnitPrice {
 		return client.UnitPrice{Price: client.Money{Amount: amount}, Unit: "fop.price.per.kg", UnitName: "PER_1KG"}
