@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -56,11 +57,56 @@ func TestCmdBrandsSnapshotAndUpdate(t *testing.T) {
 	if err != nil || !strings.Contains(out, "BONPREU") {
 		t.Fatalf("shipped snapshot output = %q, err %v", out, err)
 	}
+	out, err = captureFile(t, func() error { return cmdBrands([]string{"--csv"}) })
+	if err != nil || !strings.HasPrefix(out, "brand,count\n") || !strings.Contains(out, "BONPREU,") {
+		t.Fatalf("shipped CSV output = %q, err %v", out[:min(120, len(out))], err)
+	}
+	out, err = captureFile(t, func() error { return cmdBrands(nil) })
+	if err != nil || !strings.Contains(out, "BONPREU") {
+		t.Fatalf("human table output = %q, err %v", out[:min(120, len(out))], err)
+	}
 	out, err = captureFile(t, func() error {
 		return cmdBrands([]string{"--update", "--json", "--depth", "2", "--limit", "10"})
 	})
 	if err != nil || !strings.Contains(out, `"Marca A"`) || !strings.Contains(out, `"count": 2`) {
 		t.Fatalf("updated brands = %q, err %v", out, err)
+	}
+}
+
+func TestCrawlBrandsEmptyCategoryTree(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[{"name":"missing id"}]`))
+	}))
+	defer srv.Close()
+	_, err := crawlBrands(testCartClient(srv), 1, 10)
+	if err == nil || !strings.Contains(err.Error(), "no categories found") {
+		t.Fatalf("crawlBrands error = %v, want empty-category error", err)
+	}
+}
+
+func TestCrawlBrandsSkipsCategoryFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/v1/categories") {
+			_, _ = w.Write([]byte(`[{"retailerCategoryId":"0301"}]`))
+			return
+		}
+		http.Error(w, "remote details are not logged", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	old := stderrWarnf
+	var warnings []string
+	stderrWarnf = func(event, format string, args ...any) {
+		warnings = append(warnings, event+" "+fmt.Sprintf(format, args...))
+	}
+	defer func() { stderrWarnf = old }()
+
+	got, err := crawlBrands(testCartClient(srv), 1, 10)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("crawlBrands = %v, %v; want empty result without abort", got, err)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "catalog.category.skipped") || strings.Contains(warnings[0], "remote details") {
+		t.Fatalf("expected one safe category warning, got %q", warnings)
 	}
 }
 
