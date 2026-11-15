@@ -170,7 +170,10 @@ type Category struct {
 
 // Categories returns the category tree to the given depth (1 = top level).
 func (c *Client) Categories(depth int) ([]Category, error) {
-	if depth <= 0 {
+	if depth < 0 {
+		return nil, fmt.Errorf("category depth must be non-negative, got %d", depth)
+	}
+	if depth == 0 {
 		depth = 1
 	}
 	var cats []Category

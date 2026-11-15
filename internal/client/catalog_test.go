@@ -127,6 +127,21 @@ func TestCategories(t *testing.T) {
 	}
 }
 
+func TestCategoriesRejectsNegativeDepthBeforeNetwork(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+	if _, err := testClient(srv).Categories(-1); err == nil {
+		t.Fatal("negative category depth should fail")
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("negative category depth made %d network requests, want none", got)
+	}
+}
+
 func TestSponsored(t *testing.T) {
 	if !(Product{ExternalAdvertID: "ad"}).Sponsored() {
 		t.Error("ad product should be sponsored")
