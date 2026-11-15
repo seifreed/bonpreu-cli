@@ -47,7 +47,7 @@ func checkoutBrowser(args []string) error {
 		return err
 	}
 	stderrInfo("checkout.browser.closed", "official checkout browser closed; purchase status was not verified", "operation", cf.operation)
-	if done, err := emitStructured(cf, map[string]any{"browser_closed": true, "order_placed": false}); done {
+	if done, err := emitStructured(cf, map[string]any{"browser_closed": true, "order_placed": nil}); done {
 		return err
 	}
 	fmt.Println("navegador cerrado; el CLI no ha confirmado si se realizó la compra")

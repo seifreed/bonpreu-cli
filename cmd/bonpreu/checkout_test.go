@@ -43,7 +43,7 @@ func TestCheckoutBrowserUsesAuthenticatedSessionAndReportsHandoffOnly(t *testing
 	t.Cleanup(func() { stderrInfo = oldInfo })
 
 	out, err := capture(t, func() error { return cmdCheckout([]string{"browser", "--json"}) })
-	if err != nil || !strings.Contains(out, `"browser_closed": true`) || !strings.Contains(out, `"order_placed": false`) {
+	if err != nil || !strings.Contains(out, `"browser_closed": true`) || !strings.Contains(out, `"order_placed": null`) {
 		t.Fatalf("checkout browser output = %q, err %v", out, err)
 	}
 	if len(events) != 2 || events[0] != "checkout.browser.started" || events[1] != "checkout.browser.closed" {
