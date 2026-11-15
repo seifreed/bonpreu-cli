@@ -189,13 +189,19 @@ func TestCartAddDoesNotCheckoutOrPlaceOrder(t *testing.T) {
 }
 
 func TestCartAddSurfacesOutputFailureAfterCartWrite(t *testing.T) {
-	var cartWrites atomic.Int32
+	var cartWrites, cartReads atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/products/23597":
 			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
 		case "/":
 			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active":
+			if cartReads.Add(1)%2 == 1 {
+				_, _ = w.Write([]byte(`{"items":[]}`))
+			} else {
+				_, _ = w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":1}]}`))
+			}
 		case "/api/cart/v1/carts/active/apply-quantity":
 			cartWrites.Add(1)
 			_, _ = w.Write([]byte(`{"items":[]}`))
@@ -234,6 +240,8 @@ func TestCartAddReportsServerQuantityLimit(t *testing.T) {
 			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
 		case "/":
 			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active":
+			_, _ = w.Write([]byte(`{"items":[]}`))
 		case "/api/cart/v1/carts/active/apply-quantity":
 			cartWrites.Add(1)
 			_, _ = w.Write([]byte(`{"limitedItems":[{"productId":"uuid-23597","reason":"EXCEEDED_MAX_QUANTITY_SINGLE","expectedAmount":2,"actualAmount":1}]}`))
@@ -301,6 +309,39 @@ func TestCartUpdateLimitErrorReportsUnavailableProduct(t *testing.T) {
 	}
 	if err := cartUpdateLimitError(json.RawMessage(`{"unavailableData":[{"productId":"other","reason":"OUT_OF_STOCK"}]}`), "uuid-23597"); err != nil {
 		t.Fatalf("unavailable data for another product should not fail update: %v", err)
+	}
+}
+
+func TestCartAddVerifiesServerAppliedQuantityWithoutBudget(t *testing.T) {
+	var cartReads, cartWrites atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/products/23597":
+			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case "/":
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active":
+			cartReads.Add(1)
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		case "/api/cart/v1/carts/active/apply-quantity":
+			cartWrites.Add(1)
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	out, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1"}) })
+	if err == nil || !strings.Contains(err.Error(), "resulting quantity is 0") || strings.Contains(out, "ok — add") {
+		t.Fatalf("cart add output=%q error=%v; want an unverified no-op error", out, err)
+	}
+	if got := cartReads.Load(); got != 2 {
+		t.Fatalf("cart reads = %d, want preflight and post-write verification", got)
+	}
+	if got := cartWrites.Load(); got != 1 {
+		t.Fatalf("cart writes = %d, want one cart-only mutation", got)
 	}
 }
 
@@ -776,7 +817,7 @@ func TestCartSetFractionalNoopDoesNotWrite(t *testing.T) {
 }
 
 func TestCartAddJSON(t *testing.T) {
-	srv := apiServer(t)
+	srv := statefulCartServer(t, 0)
 	defer srv.Close()
 	useServer(t, srv, true)
 	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1", "--json"}) }); err != nil {
@@ -961,8 +1002,12 @@ func TestCartAddArgErrorsAndApplyError(t *testing.T) {
 			w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
 		case strings.HasPrefix(r.URL.Path, "/products/"):
 			w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"u","name":"Llet","price":{"amount":"1.69"}}}</html>`))
-		default: // apply-quantity / cart reads fail
+		case r.URL.Path == "/api/cart/v1/carts/active":
+			w.Write([]byte(`{"items":[]}`))
+		case r.URL.Path == "/api/cart/v1/carts/active/apply-quantity":
 			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
 		}
 	}))
 	defer srv.Close()
@@ -1028,7 +1073,7 @@ func TestCartAddRejectsInvalidBudgetBeforeWrite(t *testing.T) {
 }
 
 func TestCartWriteBranches(t *testing.T) {
-	srv := apiServer(t)
+	srv := statefulCartServer(t, 2)
 	defer srv.Close()
 	useServer(t, srv, true)
 	var events []string

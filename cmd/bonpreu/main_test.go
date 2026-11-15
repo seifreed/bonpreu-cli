@@ -160,6 +160,8 @@ func TestRunLogsRecoverableCartAndDeliveryOutcomesAsWarnings(t *testing.T) {
 				_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"2.00"}}}</html>`))
 			case "/":
 				_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+			case "/api/cart/v1/carts/active":
+				_, _ = w.Write([]byte(`{"items":[]}`))
 			case "/api/cart/v1/carts/active/apply-quantity":
 				cartWrites.Add(1)
 				_, _ = w.Write([]byte(`{"limitedItems":[{"productId":"uuid-23597","reason":"EXCEEDED_MAX_QUANTITY_SINGLE"}]}`))

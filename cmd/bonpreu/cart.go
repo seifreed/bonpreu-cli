@@ -155,16 +155,14 @@ func cartWrite(args []string, set bool) error {
 		if err != nil {
 			return err
 		}
-		lineQty := qty
-		if limit > 0 {
-			current, err = currentQty(cl, pd.ProductID)
-			if err != nil {
-				return fmt.Errorf("read current cart quantity: %w", err)
-			}
-			lineQty += current
+		current, err = currentQty(cl, pd.ProductID)
+		if err != nil {
+			return fmt.Errorf("read current cart quantity: %w", err)
 		}
-		if err := guardResultingLine(limit, pd, lineQty); err != nil {
-			return err
+		if limit > 0 {
+			if err := guardResultingLine(limit, pd, qty+current); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -173,7 +171,7 @@ func cartWrite(args []string, set bool) error {
 		return err
 	}
 	limitErr := cartUpdateLimitError(cart.Raw, pd.ProductID)
-	if limitErr == nil && (set || (!set && delta > 0 && limit > 0)) {
+	if limitErr == nil {
 		updatedCart, err := cl.GetCart()
 		if err != nil {
 			return fmt.Errorf("cart %s was accepted but the result could not be verified; inspect the cart before retrying: %w", verb, err)
