@@ -146,6 +146,26 @@ func TestCookiesFromStoresPreservesUnattributedDiscoveryErrors(t *testing.T) {
 	}
 }
 
+func TestCookiesFromStoresStopsWhenConsumerStops(t *testing.T) {
+	selected := &testCookieStore{browser: "chrome", cookies: cookieSequence(
+		cookieItem{browserCookie("chrome", "first", "1"), nil},
+		cookieItem{browserCookie("chrome", "second", "2"), nil},
+	)}
+	stores := kooky.CookieStoreSeq(func(yield func(kooky.CookieStore, error) bool) {
+		if !yield(selected, nil) {
+			return
+		}
+	})
+	var yielded int
+	cookiesFromStores("chrome", stores)(func(*kooky.Cookie, error) bool {
+		yielded++
+		return false
+	})
+	if yielded != 1 {
+		t.Fatalf("cookie events yielded after consumer stopped = %d; want 1", yielded)
+	}
+}
+
 func TestCookiesFromSequenceUsesOnlyCookiesApplicableToShopHome(t *testing.T) {
 	now := time.Now()
 	valid := browserCookieForDomain("chrome", "global_sid", "session", ".bonpreuesclat.cat")

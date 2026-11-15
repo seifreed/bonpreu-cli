@@ -144,10 +144,7 @@ func unitPriceAmount(p client.Product) (string, *big.Rat, bool) {
 	if unit == "" {
 		return "", nil, false
 	}
-	if _, err := priceCents(p.UnitPrice.Price.Amount); err != nil {
-		return "", nil, false
-	}
-	amount, err := ratFromDecimal(strings.TrimSpace(p.UnitPrice.Price.Amount))
+	amount, err := exactPriceAmount(p.UnitPrice.Price.Amount)
 	if err != nil {
 		return "", nil, false
 	}

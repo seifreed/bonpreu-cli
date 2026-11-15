@@ -89,6 +89,12 @@ func TestLineAmountCentsRoundsAfterMultiplyingExactUnitPrice(t *testing.T) {
 	}
 }
 
+func TestLineAmountCentsRejectsNegativeQuantity(t *testing.T) {
+	if _, err := lineAmountCents("1.00", -1); err == nil || !strings.Contains(err.Error(), "invalid price or quantity") {
+		t.Fatalf("negative quantity error = %v", err)
+	}
+}
+
 func TestCentsStr(t *testing.T) {
 	cases := map[int64]string{
 		169: "1.69", 5: "0.05", 1000: "10.00", 0: "0.00",

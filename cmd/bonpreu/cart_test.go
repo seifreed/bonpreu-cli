@@ -857,6 +857,56 @@ func TestCurrentQtyPropagatesError(t *testing.T) {
 	}
 }
 
+func TestCartSetRejectsSummedCurrentQuantityOverflowBeforeWrite(t *testing.T) {
+	var writes atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/products/"):
+			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"p","name":"Product","price":{"amount":"1.00"}}}</html>`))
+		case r.URL.Path == "/api/cart/v1/carts/active":
+			_, _ = w.Write([]byte(`{"items":[{"productId":"p","quantity":1e308},{"productId":"p","quantity":1e308}]}`))
+		case strings.Contains(r.URL.Path, "/apply-quantity"):
+			writes.Add(1)
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	if _, err := capture(t, func() error { return cmdCart([]string{"set", "23597", "1"}) }); err == nil || !strings.Contains(err.Error(), "exceeds the supported range") {
+		t.Fatalf("cart set overflow error = %v", err)
+	}
+	if got := writes.Load(); got != 0 {
+		t.Fatalf("cart set sent %d writes with an unrepresentable current quantity", got)
+	}
+}
+
+func TestCartClearRejectsSummedQuantityOverflowBeforeWrite(t *testing.T) {
+	var writes atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/cart/v1/carts/active":
+			_, _ = w.Write([]byte(`{"items":[{"productId":"p","quantity":1e308},{"productId":"p","quantity":1e308}]}`))
+		case "/api/cart/v1/carts/active/apply-quantity":
+			writes.Add(1)
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	if _, err := capture(t, func() error { return cmdCart([]string{"clear"}) }); err == nil || !strings.Contains(err.Error(), "exceeds the supported range") {
+		t.Fatalf("cart clear overflow error = %v", err)
+	}
+	if got := writes.Load(); got != 0 {
+		t.Fatalf("cart clear sent %d writes with an unrepresentable total quantity", got)
+	}
+}
+
 func TestCurrentQtyReturnsQuantity(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"cartId":"c1","items":[{"productId":"p1","quantity":4}]}`))
