@@ -122,10 +122,18 @@ func TestSaveAndVerifySurfacesOutputFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 	useServer(t, srv, false)
-	if err := withFailingStdout(t, func() error {
-		return saveAndVerify(&common{operation: "login"}, client.Session{Cookie: "global_sid=s; aws-waf-token=t"})
-	}); err == nil {
-		t.Fatal("login should report a failed success message write")
+	for _, jsonOut := range []bool{false, true} {
+		cf := &common{operation: "login", jsonOut: jsonOut}
+		err := withFailingStdout(t, func() error {
+			return saveAndVerify(cf, client.Session{Cookie: "global_sid=s; aws-waf-token=t"})
+		})
+		if err == nil || !strings.Contains(err.Error(), "session saved, but confirmation output failed") {
+			t.Fatalf("login output error = %v; want saved-session context", err)
+		}
+		got, loadErr := client.LoadSession()
+		if loadErr != nil || got.Cookie != "global_sid=s; aws-waf-token=t" {
+			t.Fatalf("session after output failure = %+v, %v; want persisted login session", got, loadErr)
+		}
 	}
 }
 

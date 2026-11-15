@@ -77,7 +77,13 @@ func saveAndVerify(cf *common, s client.Session) error {
 	}
 	stderrInfo("auth.session.verified", "saved session was accepted", "operation", cf.operation)
 	if done, err := emitStructured(cf, map[string]any{"authenticated": ok, "region": cl.RegionID}); done {
-		return err
+		if err != nil {
+			return fmt.Errorf("session saved, but confirmation output failed: %w", err)
+		}
+		return nil
 	}
-	return writeStdout("ok — authenticated (region %s)\n", terminalText(firstNonEmpty(cl.RegionID, "default")))
+	if err := writeStdout("ok — authenticated (region %s)\n", terminalText(firstNonEmpty(cl.RegionID, "default"))); err != nil {
+		return fmt.Errorf("session saved, but confirmation output failed: %w", err)
+	}
+	return nil
 }
