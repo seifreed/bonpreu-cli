@@ -140,8 +140,8 @@ can veto it. Edit and re-total until they're happy. Only then touch the cart.
 ### 4. Fill the cart (after the OK)
 
 Add each confirmed line with a spending cap. `cart add <id> <qty>` is additive; `cart set <id> <qty>`
-sets the **absolute** quantity (`0` removes). `--max` is a **per-line** cap, not a basket total — it
-refuses a single line over the ceiling; it does not stop the running sum:
+sets the **absolute** quantity (`0` removes). `--max` is a **per-line** cap, not a basket total — for
+`add` it includes the quantity already in that product line, but it does not stop the running sum:
 
 ```bash
 bonpreu cart add 23597 1 --max 60

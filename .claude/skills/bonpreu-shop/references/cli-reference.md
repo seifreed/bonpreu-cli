@@ -105,7 +105,8 @@ Cart total is at `totals.itemPriceAfterPromos.amount`.
 
 ## Spending guard
 
-`--max <eur>` on any cart write refuses a line over the cap (also `BONPREU_MAX_EUR` env, or
+`--max <eur>` on any cart write refuses a resulting product line over the cap, including its existing
+quantity (also `BONPREU_MAX_EUR` env, or
 `[limits] max_eur` in `~/.bonpreu/config.toml`; precedence flag > env > config; `0`/unset = no limit).
 
 ## Notes

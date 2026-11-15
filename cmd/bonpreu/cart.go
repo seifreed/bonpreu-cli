@@ -85,7 +85,7 @@ func cartWrite(args []string, set bool) error {
 		verb = "set"
 	}
 	fs, cf := newCommonFlags("cart write")
-	maxEUR := fs.Float64("max", 0, "refuse if the added line would exceed this many €")
+	maxEUR := fs.Float64("max", 0, "refuse if the resulting product line would exceed this many €")
 	parseFlags(fs, args)
 	maxSet := false
 	fs.Visit(func(f *flag.Flag) {
@@ -127,7 +127,19 @@ func cartWrite(args []string, set bool) error {
 		}
 	}
 	if delta > 0 {
-		if err := guardLineAdd(*maxEUR, maxSet, pd, delta); err != nil {
+		limit, err := resolveMax(*maxEUR, maxSet)
+		if err != nil {
+			return err
+		}
+		lineQty := qty
+		if !set && limit > 0 {
+			current, err := currentQty(cl, pd.ProductID)
+			if err != nil {
+				return fmt.Errorf("read current cart quantity: %w", err)
+			}
+			lineQty += current
+		}
+		if err := guardLineAdd(limit, pd, lineQty); err != nil {
 			return err
 		}
 	}
@@ -190,18 +202,14 @@ func currentQty(cl *client.Client, productID string) (float64, error) {
 	return 0, nil
 }
 
-// guardLineAdd enforces --max against the price of the quantity being added.
-func guardLineAdd(flagMax float64, flagSet bool, pd *client.ProductDetail, qty float64) error {
-	maxEUR, err := resolveMax(flagMax, flagSet)
-	if err != nil {
-		return err
-	}
+// guardLineAdd enforces --max against the resulting product-line value.
+func guardLineAdd(maxEUR float64, pd *client.ProductDetail, qty float64) error {
 	if maxEUR == 0 {
 		return nil
 	}
-	cents, perr := priceCents(pd.Price.Amount)
-	if perr != nil {
-		return fmt.Errorf("cannot enforce spending limit for an unpriceable cart line: %w", perr)
+	cents, err := priceCents(pd.Price.Amount)
+	if err != nil {
+		return fmt.Errorf("cannot enforce spending limit for an unpriceable cart line: %w", err)
 	}
 	lineCents, err := lineCents(cents, qty)
 	if err != nil {

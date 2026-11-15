@@ -211,7 +211,7 @@ Cart writes resolve the short retailer id to the API's product UUID, then `POST 
 
 | Option | Description |
 |--------|-------------|
-| `--max <eur>` | Refuse a cart line over the cap, before writing |
+| `--max <eur>` | Refuse a resulting product line over the cap, before writing; existing quantity counts |
 | `BONPREU_MAX_EUR` | Same cap via environment variable |
 | `[limits] max_eur` | Same cap in `~/.bonpreu/config.toml` (precedence: flag > env > config) |
 

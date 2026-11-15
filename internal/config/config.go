@@ -39,7 +39,7 @@ type Config struct {
 		PostalCode string `toml:"postal_code"` // human-meaningful source; region is derived from it
 	} `toml:"defaults"`
 	Limits struct {
-		MaxEUR float64 `toml:"max_eur"` // refuse carts/checkouts over this total (0 = no limit)
+		MaxEUR float64 `toml:"max_eur"` // maximum value of one resulting cart line (0 = no limit)
 	} `toml:"limits"`
 	Brands Brands `toml:"brands"`
 	Offers struct {

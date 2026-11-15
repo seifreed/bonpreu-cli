@@ -17,7 +17,7 @@ func TestGuardLineAddRejectsUnpriceableWhenLimitSet(t *testing.T) {
 	pd.Name = "Mystery item"
 	pd.Price.Amount = "" // unparseable → priceCents fails
 
-	if err := guardLineAdd(50, true, pd, 2); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
+	if err := guardLineAdd(50, pd, 2); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
 		t.Fatalf("unpriceable line must fail closed when --max is set, got %v", err)
 	}
 }
@@ -25,7 +25,7 @@ func TestGuardLineAddRejectsUnpriceableWhenLimitSet(t *testing.T) {
 func TestGuardLineAddRejectsOverflowWhenLimitSet(t *testing.T) {
 	pd := &client.ProductDetail{}
 	pd.Price.Amount = "1.00"
-	if err := guardLineAdd(50, true, pd, 1e300); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
+	if err := guardLineAdd(50, pd, 1e300); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
 		t.Fatalf("unrepresentable line subtotal must fail closed, got %v", err)
 	}
 }
@@ -36,7 +36,7 @@ func TestGuardLineAddSilentWithoutLimit(t *testing.T) {
 
 	pd := &client.ProductDetail{}
 	pd.Name = "Mystery item"
-	if err := guardLineAdd(0, true, pd, 2); err != nil { // no limit set
+	if err := guardLineAdd(0, pd, 2); err != nil { // no limit set
 		t.Fatalf("no limit: %v", err)
 	}
 }
@@ -58,6 +58,10 @@ func TestCartAddDoesNotWriteWhenLimitCannotBeEnforced(t *testing.T) {
 			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Mystery item","price":{"amount":"NaN"}}}</html>`))
 			return
 		}
+		if strings.Contains(r.URL.Path, "/cart/v1/carts/active") {
+			_, _ = w.Write([]byte(`{"items":[]}`))
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
@@ -68,6 +72,68 @@ func TestCartAddDoesNotWriteWhenLimitCannotBeEnforced(t *testing.T) {
 	}
 	if cartWrite {
 		t.Fatal("cart add wrote despite an active limit and unknown product price")
+	}
+}
+
+func TestCartWriteLimitAppliesToResultingLine(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "add", args: []string{"add", "23597", "1", "--max", "5"}},
+		{name: "set", args: []string{"set", "23597", "3", "--max", "5"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var writes atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case strings.HasPrefix(r.URL.Path, "/products/"):
+					w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+				case strings.Contains(r.URL.Path, "/cart/v1/carts/active"):
+					w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":2}]}`))
+				case strings.Contains(r.URL.Path, "/apply-quantity"):
+					writes.Add(1)
+					w.Write([]byte(`{"items":[]}`))
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer srv.Close()
+			useServer(t, srv, true)
+
+			if _, err := capture(t, func() error { return cmdCart(tc.args) }); err == nil || !strings.Contains(err.Error(), "BUDGET EXCEEDED") {
+				t.Fatalf("cart %s error = %v, want resulting line over limit", tc.name, err)
+			}
+			if got := writes.Load(); got != 0 {
+				t.Fatalf("cart %s sent %d writes despite resulting line exceeding limit", tc.name, got)
+			}
+		})
+	}
+}
+
+func TestCartAddLimitFailsClosedWhenCurrentCartCannotBeRead(t *testing.T) {
+	var writes atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/products/"):
+			w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case strings.Contains(r.URL.Path, "/cart/v1/carts/active"):
+			w.WriteHeader(http.StatusInternalServerError)
+		case strings.Contains(r.URL.Path, "/apply-quantity"):
+			writes.Add(1)
+			w.Write([]byte(`{"items":[]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1", "--max", "5"}) }); err == nil || !strings.Contains(err.Error(), "read current cart quantity") {
+		t.Fatalf("cart add error = %v, want current-cart read error", err)
+	}
+	if got := writes.Load(); got != 0 {
+		t.Fatalf("cart add sent %d writes when the line limit could not be checked", got)
 	}
 }
 
@@ -221,17 +287,26 @@ func TestCartMutationsRejectSurplusArgumentsBeforeRequests(t *testing.T) {
 	}
 }
 
-func TestGuardResolveMaxErrorOnAdd(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("BONPREU_CONFIG_DIR", dir)
-	t.Setenv("BONPREU_MAX_EUR", "")
-	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("bad = ["), 0o600); err != nil {
-		t.Fatal(err)
+func TestCartAddRejectsInvalidBudgetBeforeWrite(t *testing.T) {
+	var writes atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/products/") {
+			w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+			return
+		}
+		if strings.Contains(r.URL.Path, "/apply-quantity") {
+			writes.Add(1)
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+	t.Setenv("BONPREU_MAX_EUR", "not-a-number")
+	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1"}) }); err == nil || !strings.Contains(err.Error(), "invalid BONPREU_MAX_EUR") {
+		t.Errorf("cart add error = %v, want invalid spending-limit error", err)
 	}
-	pd := &client.ProductDetail{}
-	pd.Price.Amount = "1.69"
-	if err := guardLineAdd(0, false, pd, 1); err == nil {
-		t.Error("a malformed config should fail the spending-guard resolution")
+	if got := writes.Load(); got != 0 {
+		t.Fatalf("cart add sent %d writes despite an invalid spending limit", got)
 	}
 }
 
