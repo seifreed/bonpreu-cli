@@ -1,7 +1,7 @@
 package client
 
 import (
-	"fmt"
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,10 +17,13 @@ func loadAuthLogs(t *testing.T, writeSession []byte) []string {
 			t.Fatal(err)
 		}
 	}
-	var logs []string
-	c := &Client{Logf: func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }}
+	var logs bytes.Buffer
+	c := &Client{Logger: testLogger(&logs)}
 	c.LoadAuth()
-	return logs
+	if logs.Len() == 0 {
+		return nil
+	}
+	return strings.Split(strings.TrimSpace(logs.String()), "\n")
 }
 
 func TestLoadAuthWarnsOnCorruptSession(t *testing.T) {
@@ -38,35 +41,29 @@ func TestLoadAuthSilentWhenNoSession(t *testing.T) {
 
 func TestLoadAuthWarnsOnForeignBaseURL(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
-	var logs []string
+	var logs bytes.Buffer
 	c := &Client{
 		BaseURL: "https://evil.example",
-		Logf:    func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) },
+		Logger:  testLogger(&logs),
 	}
 	c.Cookie = "global_sid=x; aws-waf-token=y"
 	c.LoadAuth() // BaseURL stays foreign; cookie already set → must warn
 	var warned bool
-	for _, l := range logs {
-		if strings.Contains(l, "non-Bonpreu host") {
-			warned = true
-		}
-	}
+	warned = strings.Contains(logs.String(), "security.cookie_external_host")
 	if !warned {
-		t.Errorf("expected a foreign-host cookie warning, got %v", logs)
+		t.Errorf("expected a foreign-host cookie warning, got %q", logs.String())
 	}
 
 	// A real Bonpreu BaseURL must NOT warn.
-	logs = nil
+	logs.Reset()
 	c2 := &Client{
 		BaseURL: BaseURL,
-		Logf:    func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) },
+		Logger:  testLogger(&logs),
 	}
 	c2.Cookie = "global_sid=x; aws-waf-token=y"
 	c2.LoadAuth()
-	for _, l := range logs {
-		if strings.Contains(l, "non-Bonpreu host") {
-			t.Errorf("Bonpreu BaseURL must not warn, got %v", logs)
-		}
+	if strings.Contains(logs.String(), "security.cookie_external_host") {
+		t.Errorf("Bonpreu BaseURL must not warn, got %q", logs.String())
 	}
 }
 

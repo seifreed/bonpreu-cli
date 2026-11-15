@@ -1,10 +1,12 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,10 +66,10 @@ func TestChromeSpecFailureSeam(t *testing.T) {
 	defer srv.Close()
 	c.BaseURL = srv.URL
 	c.HTTP = srv.Client()
-	var logs []string
-	c.Logf = func(f string, _ ...any) { logs = append(logs, f) }
+	var logs bytes.Buffer
+	c.Logger = testLogger(&logs)
 	_ = c.DoJSON("GET", srv.URL+"/x", nil, nil)
-	if len(logs) == 0 {
+	if !strings.Contains(logs.String(), "event_name=transport.fallback") {
 		t.Error("a built-in transport failure should log the stdlib fallback")
 	}
 }

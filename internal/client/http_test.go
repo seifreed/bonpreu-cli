@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -197,18 +198,18 @@ func TestRetryLogsThrottle(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	var logs []string
+	var logs bytes.Buffer
 	cl := testClient(srv)
-	cl.Logf = func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }
+	cl.Logger = testLogger(&logs)
 
 	if err := cl.DoJSON("GET", srv.URL+"/x", nil, nil); err != nil {
 		t.Fatalf("DoJSON: %v", err)
 	}
-	if len(logs) != 1 {
-		t.Fatalf("expected exactly one throttle log, got %d: %v", len(logs), logs)
+	if strings.Count(logs.String(), "event_name=http.retry") != 1 {
+		t.Fatalf("expected exactly one throttle event, got %q", logs.String())
 	}
-	if !strings.Contains(logs[0], "throttled") || !strings.Contains(logs[0], "503") {
-		t.Errorf("log missing throttle/status: %q", logs[0])
+	if !strings.Contains(logs.String(), "retry scheduled") || !strings.Contains(logs.String(), "http.response.status_code=503") {
+		t.Errorf("event missing throttle/status: %q", logs.String())
 	}
 }
 
@@ -217,14 +218,14 @@ func TestNoLogWhenNotThrottled(t *testing.T) {
 		w.Write([]byte(`{"ok":true}`))
 	}))
 	defer srv.Close()
-	var logs []string
+	var logs bytes.Buffer
 	cl := testClient(srv)
-	cl.Logf = func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }
+	cl.Logger = testLogger(&logs)
 	if err := cl.DoJSON("GET", srv.URL+"/x", nil, nil); err != nil {
 		t.Fatalf("DoJSON: %v", err)
 	}
-	if len(logs) != 0 {
-		t.Errorf("expected no logs on success, got %v", logs)
+	if logs.Len() != 0 {
+		t.Errorf("expected no logs on success, got %q", logs.String())
 	}
 }
 
@@ -234,21 +235,21 @@ func TestTransportFallbackLogsOnce(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	var logs []string
+	var logs bytes.Buffer
 	cl := testClient(srv)
 	cl.transportErr = errors.New("uTLS boom") // simulate the Chrome transport failing to init
-	cl.Logf = func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }
+	cl.Logger = testLogger(&logs)
 
 	for i := 0; i < 3; i++ {
 		if err := cl.DoJSON("GET", srv.URL+"/x", nil, nil); err != nil {
 			t.Fatalf("DoJSON: %v", err)
 		}
 	}
-	if len(logs) != 1 {
-		t.Fatalf("transport fallback should log exactly once across requests, got %d: %v", len(logs), logs)
+	if strings.Count(logs.String(), "event_name=transport.fallback") != 1 {
+		t.Fatalf("transport fallback should log exactly once, got %q", logs.String())
 	}
-	if !strings.Contains(logs[0], "stdlib transport") || !strings.Contains(logs[0], "uTLS boom") {
-		t.Errorf("log missing detail: %q", logs[0])
+	if !strings.Contains(logs.String(), "standard transport") || !strings.Contains(logs.String(), "error_type=") || strings.Contains(logs.String(), "uTLS boom") {
+		t.Errorf("event should identify fallback without exposing error text: %q", logs.String())
 	}
 }
 
@@ -258,9 +259,9 @@ func TestCartProjectionMismatchLogs(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	var logs []string
+	var logs bytes.Buffer
 	cl := testClient(srv)
-	cl.Logf = func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }
+	cl.Logger = testLogger(&logs)
 
 	cart, err := cl.GetCart()
 	if err != nil {
@@ -269,8 +270,8 @@ func TestCartProjectionMismatchLogs(t *testing.T) {
 	if len(cart.Lines) != 0 {
 		t.Errorf("expected empty projection, got %+v", cart.Lines)
 	}
-	if len(logs) != 1 || !strings.Contains(logs[0], "did not match") {
-		t.Fatalf("expected one shape-mismatch log, got %v", logs)
+	if strings.Count(logs.String(), "event_name=cart.response.shape_mismatch") != 1 {
+		t.Fatalf("expected one shape-mismatch event, got %q", logs.String())
 	}
 }
 

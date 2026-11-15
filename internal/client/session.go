@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 
@@ -39,7 +40,10 @@ func (c *Client) LoadAuth() bool {
 	// A corrupt cache (exists but unreadable) is distinct from "no session yet":
 	// the latter is normal, the former should not masquerade as "not authenticated".
 	if err := config.Load(sessionFile, &s); err != nil && !os.IsNotExist(err) {
-		c.logf("session cache could not be read (%v) — re-import with `bonpreu import-har`", err)
+		if c.Logger != nil {
+			c.Logger.Warn("session cache could not be read; re-import the session",
+				"event_name", "auth.session_cache.read_failed", "component", "client", "error_type", fmt.Sprintf("%T", err))
+		}
 	}
 	cfg, _ := config.LoadConfig()
 	if s.Cookie == "" {
@@ -60,8 +64,15 @@ func (c *Client) LoadAuth() bool {
 	// or a poisoned env doesn't silently exfiltrate the session. The override stays
 	// allowed (localhost proxies are a legitimate use); it's just no longer silent.
 	if c.Cookie != "" && c.BaseURL != "" {
-		if u, err := url.Parse(c.BaseURL); err != nil || !isBonpreuHost(u.Hostname()) {
-			c.logf("WARNING: session cookie will be sent to non-Bonpreu host %q (set via BONPREU_BASE_URL) — unset it unless this is a trusted debugging proxy", c.BaseURL)
+		host := ""
+		if u, err := url.Parse(c.BaseURL); err == nil {
+			host = u.Hostname()
+		}
+		if !isBonpreuHost(host) {
+			if c.Logger != nil {
+				c.Logger.Warn("session cookie targets a non-Bonpreu host",
+					"event_name", "security.cookie_external_host", "component", "client", "host", host)
+			}
 		}
 	}
 	return c.Cookie != ""

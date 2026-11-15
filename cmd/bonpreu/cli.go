@@ -15,15 +15,10 @@ import (
 	"github.com/seifreed/bonpreu-cli/internal/config"
 )
 
-// stderrLogf routes diagnostics (client retries/fallbacks, CLI-side warnings) to
-// stderr, prefixed, so they never mix with --json data on stdout. It is a var so
-// tests can capture what would be logged.
+// stderrLogf routes CLI diagnostics to stderr so they never mix with --json data
+// on stdout. It is a var so tests can capture what would be logged.
 var stderrLogf = func(format string, args ...any) {
-	defaultLogger().Info(fmt.Sprintf(format, args...), "service", "bonpreu", "component", "cli")
-}
-
-var stderrWarnf = func(format string, args ...any) {
-	defaultLogger().Warn(fmt.Sprintf(format, args...), "service", "bonpreu", "component", "client")
+	defaultLogger().Info(fmt.Sprintf(format, args...), "service", "bonpreu", "component", "cli", "event_name", "cli.diagnostic")
 }
 
 func defaultLogger() *slog.Logger {
@@ -40,7 +35,12 @@ func newLogger(w io.Writer) *slog.Logger {
 	case "error":
 		level = slog.LevelError
 	}
-	opts := &slog.HandlerOptions{Level: level}
+	opts := &slog.HandlerOptions{Level: level, ReplaceAttr: func(_ []string, attr slog.Attr) slog.Attr {
+		if attr.Key == slog.TimeKey && attr.Value.Kind() == slog.KindTime {
+			attr.Value = slog.Time(attr.Key, attr.Value.Time().UTC()).Value
+		}
+		return attr
+	}}
 	if strings.EqualFold(os.Getenv("BONPREU_LOG_FORMAT"), "json") {
 		return slog.New(slog.NewJSONHandler(w, opts))
 	}
@@ -78,7 +78,7 @@ func addCommon(fs *flag.FlagSet) *common {
 // loaded from config/cache by the authenticated commands, not here.
 func newClient(c *common) *client.Client {
 	cl := client.New()
-	cl.Logf = stderrWarnf
+	cl.Logger = defaultLogger().With("service", "bonpreu")
 	// BONPREU_BASE_URL points the client at an alternate host (a debugging proxy,
 	// a mock, or a staging endpoint) instead of the production API.
 	if u := os.Getenv("BONPREU_BASE_URL"); u != "" {

@@ -58,7 +58,10 @@ func (c *Client) activeCart() (json.RawMessage, cartShape, error) {
 	}
 	var s cartShape
 	if uerr := json.Unmarshal(raw, &s); uerr != nil {
-		c.logf("active-cart response did not match the expected shape (%v) — projecting empty; use --json for the raw body", uerr)
+		if c.Logger != nil {
+			c.Logger.Warn("active-cart response shape mismatch; returning empty projection",
+				"event_name", "cart.response.shape_mismatch", "component", "client", "error_type", fmt.Sprintf("%T", uerr))
+		}
 	}
 	return raw, s, nil
 }

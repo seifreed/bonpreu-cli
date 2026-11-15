@@ -56,6 +56,13 @@ Diagnostics use Go's standard `log/slog` and go to stderr, keeping
 `BONPREU_LOG_FORMAT=json` for structured JSON and `BONPREU_LOG_LEVEL` to
 `debug`, `info` (default), `warn`, or `error`. Remote HTTP response bodies are
 excluded from error strings because they are untrusted and may contain secrets.
+The client accepts an optional `*slog.Logger`; without one, library calls stay
+silent. Current client events include `http.retry`, `transport.fallback`,
+`auth.session_cache.read_failed`, `security.cookie_external_host`, and
+`cart.response.shape_mismatch`. Retry events carry method, status, attempt,
+maximum attempts, and wait duration; events omit request URLs, bodies, cookies,
+and raw error text. Add new diagnostics at the operation boundary with a stable
+`event_name` and only the minimum safe fields needed to diagnose the outcome.
 
 ```text
 Catalog data    Human tables, JSON (--json)

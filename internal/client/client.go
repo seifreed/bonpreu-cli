@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -43,24 +44,15 @@ type Client struct {
 	// authenticated leg (cart/checkout) and to unlock GraphQL product detail.
 	Cookie string
 
-	// Logf, when set, receives human-readable diagnostics about otherwise-silent
-	// resilience events (throttle retries, transport fallback). Diagnostics belong
-	// on stderr; nil disables them. The library never writes to os.Stderr itself —
-	// the caller routes the output (keeping the client free of process I/O).
-	Logf func(format string, args ...any)
+	// Logger receives structured diagnostics when provided. Nil disables logging;
+	// the client never writes to process output directly.
+	Logger *slog.Logger
 
 	// transportErr records why the uTLS Chrome transport could not initialise (nil
-	// when it did). New cannot log it — Logf is set by the caller afterwards — so it
+	// when it did). New cannot log it — Logger is set by the caller afterwards — so it
 	// is surfaced lazily on the first request.
 	transportErr error
 	warnOnce     sync.Once
-}
-
-// logf emits a diagnostic through the optional Logf hook (no-op when unset).
-func (c *Client) logf(format string, args ...any) {
-	if c.Logf != nil {
-		c.Logf(format, args...)
-	}
 }
 
 // New returns a Client with web-app-like defaults (anonymous, Catalan). Its HTTP
@@ -208,7 +200,12 @@ func (c *Client) doJSONHeaders(method, url string, body, out any, extra map[stri
 		}
 		wait := retryWait(err, backoff)
 		status, _ := HTTPStatus(err)
-		c.logf("throttled: HTTP %d on %s — retrying %d/%d in %s", status, url, attempt+1, maxRetries, wait.Round(time.Millisecond))
+		if c.Logger != nil {
+			c.Logger.Warn("HTTP request throttled; retry scheduled",
+				"event_name", "http.retry", "component", "client", "http.request.method", method,
+				"http.response.status_code", status, "retry.attempt", attempt+1,
+				"retry.max", maxRetries, "duration_ms", wait.Milliseconds())
+		}
 		time.Sleep(wait)
 		backoff *= 2
 	}
@@ -223,7 +220,11 @@ const maxBodyBytes = 16 << 20
 func (c *Client) do(req *http.Request) ([]byte, error) {
 	c.warnOnce.Do(func() {
 		if c.transportErr != nil {
-			c.logf("uTLS Chrome fingerprint unavailable (%v) — using the stdlib transport; requests may hit the WAF JS challenge", c.transportErr)
+			if c.Logger != nil {
+				c.Logger.Warn("Chrome TLS transport unavailable; using standard transport",
+					"event_name", "transport.fallback", "component", "client",
+					"error_type", fmt.Sprintf("%T", c.transportErr))
+			}
 		}
 	})
 	resp, err := c.HTTP.Do(req)
