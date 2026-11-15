@@ -11,8 +11,8 @@ import (
 
 // resolveMax returns the spending cap in € from (in order) the --max flag, the
 // BONPREU_MAX_EUR env var, or [limits].max_eur in config.toml. 0 = no limit.
-func resolveMax(flagMax float64) (float64, error) {
-	if flagMax != 0 {
+func resolveMax(flagMax float64, flagSet bool) (float64, error) {
+	if flagSet {
 		return validatedMax(flagMax, "--max")
 	}
 	if s := os.Getenv("BONPREU_MAX_EUR"); s != "" {

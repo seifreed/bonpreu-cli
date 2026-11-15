@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 
 	"github.com/seifreed/bonpreu-cli/internal/client"
@@ -86,6 +87,12 @@ func cartWrite(args []string, set bool) error {
 	fs, cf := newCommonFlags("cart write")
 	maxEUR := fs.Float64("max", 0, "refuse if the added line would exceed this many €")
 	parseFlags(fs, args)
+	maxSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "max" {
+			maxSet = true
+		}
+	})
 	if fs.NArg() != 2 {
 		return fmt.Errorf("usage: bonpreu cart %s <id> <qty>", verb)
 	}
@@ -117,7 +124,7 @@ func cartWrite(args []string, set bool) error {
 		}
 	}
 	if delta > 0 {
-		if err := guardLineAdd(*maxEUR, pd, delta); err != nil {
+		if err := guardLineAdd(*maxEUR, maxSet, pd, delta); err != nil {
 			return err
 		}
 	}
@@ -181,8 +188,8 @@ func currentQty(cl *client.Client, productID string) (float64, error) {
 }
 
 // guardLineAdd enforces --max against the price of the quantity being added.
-func guardLineAdd(flagMax float64, pd *client.ProductDetail, qty float64) error {
-	maxEUR, err := resolveMax(flagMax)
+func guardLineAdd(flagMax float64, flagSet bool, pd *client.ProductDetail, qty float64) error {
+	maxEUR, err := resolveMax(flagMax, flagSet)
 	if err != nil {
 		return err
 	}

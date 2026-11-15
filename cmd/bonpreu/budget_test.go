@@ -14,12 +14,15 @@ func TestResolveMaxPrecedence(t *testing.T) {
 
 	// flag wins over env.
 	t.Setenv("BONPREU_MAX_EUR", "100")
-	if v, _ := resolveMax(50); v != 50 {
+	if v, _ := resolveMax(50, true); v != 50 {
 		t.Errorf("flag should win: got %v want 50", v)
+	}
+	if v, _ := resolveMax(0, true); v != 0 {
+		t.Errorf("explicit zero flag should disable the limit: got %v want 0", v)
 	}
 
 	// env wins when no flag.
-	if v, _ := resolveMax(0); v != 100 {
+	if v, _ := resolveMax(0, false); v != 100 {
 		t.Errorf("env should win: got %v want 100", v)
 	}
 
@@ -28,23 +31,23 @@ func TestResolveMaxPrecedence(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("[limits]\nmax_eur = 30\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if v, _ := resolveMax(0); v != 30 {
+	if v, _ := resolveMax(0, false); v != 30 {
 		t.Errorf("config should be used: got %v want 30", v)
 	}
 
 	// invalid env is an error.
 	t.Setenv("BONPREU_MAX_EUR", "notanumber")
-	if _, err := resolveMax(0); err == nil {
+	if _, err := resolveMax(0, false); err == nil {
 		t.Error("invalid BONPREU_MAX_EUR should error")
 	}
 	for _, invalid := range []float64{-1, math.NaN(), math.Inf(1)} {
-		if _, err := resolveMax(invalid); err == nil {
+		if _, err := resolveMax(invalid, true); err == nil {
 			t.Errorf("invalid --max %v should error", invalid)
 		}
 	}
 	for _, invalid := range []string{"NaN", "Inf", "-1"} {
 		t.Setenv("BONPREU_MAX_EUR", invalid)
-		if _, err := resolveMax(0); err == nil {
+		if _, err := resolveMax(0, false); err == nil {
 			t.Errorf("invalid BONPREU_MAX_EUR %q should error", invalid)
 		}
 	}
@@ -77,7 +80,7 @@ func TestResolveMaxFailsOnMalformedConfig(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("not valid = toml ["), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := resolveMax(0); err == nil {
+	if _, err := resolveMax(0, false); err == nil {
 		t.Fatal("a malformed config must surface an error, not silently disable the limit")
 	}
 }

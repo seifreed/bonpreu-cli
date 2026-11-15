@@ -17,7 +17,7 @@ func TestGuardLineAddRejectsUnpriceableWhenLimitSet(t *testing.T) {
 	pd.Name = "Mystery item"
 	pd.Price.Amount = "" // unparseable → priceCents fails
 
-	if err := guardLineAdd(50, pd, 2); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
+	if err := guardLineAdd(50, true, pd, 2); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
 		t.Fatalf("unpriceable line must fail closed when --max is set, got %v", err)
 	}
 }
@@ -25,7 +25,7 @@ func TestGuardLineAddRejectsUnpriceableWhenLimitSet(t *testing.T) {
 func TestGuardLineAddRejectsOverflowWhenLimitSet(t *testing.T) {
 	pd := &client.ProductDetail{}
 	pd.Price.Amount = "1.00"
-	if err := guardLineAdd(50, pd, 1e300); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
+	if err := guardLineAdd(50, true, pd, 1e300); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
 		t.Fatalf("unrepresentable line subtotal must fail closed, got %v", err)
 	}
 }
@@ -36,7 +36,7 @@ func TestGuardLineAddSilentWithoutLimit(t *testing.T) {
 
 	pd := &client.ProductDetail{}
 	pd.Name = "Mystery item"
-	if err := guardLineAdd(0, pd, 2); err != nil { // no limit set
+	if err := guardLineAdd(0, true, pd, 2); err != nil { // no limit set
 		t.Fatalf("no limit: %v", err)
 	}
 }
@@ -205,7 +205,7 @@ func TestGuardResolveMaxErrorOnAdd(t *testing.T) {
 	}
 	pd := &client.ProductDetail{}
 	pd.Price.Amount = "1.69"
-	if err := guardLineAdd(0, pd, 1); err == nil {
+	if err := guardLineAdd(0, false, pd, 1); err == nil {
 		t.Error("a malformed config should fail the spending-guard resolution")
 	}
 }
@@ -233,6 +233,10 @@ func TestCartWriteBranches(t *testing.T) {
 	}
 	if len(events) != 2 || events[1] != "cart.quantity.changed" {
 		t.Fatalf("cart write events = %v", events)
+	}
+	t.Setenv("BONPREU_MAX_EUR", "0.10")
+	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1", "--max", "0"}) }); err != nil {
+		t.Fatalf("explicit --max 0 should disable the inherited cap: %v", err)
 	}
 	// --max exceeded: price 1.69 × 100 > 1€ → refused.
 	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "100", "--max", "1"}) }); err == nil {
