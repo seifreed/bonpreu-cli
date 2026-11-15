@@ -147,3 +147,14 @@ func TestParseHARSkipsNonBonpreu(t *testing.T) {
 		t.Fatalf("ParseHAR skipping non-bonpreu = %+v, err %v", s, err)
 	}
 }
+
+func TestParseHARIgnoresRelatedButDifferentRegionQueryKeys(t *testing.T) {
+	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x?customerRegionId=wrong-region","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
+	s, err := ParseHAR([]byte(har))
+	if err != nil {
+		t.Fatalf("ParseHAR: %v", err)
+	}
+	if s.RegionID != "" {
+		t.Fatalf("region = %q; want no region from a different query key", s.RegionID)
+	}
+}

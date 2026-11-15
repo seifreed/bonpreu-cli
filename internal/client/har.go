@@ -22,7 +22,7 @@ type HARSession struct {
 	RegionID string
 }
 
-var regionIDRE = regexp.MustCompile(`(?i)region[_-]?id`)
+var regionIDRE = regexp.MustCompile(`(?i)^region[_-]?id$`)
 
 // bonpreuHost is the registrable domain; the site is served from subdomains
 // (www.compraonline.bonpreuesclat.cat, etc.).
