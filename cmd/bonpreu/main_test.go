@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -179,13 +180,20 @@ func TestRunDispatch(t *testing.T) {
 }
 
 func TestRunVersionOutputFailure(t *testing.T) {
+	t.Setenv("BONPREU_LOG_FORMAT", "json")
+	var stderr string
 	if err := withFailingStdout(t, func() error {
-		if run([]string{"version"}) != 1 {
-			return io.ErrUnexpectedEOF
+		code, logs := captureStderr(t, func() int { return run([]string{"version"}) })
+		stderr = logs
+		if code != 1 {
+			return fmt.Errorf("run(version) = %d", code)
 		}
 		return nil
 	}); err != nil {
 		t.Fatalf("run(version) should fail when stdout cannot be written: %v", err)
+	}
+	if !strings.Contains(stderr, `"event_name":"command.failed"`) || !strings.Contains(stderr, "write version output:") {
+		t.Fatalf("version output failure was not reported: %q", stderr)
 	}
 }
 
