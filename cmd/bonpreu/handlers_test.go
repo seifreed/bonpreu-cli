@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/seifreed/bonpreu-cli/internal/client"
@@ -169,6 +170,66 @@ func TestCmdWhoami(t *testing.T) {
 	}
 	if len(events) != 1 || events[0] != "auth.session.verified" {
 		t.Fatalf("whoami events = %v", events)
+	}
+}
+
+func TestFlagOnlyCommandsRejectUnexpectedArgumentsBeforeWork(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		run  func() error
+	}{
+		{name: "whoami", run: func() error { return cmdWhoami([]string{"unexpected"}) }},
+		{name: "cart get", run: func() error { return cmdCart([]string{"get", "unexpected"}) }},
+		{name: "categories", run: func() error { return cmdCategories([]string{"unexpected"}) }},
+		{name: "brands update", run: func() error { return cmdBrands([]string{"--update", "unexpected"}) }},
+		{name: "checkout status", run: func() error { return cmdCheckout([]string{"status", "unexpected"}) }},
+		{name: "checkout addresses", run: func() error { return cmdCheckout([]string{"addresses", "unexpected"}) }},
+		{name: "checkout slots", run: func() error {
+			return cmdCheckout([]string{"slots", "--address", "address-1", "unexpected"})
+		}},
+		{name: "checkout browser", run: func() error { return cmdCheckout([]string{"browser", "unexpected"}) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests.Add(1)
+				switch r.URL.Path {
+				case "/api/order/v6/orders":
+					_, _ = w.Write([]byte(`[]`))
+				case "/api/cart/v1/carts/active":
+					_, _ = w.Write([]byte(`{"items":[]}`))
+				case "/api/webproductpagews/v1/categories":
+					_, _ = w.Write([]byte(`[]`))
+				case "/api/ecomdeliverydestinations/v1/delivery-destinations":
+					_, _ = w.Write([]byte(`{"deliveryAddresses":[]}`))
+				case "/api/ecomslots/v1/web/slots-offering":
+					_, _ = w.Write([]byte(`{"slots":[]}`))
+				default:
+					_, _ = w.Write([]byte(`{}`))
+				}
+			}))
+			defer srv.Close()
+			useServer(t, srv, true)
+
+			browserCalled := false
+			oldOpen := openCheckoutBrowser
+			openCheckoutBrowser = func(string, string) error {
+				browserCalled = true
+				return nil
+			}
+			t.Cleanup(func() { openCheckoutBrowser = oldOpen })
+
+			_, err := capture(t, tc.run)
+			if err == nil || !strings.Contains(err.Error(), "usage:") {
+				t.Fatalf("%s error = %v; want usage error", tc.name, err)
+			}
+			if got := requests.Load(); got != 0 {
+				t.Errorf("%s made %d network requests with invalid arguments", tc.name, got)
+			}
+			if browserCalled {
+				t.Errorf("%s opened the browser with invalid arguments", tc.name)
+			}
+		})
 	}
 }
 

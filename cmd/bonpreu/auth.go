@@ -88,6 +88,9 @@ func cmdSetCookie(args []string) error {
 func cmdWhoami(args []string) error {
 	fs, cf := newCommonFlags("whoami")
 	parseFlags(fs, args)
+	if fs.NArg() != 0 {
+		return fmt.Errorf("usage: bonpreu whoami")
+	}
 	cl, err := authedClient(cf)
 	if err != nil {
 		return err

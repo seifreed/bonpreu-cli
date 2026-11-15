@@ -38,6 +38,9 @@ func cmdCheckout(args []string) error {
 func checkoutBrowser(args []string) error {
 	fs, cf := newCommonFlags("checkout browser")
 	parseFlags(fs, args)
+	if fs.NArg() != 0 {
+		return fmt.Errorf("usage: bonpreu checkout browser")
+	}
 	cl, err := authedClient(cf)
 	if err != nil {
 		return err
@@ -87,6 +90,9 @@ func checkoutReserve(args []string) error {
 func checkoutStatus(args []string) error {
 	fs, cf := newCommonFlags("checkout")
 	parseFlags(fs, args)
+	if fs.NArg() != 0 {
+		return fmt.Errorf("usage: bonpreu checkout [status]")
+	}
 	cl, err := authedClient(cf)
 	if err != nil {
 		return err
@@ -130,6 +136,9 @@ func restrictionsCa(codes []string) string {
 func checkoutAddresses(args []string) error {
 	fs, cf := newCommonFlags("checkout addresses")
 	parseFlags(fs, args)
+	if fs.NArg() != 0 {
+		return fmt.Errorf("usage: bonpreu checkout addresses")
+	}
 	cl, err := authedClient(cf)
 	if err != nil {
 		return err
@@ -145,7 +154,7 @@ func checkoutSlots(args []string) error {
 	fs, cf := newCommonFlags("checkout slots")
 	addr := fs.String("address", "", "delivery destination id (from `checkout addresses`)")
 	parseFlags(fs, args)
-	if *addr == "" {
+	if fs.NArg() != 0 || *addr == "" {
 		return fmt.Errorf("usage: bonpreu checkout slots --address <deliveryDestinationId>")
 	}
 	cl, err := authedClient(cf)

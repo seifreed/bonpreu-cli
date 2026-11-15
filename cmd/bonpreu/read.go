@@ -455,6 +455,9 @@ func cmdCategories(args []string) error {
 	limit := fs.Int("limit", 0, "max products when using --id")
 	cheapest := fs.Bool("cheapest", false, "with --id: rank by unit price (€/kg, €/L, €/u); mark the cheapest per unit")
 	parseFlags(fs, args)
+	if fs.NArg() != 0 {
+		return fmt.Errorf("usage: bonpreu categories [--id <id>] [--depth N] [--limit N] [--cheapest]")
+	}
 	cl, _ := newClient(cf)
 
 	if *id != "" {

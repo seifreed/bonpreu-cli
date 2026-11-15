@@ -36,6 +36,9 @@ func cmdBrands(args []string) error {
 	limit := fs.Int("limit", 300, "with --update: max products sampled per category")
 	csv := fs.Bool("csv", false, "emit CSV (brand,count) instead of a table")
 	parseFlags(fs, args)
+	if fs.NArg() != 0 {
+		return fmt.Errorf("usage: bonpreu brands [--update] [--depth N] [--limit N] [--csv]")
+	}
 
 	var ranked []brandCount
 	if *update {

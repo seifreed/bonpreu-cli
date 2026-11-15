@@ -57,6 +57,9 @@ func authedClient(cf *common) (*client.Client, error) {
 func cartGet(args []string) error {
 	fs, cf := newCommonFlags("cart get")
 	parseFlags(fs, args)
+	if fs.NArg() != 0 {
+		return fmt.Errorf("usage: bonpreu cart get")
+	}
 	cl, err := authedClient(cf)
 	if err != nil {
 		return err
