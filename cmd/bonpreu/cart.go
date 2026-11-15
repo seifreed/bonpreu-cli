@@ -56,7 +56,9 @@ func authedClient(cf *common) (*client.Client, error) {
 
 func cartGet(args []string) error {
 	fs, cf := newCommonFlags("cart get")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	if fs.NArg() != 0 {
 		return invalidCommandf("usage: bonpreu cart get")
 	}
@@ -95,7 +97,9 @@ func cartWrite(args []string, set bool) error {
 	}
 	fs, cf := newCommonFlags("cart write")
 	maxEUR := fs.Float64("max", 0, "refuse if the resulting product line would exceed this many €")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	maxSet := false
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "max" {
@@ -274,7 +278,9 @@ func cartUpdateLimitError(raw json.RawMessage, productID string) error {
 
 func cartClear(args []string) error {
 	fs, cf := newCommonFlags("cart clear")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	if fs.NArg() != 0 {
 		return invalidCommandf("usage: bonpreu cart clear")
 	}

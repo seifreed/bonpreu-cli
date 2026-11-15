@@ -37,7 +37,9 @@ func cmdCheckout(args []string) error {
 
 func checkoutBrowser(args []string) error {
 	fs, cf := newCommonFlags("checkout browser")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	if fs.NArg() != 0 {
 		return invalidCommandf("usage: bonpreu checkout browser")
 	}
@@ -62,7 +64,9 @@ func checkoutReserve(args []string) error {
 	slot := fs.String("slot", "", "delivery slot id (from `checkout slots`)")
 	region := fs.String("region", "", "delivery region id (defaults to the authenticated session)")
 	externalAddress := fs.String("external-address", "", "optional custom delivery address")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	if fs.NArg() != 0 || strings.TrimSpace(*address) == "" || strings.TrimSpace(*slot) == "" {
 		return invalidCommandf("usage: bonpreu checkout reserve --address <id> --slot <id> [--region <id>] [--external-address <text>]")
 	}
@@ -89,7 +93,9 @@ func checkoutReserve(args []string) error {
 // what's blocking it (below the 35€ minimum, no slot booked, empty basket).
 func checkoutStatus(args []string) error {
 	fs, cf := newCommonFlags("checkout")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	if fs.NArg() != 0 {
 		return invalidCommandf("usage: bonpreu checkout [status]")
 	}
@@ -135,7 +141,9 @@ func restrictionsCa(codes []string) string {
 
 func checkoutAddresses(args []string) error {
 	fs, cf := newCommonFlags("checkout addresses")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	if fs.NArg() != 0 {
 		return invalidCommandf("usage: bonpreu checkout addresses")
 	}
@@ -153,7 +161,9 @@ func checkoutAddresses(args []string) error {
 func checkoutSlots(args []string) error {
 	fs, cf := newCommonFlags("checkout slots")
 	addr := fs.String("address", "", "delivery destination id (from `checkout addresses`)")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	if fs.NArg() != 0 || *addr == "" {
 		return invalidCommandf("usage: bonpreu checkout slots --address <deliveryDestinationId>")
 	}

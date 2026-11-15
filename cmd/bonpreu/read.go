@@ -33,7 +33,9 @@ func cmdSearch(args []string) error {
 	limit := fs.Int("limit", 0, "max products to return (0 = server default ~100)")
 	fresh := fs.Bool("fresh", false, "drop frozen (Congelats) + canned (Conserves) hits")
 	cheapest := fs.Bool("cheapest", false, "rank by unit price (€/kg, €/L, €/u); mark the cheapest per unit")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 
 	term := strings.TrimSpace(strings.Join(fs.Args(), " "))
 	if term == "" {
@@ -153,7 +155,9 @@ func cmdBatch(args []string) error {
 	brand := fs.String("brand", "", "prefer these brands (comma-separated), overriding config for this run")
 	noBrands := fs.Bool("no-brands", false, "ignore configured brand preferences (pick cheapest/organic)")
 	offers := fs.String("offers", "", "actionable offers: alert (default) | ignore | accept (overrides [offers] mode)")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 
 	terms, err := collectLines(*file, fs.Args())
 	if err != nil {
@@ -318,7 +322,9 @@ func resolveBrandHit(prods []client.Product, term string, brands config.Brands, 
 func cmdTotal(args []string) error {
 	fs, cf := newCommonFlags("total")
 	file := fs.String("f", "", "file with one '<id> [qty]' per line ('-' for stdin); else ids are positional (qty 1)")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 
 	lines, err := collectBasket(*file, fs.Args())
 	if err != nil {
@@ -405,7 +411,9 @@ func cmdTotal(args []string) error {
 // when the item carries it).
 func cmdProduct(args []string) error {
 	fs, cf := newCommonFlags("product")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	if fs.NArg() != 1 {
 		return invalidCommandf("usage: bonpreu product <id>")
 	}
@@ -454,7 +462,9 @@ func cmdCategories(args []string) error {
 	depth := fs.Int("depth", 1, "tree depth when listing the tree (1 = top level)")
 	limit := fs.Int("limit", 0, "max products when using --id")
 	cheapest := fs.Bool("cheapest", false, "with --id: rank by unit price (€/kg, €/L, €/u); mark the cheapest per unit")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	if fs.NArg() != 0 {
 		return invalidCommandf("usage: bonpreu categories [--id <id>] [--depth N] [--limit N] [--cheapest]")
 	}

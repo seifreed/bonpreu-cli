@@ -101,6 +101,15 @@ func run(args []string) int {
 		return 2
 	}
 	if err != nil {
+		if errors.Is(err, errCommandHelp) {
+			return 0
+		}
+		var invalidFlag *invalidFlagError
+		if errors.As(err, &invalidFlag) {
+			logInvalidCommand(operation)
+			fmt.Fprintln(os.Stderr, "error:", terminalText(err.Error()))
+			return 2
+		}
 		var invalid *invalidCommandError
 		if errors.As(err, &invalid) {
 			logInvalidCommand(operation)

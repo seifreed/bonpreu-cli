@@ -26,9 +26,11 @@ var (
 // preferred way to bring your own authenticated session — Bonpreu's first login
 // is browser-only (captcha / SSO), but the cookie it mints drives the CLI.
 func cmdImportHar(args []string) error {
-	fs := flag.NewFlagSet("import-har", flag.ExitOnError)
+	fs := flag.NewFlagSet("import-har", flag.ContinueOnError)
 	file := fs.String("file", "", "path to the .har export ('-' for stdin)")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	if fs.NArg() != 0 || *file == "" {
 		return invalidCommandf("usage: bonpreu import-har --file tienda.har")
 	}
@@ -54,9 +56,11 @@ func cmdImportHar(args []string) error {
 // cmdSetCookie seeds a raw Cookie header (copied from DevTools) into the session
 // cache — the manual alternative to import-har.
 func cmdSetCookie(args []string) error {
-	fs := flag.NewFlagSet("set-cookie", flag.ExitOnError)
+	fs := flag.NewFlagSet("set-cookie", flag.ContinueOnError)
 	stdin := fs.Bool("stdin", false, "read the cookie from stdin (required)")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	if !*stdin || fs.NArg() != 0 {
 		return invalidCommandf("usage: bonpreu set-cookie --stdin")
 	}
@@ -87,7 +91,9 @@ func cmdSetCookie(args []string) error {
 // authenticated endpoint): success means the cookie is accepted.
 func cmdWhoami(args []string) error {
 	fs, cf := newCommonFlags("whoami")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	if fs.NArg() != 0 {
 		return invalidCommandf("usage: bonpreu whoami")
 	}

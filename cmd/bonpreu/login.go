@@ -24,7 +24,9 @@ func cmdLogin(args []string) error {
 func cmdLoginWith(args []string, readBrowser func(string) (client.Session, error), openBrowser func(string) (client.Session, error)) error {
 	fs, cf := newCommonFlags("login")
 	fromBrowser := fs.String("from-browser", "", "read the session from a browser's cookie store: chrome|chromium|firefox|safari|edge|brave (empty = any installed)")
-	parseFlags(fs, args)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
 	if fs.NArg() != 0 {
 		return invalidCommandf("usage: bonpreu login [--from-browser <name>]")
 	}

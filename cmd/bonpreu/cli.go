@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -92,6 +93,12 @@ func invalidCommandf(format string, args ...any) error {
 	return &invalidCommandError{message: fmt.Sprintf(format, args...)}
 }
 
+type invalidFlagError struct{ message string }
+
+func (e *invalidFlagError) Error() string { return e.message }
+
+var errCommandHelp = errors.New("help requested")
+
 type commandRejectedError struct {
 	reason  string
 	message string
@@ -106,7 +113,7 @@ func rejectCommand(reason, format string, args ...any) error {
 // newCommonFlags builds a flag set carrying the common flags (--lang, --json),
 // the starting point for every command that takes them.
 func newCommonFlags(name string) (*flag.FlagSet, *common) {
-	fs := flag.NewFlagSet(name, flag.ExitOnError)
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	c := addCommon(fs)
 	c.operation = name
 	return fs, c
@@ -162,8 +169,17 @@ func clientLogger(w io.Writer, operation string) *slog.Logger {
 // parseFlags parses args into fs, letting flags appear among positionals (see
 // reorderArgs). Centralised so every command parses identically and none forgets
 // the reorder step — omitting it silently drops flags placed after positionals.
-func parseFlags(fs *flag.FlagSet, args []string) {
-	_ = fs.Parse(reorderArgs(fs, args))
+func parseFlags(fs *flag.FlagSet, args []string) error {
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
+		fs.SetOutput(os.Stderr)
+		fs.Usage()
+		if err == flag.ErrHelp {
+			return errCommandHelp
+		}
+		return &invalidFlagError{message: err.Error()}
+	}
+	return nil
 }
 
 // reorderArgs lets flags appear anywhere among positional args. The stdlib flag

@@ -221,6 +221,64 @@ func assertRejectedWarning(t *testing.T, code int, logs, reason string) {
 	}
 }
 
+func TestRunLogsInvalidFlagsAsWarningAndPreservesExitCode(t *testing.T) {
+	t.Setenv("BONPREU_LOG_FORMAT", "json")
+	t.Setenv("BONPREU_LOG_LEVEL", "info")
+
+	code, output := runWithStderr(t, []string{"search", "llet", "--limit", "invalid"})
+	if code != 2 || !strings.Contains(output, `"level":"WARN"`) || !strings.Contains(output, `"event_name":"command.invalid"`) {
+		t.Fatalf("invalid flag exit=%d output=%q; want exit 2 and command.invalid WARN", code, output)
+	}
+	if !strings.Contains(output, "Usage of search:") || !strings.Contains(output, "invalid value") {
+		t.Fatalf("invalid flag output=%q; want parser error and usage", output)
+	}
+	if strings.Contains(output, `"event_name":"command.failed"`) {
+		t.Fatalf("invalid flag was logged as an operational failure: %q", output)
+	}
+}
+
+func TestRunFlagHelpReturnsSuccess(t *testing.T) {
+	code, output := runWithStderr(t, []string{"search", "--help"})
+	if code != 0 || !strings.Contains(output, "Usage of search:") {
+		t.Fatalf("flag help exit=%d output=%q; want usage and success", code, output)
+	}
+	if strings.Contains(output, `"event_name":"command.failed"`) || strings.Contains(output, `"event_name":"command.invalid"`) {
+		t.Fatalf("help was logged as a failed or invalid command: %q", output)
+	}
+}
+
+func TestEveryCommandReturnsFlagParseErrors(t *testing.T) {
+	t.Setenv("BONPREU_LOG_FORMAT", "json")
+	t.Setenv("BONPREU_LOG_LEVEL", "info")
+	for _, args := range [][]string{
+		{"login", "--invalid-flag"},
+		{"search", "--invalid-flag"},
+		{"batch", "--invalid-flag"},
+		{"total", "--invalid-flag"},
+		{"product", "--invalid-flag"},
+		{"categories", "--invalid-flag"},
+		{"checkout", "browser", "--invalid-flag"},
+		{"checkout", "reserve", "--invalid-flag"},
+		{"checkout", "status", "--invalid-flag"},
+		{"checkout", "addresses", "--invalid-flag"},
+		{"checkout", "slots", "--invalid-flag"},
+		{"brands", "--invalid-flag"},
+		{"import-har", "--invalid-flag"},
+		{"set-cookie", "--invalid-flag"},
+		{"whoami", "--invalid-flag"},
+		{"cart", "get", "--invalid-flag"},
+		{"cart", "add", "--invalid-flag"},
+		{"cart", "clear", "--invalid-flag"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			code, output := runWithStderr(t, args)
+			if code != 2 || !strings.Contains(output, `"event_name":"command.invalid"`) {
+				t.Fatalf("invalid flags exit=%d output=%q; want exit 2 and command.invalid", code, output)
+			}
+		})
+	}
+}
+
 func TestCommandOperationNames(t *testing.T) {
 	for _, tc := range []struct {
 		args []string
