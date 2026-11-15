@@ -69,10 +69,24 @@ func ParseHAR(data []byte) (HARSession, error) {
 		}
 		sawBonpreuReq = true
 		var requestRegion string
+		ambiguousRegion := false
 		for k, vs := range u.Query() {
-			if regionIDRE.MatchString(k) && len(vs) > 0 && vs[0] != "" {
-				requestRegion = vs[0]
+			if !regionIDRE.MatchString(k) {
+				continue
 			}
+			for _, value := range vs {
+				if value == "" {
+					continue
+				}
+				if requestRegion == "" {
+					requestRegion = value
+				} else if requestRegion != value {
+					ambiguousRegion = true
+				}
+			}
+		}
+		if ambiguousRegion {
+			requestRegion = ""
 		}
 		requestAuthed := false
 		for _, h := range e.Request.Headers {
@@ -85,7 +99,7 @@ func ParseHAR(data []byte) (HARSession, error) {
 				requestAuthed = true
 			}
 		}
-		if requestAuthed && requestRegion != "" {
+		if requestAuthed {
 			s.RegionID = requestRegion
 		}
 	}

@@ -43,6 +43,26 @@ func TestParseHARKeepsRegionFromAuthenticatedRequest(t *testing.T) {
 	}
 }
 
+func TestParseHARDoesNotReuseRegionFromOlderAuthenticatedRequest(t *testing.T) {
+	har := `{"log":{"entries":[
+ {"request":{"url":"https://www.compraonline.bonpreuesclat.cat/api/cart/v1/carts/active?regionId=old-region","headers":[
+   {"name":"cookie","value":"global_sid=OLD; aws-waf-token=OLD-WAF"}]}},
+ {"request":{"url":"https://www.compraonline.bonpreuesclat.cat/api/cart/v1/carts/active","headers":[
+   {"name":"cookie","value":"global_sid=NEW; aws-waf-token=NEW-WAF"}]}}
+]}}`
+
+	s, err := ParseHAR([]byte(har))
+	if err != nil {
+		t.Fatalf("ParseHAR: %v", err)
+	}
+	if s.Cookie != "global_sid=NEW; aws-waf-token=NEW-WAF" {
+		t.Fatalf("cookie = %q; want the newest authenticated request", s.Cookie)
+	}
+	if s.RegionID != "" {
+		t.Fatalf("region = %q; stale region must not be paired with the newer cookie", s.RegionID)
+	}
+}
+
 func TestParseHARNoSession(t *testing.T) {
 	anon := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/","headers":[{"name":"Cookie","value":"VISITORID=abc"}]}}]}}`
 	if _, err := ParseHAR([]byte(anon)); err == nil {
@@ -156,5 +176,24 @@ func TestParseHARIgnoresRelatedButDifferentRegionQueryKeys(t *testing.T) {
 	}
 	if s.RegionID != "" {
 		t.Fatalf("region = %q; want no region from a different query key", s.RegionID)
+	}
+}
+
+func TestParseHARIgnoresConflictingRegionAliases(t *testing.T) {
+	for _, tc := range []struct {
+		query string
+		want  string
+	}{
+		{"regionId=region-a&region_id=region-b", ""},
+		{"regionId=region-a&region_id=region-a", "region-a"},
+	} {
+		har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x?` + tc.query + `","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
+		s, err := ParseHAR([]byte(har))
+		if err != nil {
+			t.Fatalf("ParseHAR(%q): %v", tc.query, err)
+		}
+		if s.RegionID != tc.want {
+			t.Errorf("ParseHAR(%q) region = %q, want %q", tc.query, s.RegionID, tc.want)
+		}
 	}
 }
