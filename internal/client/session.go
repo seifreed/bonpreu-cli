@@ -82,7 +82,7 @@ func (c *Client) warnExternalCookieHost(cookie string) {
 		host = u.Hostname()
 	}
 	if !isBonpreuHost(host) && c.Logger != nil {
-		c.Logger.Warn("session cookie targets a non-Bonpreu host",
+		c.Logger.Warn("session cookie targets an untrusted host",
 			"event_name", "security.cookie_external_host", "component", "client", "host", host)
 	}
 }
@@ -103,7 +103,7 @@ func (c *Client) validateCookieTransport(cookie, targetURL string) error {
 		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
 			return nil
 		}
-		return fmt.Errorf("refusing to send session cookie to non-Bonpreu host %q; explicitly allow only trusted staging hosts", host)
+		return fmt.Errorf("refusing to send session cookie to untrusted host %q; explicitly allow only trusted staging hosts", host)
 	}
 	if strings.EqualFold(host, "localhost") {
 		return nil

@@ -146,6 +146,7 @@ func TestLoginViaBrowserRejectsUntrustedURLsBeforeLaunching(t *testing.T) {
 	for _, loginURL := range []string{
 		"http://www.bonpreuesclat.cat/",
 		"https://attacker.example/",
+		"https://attacker.bonpreuesclat.cat/",
 		"https://user@www.bonpreuesclat.cat/",
 		"https://www.bonpreuesclat.cat:8443/",
 	} {
@@ -284,6 +285,7 @@ func TestCheckoutPageURLRequiresBonpreuHTTPSHost(t *testing.T) {
 		{"https://www.compraonline.bonpreuesclat.cat/path?token=ignored#fragment", "https://www.compraonline.bonpreuesclat.cat/checkout", true},
 		{"http://www.bonpreuesclat.cat/", "", false},
 		{"https://bonpreuesclat.cat.attacker.example/", "", false},
+		{"https://attacker.bonpreuesclat.cat/", "", false},
 		{"https://example.com/", "", false},
 	} {
 		got, err := checkoutPageURL(tc.input)

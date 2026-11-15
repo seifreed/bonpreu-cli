@@ -122,15 +122,15 @@ func TestParseHARForeignHostMentioningDomainIsSkipped(t *testing.T) {
 	}
 }
 
-func TestParseHARAcceptsApexAndSubdomains(t *testing.T) {
-	for _, host := range []string{"compraonline.bonpreuesclat.cat", "bonpreuesclat.cat", "www.bonpreuesclat.cat"} {
+func TestParseHARAcceptsKnownBonpreuWebHosts(t *testing.T) {
+	for _, host := range []string{"compraonline.bonpreuesclat.cat", "www.compraonline.bonpreuesclat.cat", "bonpreuesclat.cat", "www.bonpreuesclat.cat"} {
 		har := `{"log":{"entries":[{"request":{"url":"https://` + host + `/x","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
 		if _, err := ParseHAR([]byte(har)); err != nil {
 			t.Errorf("host %q should be accepted as Bonpreu, got %v", host, err)
 		}
 	}
-	// A look-alike that is NOT a Bonpreu subdomain must be rejected.
-	for _, host := range []string{"bonpreuesclat.cat.evil.example", "evilbonpreuesclat.cat"} {
+	// Foreign hosts and arbitrary Bonpreu subdomains are not trusted for auth cookies.
+	for _, host := range []string{"bonpreuesclat.cat.evil.example", "evilbonpreuesclat.cat", "attacker.bonpreuesclat.cat"} {
 		har := `{"log":{"entries":[{"request":{"url":"https://` + host + `/x","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
 		if _, err := ParseHAR([]byte(har)); err == nil {
 			t.Errorf("look-alike host %q must be rejected", host)
@@ -213,5 +213,16 @@ func TestParseHARIgnoresConflictingRegionAliases(t *testing.T) {
 		if s.RegionID != tc.want {
 			t.Errorf("ParseHAR(%q) region = %q, want %q", tc.query, s.RegionID, tc.want)
 		}
+	}
+}
+
+func TestParseHARIgnoresEmptyRegionValue(t *testing.T) {
+	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x?regionId=&region_id=region-a","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
+	s, err := ParseHAR([]byte(har))
+	if err != nil {
+		t.Fatalf("ParseHAR: %v", err)
+	}
+	if s.RegionID != "region-a" {
+		t.Fatalf("region = %q; want the non-empty alias", s.RegionID)
 	}
 }

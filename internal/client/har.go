@@ -24,17 +24,19 @@ type HARSession struct {
 
 var regionIDRE = regexp.MustCompile(`(?i)^region[_-]?id$`)
 
-// bonpreuHost is the registrable domain; the site is served from subdomains
-// (www.compraonline.bonpreuesclat.cat, etc.).
+// bonpreuHost is the registrable domain.
 const bonpreuHost = "bonpreuesclat.cat"
 
-// isBonpreuHost matches the Bonpreu domain on the URL's HOST, not a substring of
-// the whole URL — so a foreign request like https://evil.com/?x=bonpreuesclat.cat
-// (whose host is evil.com) is not mistaken for a Bonpreu request and its cookies
-// are never read. Accepts the apex and any subdomain, case-insensitively.
+// isBonpreuHost accepts only known Bonpreu web entry points. A suffix check would
+// trust every delegated subdomain, even though an authenticated cookie must never
+// be sent to an arbitrary host under the registrable domain.
 func isBonpreuHost(host string) bool {
-	host = strings.ToLower(host)
-	return host == bonpreuHost || strings.HasSuffix(host, "."+bonpreuHost)
+	switch strings.ToLower(strings.TrimSuffix(host, ".")) {
+	case bonpreuHost, "www.bonpreuesclat.cat", "compraonline.bonpreuesclat.cat", "www.compraonline.bonpreuesclat.cat":
+		return true
+	default:
+		return false
+	}
 }
 
 // ParseHAR scans a HAR for the freshest authenticated Bonpreu request: its Cookie

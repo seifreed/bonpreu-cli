@@ -329,14 +329,14 @@ func TestNewReqRejectsRemoteHTTPCookie(t *testing.T) {
 
 func TestNewReqRejectsForeignHTTPSCookieByDefault(t *testing.T) {
 	cl := &Client{BaseURL: "https://evil.example", Cookie: "global_sid=secret"}
-	if _, err := cl.newReq(http.MethodGet, cl.BaseURL+"/api", nil, nil); err == nil || !strings.Contains(err.Error(), "non-Bonpreu") {
+	if _, err := cl.newReq(http.MethodGet, cl.BaseURL+"/api", nil, nil); err == nil || !strings.Contains(err.Error(), "untrusted host") {
 		t.Fatalf("newReq error = %v, want foreign-host rejection", err)
 	}
 }
 
 func TestNewReqValidatesActualCookieTarget(t *testing.T) {
 	cl := &Client{BaseURL: BaseURL, Cookie: "global_sid=secret"}
-	if _, err := cl.newReq(http.MethodGet, "https://evil.example/api", nil, nil); err == nil || !strings.Contains(err.Error(), "non-Bonpreu") {
+	if _, err := cl.newReq(http.MethodGet, "https://evil.example/api", nil, nil); err == nil || !strings.Contains(err.Error(), "untrusted host") {
 		t.Fatalf("newReq error = %v, want foreign request target rejection", err)
 	}
 }
@@ -354,7 +354,7 @@ func TestNewReqAllowsExplicitTrustedHTTPSHost(t *testing.T) {
 
 func TestCheckAuthWithCookieRejectsForeignHTTPSByDefault(t *testing.T) {
 	cl := &Client{BaseURL: "https://evil.example"}
-	if _, err := cl.CheckAuthWithCookie("global_sid=secret"); err == nil || !strings.Contains(err.Error(), "non-Bonpreu") {
+	if _, err := cl.CheckAuthWithCookie("global_sid=secret"); err == nil || !strings.Contains(err.Error(), "untrusted host") {
 		t.Fatalf("CheckAuthWithCookie error = %v, want foreign-host rejection", err)
 	}
 }
@@ -422,6 +422,8 @@ func TestValidateCookieTransport(t *testing.T) {
 		{name: "empty cookie"},
 		{name: "bad url", targetURL: "://bad", cookie: "secret", wantErr: true},
 		{name: "bonpreu https", targetURL: "https://www.compraonline.bonpreuesclat.cat", cookie: "secret"},
+		{name: "bonpreu apex api host", targetURL: "https://compraonline.bonpreuesclat.cat", cookie: "secret"},
+		{name: "unrecognized Bonpreu subdomain", targetURL: "https://attacker.bonpreuesclat.cat", cookie: "secret", wantErr: true},
 		{name: "uppercase https", targetURL: "HTTPS://www.compraonline.bonpreuesclat.cat", cookie: "secret"},
 		{name: "foreign https", targetURL: "https://example.test", cookie: "secret", wantErr: true},
 		{name: "trusted foreign https", targetURL: "https://example.test", cookie: "secret", allowExternal: true},
