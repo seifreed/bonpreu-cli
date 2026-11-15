@@ -345,6 +345,67 @@ func TestCartAddVerifiesServerAppliedQuantityWithoutBudget(t *testing.T) {
 	}
 }
 
+func TestCartAddAcceptsExactFractionalReadback(t *testing.T) {
+	var cartReads, cartWrites atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/products/23597":
+			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case "/":
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active":
+			if cartReads.Add(1) == 1 {
+				_, _ = w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":0.1}]}`))
+			} else {
+				_, _ = w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":0.3}]}`))
+			}
+		case "/api/cart/v1/carts/active/apply-quantity":
+			cartWrites.Add(1)
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	out, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "0.2"}) })
+	if err != nil || !strings.Contains(out, "ok — add") {
+		t.Fatalf("cart add output=%q error=%v; want the exact 0.3 quantity to verify", out, err)
+	}
+	if got := cartWrites.Load(); got != 1 {
+		t.Fatalf("cart writes = %d, want one cart-only mutation", got)
+	}
+}
+
+func TestCartAddRefusesUnrepresentableCurrentQuantityBeforeWrite(t *testing.T) {
+	var writes atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/products/23597":
+			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case "/":
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active":
+			_, _ = w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":1e308},{"productId":"uuid-23597","quantity":1e308}]}`))
+		case "/api/cart/v1/carts/active/apply-quantity":
+			writes.Add(1)
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1"}) }); err == nil || !strings.Contains(err.Error(), "exceeds the supported range") {
+		t.Fatalf("cart add with unrepresentable existing quantity error = %v", err)
+	}
+	if got := writes.Load(); got != 0 {
+		t.Fatalf("cart writes = %d, want no write when preflight quantity cannot be represented", got)
+	}
+}
+
 func TestCartAddDoesNotWriteWhenLimitCannotBeEnforced(t *testing.T) {
 	var cartWrite bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

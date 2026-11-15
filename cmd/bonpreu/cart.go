@@ -139,28 +139,34 @@ func cartWrite(args []string, set bool) error {
 	}
 
 	delta := qty
-	current := float64(0)
+	currentExact := new(big.Rat)
+	deltaExact, err := quantityRat(qty)
+	if err != nil {
+		return err
+	}
 	if set {
-		current, err = currentQty(cl, pd.ProductID)
+		currentExact, err = currentQtyExact(cl, pd.ProductID)
 		if err != nil {
 			return fmt.Errorf("read current cart quantity: %w", err)
 		}
-		delta = qty - current
-		if delta == 0 {
+		deltaExact.Sub(deltaExact, currentExact)
+		if deltaExact.Sign() == 0 {
 			stderrInfo("cart.quantity.no_change", "cart line is already at target quantity", "operation", "cart write")
 			return nil
 		}
+		delta, _ = deltaExact.Float64()
 	} else if delta > 0 {
 		limit, err = resolveMax(*maxEUR, maxSet)
 		if err != nil {
 			return err
 		}
-		current, err = currentQty(cl, pd.ProductID)
+		currentExact, err = currentQtyExact(cl, pd.ProductID)
 		if err != nil {
 			return fmt.Errorf("read current cart quantity: %w", err)
 		}
 		if limit > 0 {
-			if err := guardResultingLine(limit, pd, qty+current); err != nil {
+			lineQty, _ := new(big.Rat).Add(currentExact, deltaExact).Float64()
+			if err := guardResultingLine(limit, pd, lineQty); err != nil {
 				return err
 			}
 		}
@@ -176,15 +182,21 @@ func cartWrite(args []string, set bool) error {
 		if err != nil {
 			return fmt.Errorf("cart %s was accepted but the result could not be verified; inspect the cart before retrying: %w", verb, err)
 		}
-		actual, err := decimalQtySum(updatedCart.Lines, pd.ProductID)
+		actualExact, err := decimalQtySumExact(updatedCart.Lines, pd.ProductID)
 		if err != nil {
 			return fmt.Errorf("cart %s was accepted but the result could not be verified; inspect the cart before retrying: %w", verb, err)
 		}
-		if set && actual != qty {
+		expectedExact := new(big.Rat).Add(currentExact, deltaExact)
+		actual, err := quantityFloat64(actualExact, pd.ProductID)
+		if err != nil {
+			return fmt.Errorf("cart %s was accepted but the result could not be verified; inspect the cart before retrying: %w", verb, err)
+		}
+		if set && actualExact.Cmp(expectedExact) != 0 {
 			return fmt.Errorf("cart set was accepted but resulting quantity is %s, not requested %s; inspect the cart before retrying", fmtQty(actual), fmtQty(qty))
 		}
-		if !set && actual < current+delta {
-			return fmt.Errorf("cart add was accepted but resulting quantity is %s, below the requested increase to %s; inspect the cart before retrying", fmtQty(actual), fmtQty(current+delta))
+		if !set && actualExact.Cmp(expectedExact) < 0 {
+			expected, _ := expectedExact.Float64()
+			return fmt.Errorf("cart add was accepted but resulting quantity is %s, below the requested increase to %s; inspect the cart before retrying", fmtQty(actual), fmtQty(expected))
 		}
 		if limit > 0 {
 			actualLineCents := int64(0)
@@ -334,29 +346,63 @@ func cartClear(args []string) error {
 // (0 if absent). A read failure is returned, not swallowed: `cart set` derives
 // its delta from this, so a silent 0 would over-add the full target quantity.
 func currentQty(cl *client.Client, productID string) (float64, error) {
-	cart, err := cl.GetCart()
+	quantity, err := currentQtyExact(cl, productID)
 	if err != nil {
 		return 0, err
 	}
-	return decimalQtySum(cart.Lines, productID)
+	return quantityFloat64(quantity, productID)
+}
+
+func currentQtyExact(cl *client.Client, productID string) (*big.Rat, error) {
+	cart, err := cl.GetCart()
+	if err != nil {
+		return nil, err
+	}
+	quantity, err := decimalQtySumExact(cart.Lines, productID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := quantityFloat64(quantity, productID); err != nil {
+		return nil, err
+	}
+	return quantity, nil
 }
 
 func decimalQtySum(lines []client.CartLine, productID string) (float64, error) {
-	quantity := new(big.Rat)
-	for _, l := range lines {
-		if l.ProductID == productID {
-			line, err := ratFromDecimal(strconv.FormatFloat(l.Quantity, 'f', -1, 64))
-			if err != nil {
-				return 0, fmt.Errorf("invalid cart quantity for product %s: %w", productID, err)
-			}
-			quantity.Add(quantity, line)
-		}
+	quantity, err := decimalQtySumExact(lines, productID)
+	if err != nil {
+		return 0, err
 	}
+	return quantityFloat64(quantity, productID)
+}
+
+func quantityFloat64(quantity *big.Rat, productID string) (float64, error) {
 	total, _ := quantity.Float64()
 	if math.IsInf(total, 0) {
 		return 0, fmt.Errorf("cart quantity for product %s exceeds the supported range", productID)
 	}
 	return total, nil
+}
+
+func decimalQtySumExact(lines []client.CartLine, productID string) (*big.Rat, error) {
+	quantity := new(big.Rat)
+	for _, l := range lines {
+		if l.ProductID == productID {
+			line, err := quantityRat(l.Quantity)
+			if err != nil {
+				return nil, fmt.Errorf("invalid cart quantity for product %s: %w", productID, err)
+			}
+			quantity.Add(quantity, line)
+		}
+	}
+	return quantity, nil
+}
+
+func quantityRat(quantity float64) (*big.Rat, error) {
+	if math.IsInf(quantity, 0) || math.IsNaN(quantity) {
+		return nil, fmt.Errorf("invalid quantity")
+	}
+	return ratFromDecimal(strconv.FormatFloat(quantity, 'f', -1, 64))
 }
 
 func cartLineTotalCents(lines []client.CartLine, productID string) (int64, error) {
