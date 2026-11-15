@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -36,11 +37,11 @@ func TestChromeDialBranches(t *testing.T) {
 	cfg := func(host string) *utls.Config { return &utls.Config{ServerName: host} }
 
 	// SplitHostPort error: address with no port.
-	if _, err := chromeDial(ctx, "tcp", "noport", spec, cfg); err == nil {
+	if _, err := chromeDial(ctx, "tcp", "noport", spec, cfg, tlsHandshakeTimeout); err == nil {
 		t.Error("address without a port should fail SplitHostPort")
 	}
 	// DialContext error: port 0 is not connectable.
-	if _, err := chromeDial(ctx, "tcp", "127.0.0.1:0", spec, cfg); err == nil {
+	if _, err := chromeDial(ctx, "tcp", "127.0.0.1:0", spec, cfg, tlsHandshakeTimeout); err == nil {
 		t.Error("dial to port 0 should fail")
 	}
 	// spec builder error: needs a live endpoint first, so dial the TLS server.
@@ -48,20 +49,45 @@ func TestChromeDialBranches(t *testing.T) {
 	defer srv.Close()
 	addr := srv.Listener.Addr().String()
 	badSpec := func() (utls.ClientHelloSpec, error) { return utls.ClientHelloSpec{}, errors.New("boom") }
-	if _, err := chromeDial(ctx, "tcp", addr, badSpec, cfg); err == nil {
+	if _, err := chromeDial(ctx, "tcp", addr, badSpec, cfg, tlsHandshakeTimeout); err == nil {
 		t.Error("a spec build error should propagate")
 	}
 	badConfig := func(host string) *utls.Config { return &utls.Config{ServerName: host, NextProtos: []string{""}} }
-	if _, err := chromeDial(ctx, "tcp", addr, spec, badConfig); err == nil || !strings.Contains(err.Error(), "utls preset") {
+	if _, err := chromeDial(ctx, "tcp", addr, spec, badConfig, tlsHandshakeTimeout); err == nil || !strings.Contains(err.Error(), "utls preset") {
 		t.Errorf("invalid TLS preset error = %v, want ApplyPreset failure", err)
 	}
 	// Successful handshake: trust the test cert via InsecureSkipVerify.
 	skip := func(host string) *utls.Config { return &utls.Config{ServerName: host, InsecureSkipVerify: true} }
-	conn, err := chromeDial(ctx, "tcp", addr, spec, skip)
+	conn, err := chromeDial(ctx, "tcp", addr, spec, skip, tlsHandshakeTimeout)
 	if err != nil {
 		t.Fatalf("handshake against the test TLS server should succeed: %v", err)
 	}
 	conn.Close()
+}
+
+func TestChromeDialEnforcesHandshakeTimeout(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := listener.Close(); err != nil {
+			t.Errorf("close handshake-timeout listener: %v", err)
+		}
+	}()
+	go func() {
+		conn, err := listener.Accept()
+		if err == nil {
+			defer conn.Close()
+			_, _ = io.Copy(io.Discard, conn)
+		}
+	}()
+
+	_, err = chromeDial(context.Background(), "tcp", listener.Addr().String(), chromeSpecHTTP1,
+		func(host string) *utls.Config { return &utls.Config{ServerName: host} }, 10*time.Millisecond)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("chromeDial error = %v; want handshake deadline", err)
+	}
 }
 
 func TestChromeSpecFailureSeam(t *testing.T) {

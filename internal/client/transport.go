@@ -11,6 +11,8 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
+const tlsHandshakeTimeout = 15 * time.Second
+
 // newChromeTransport returns an http.Transport whose TLS handshake mimics
 // Chrome's JA3 fingerprint via uTLS. Akamai Bot Manager scores the client's TLS
 // fingerprint, and a vanilla Go client's JA3 is an easy bot tell — so on every
@@ -27,13 +29,13 @@ func newChromeTransport() (*http.Transport, error) {
 	dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
 		return chromeDial(ctx, network, addr, chromeSpecHTTP1, func(host string) *utls.Config {
 			return &utls.Config{ServerName: host}
-		})
+		}, tlsHandshakeTimeout)
 	}
 	return &http.Transport{
 		DialTLSContext:        dial,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   15 * time.Second,
+		TLSHandshakeTimeout:   tlsHandshakeTimeout,
 		ExpectContinueTimeout: time.Second,
 	}, nil
 }
@@ -44,6 +46,7 @@ func newChromeTransport() (*http.Transport, error) {
 func chromeDial(ctx context.Context, network, addr string,
 	specFn func() (utls.ClientHelloSpec, error),
 	cfgFn func(host string) *utls.Config,
+	handshakeTimeout time.Duration,
 ) (net.Conn, error) {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -62,7 +65,10 @@ func chromeDial(ctx context.Context, network, addr string,
 	if err := u.ApplyPreset(&spec); err != nil {
 		return nil, closeConnWithCause(raw, fmt.Errorf("utls preset: %w", err))
 	}
-	if err := u.HandshakeContext(ctx); err != nil {
+	handshakeCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+	defer cancel()
+	// DialTLSContext owns the handshake, so net/http ignores TLSHandshakeTimeout.
+	if err := u.HandshakeContext(handshakeCtx); err != nil {
 		return nil, closeConnWithCause(raw, fmt.Errorf("utls handshake: %w", err))
 	}
 	return u, nil
