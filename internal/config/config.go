@@ -103,6 +103,12 @@ func LoadConfig() (Config, error) {
 
 // ensureDir creates the config dir privately and rejects permissive existing dirs.
 func ensureDir() error {
+	if os.Getenv("BONPREU_CONFIG_DIR") == "" {
+		home, err := os.UserHomeDir()
+		if err != nil || home == "" || !filepath.IsAbs(home) {
+			return fmt.Errorf("cannot determine an absolute home directory; set BONPREU_CONFIG_DIR to a private directory")
+		}
+	}
 	dir := Dir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err

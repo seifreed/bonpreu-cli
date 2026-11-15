@@ -89,6 +89,19 @@ func TestDirNoHome(t *testing.T) {
 	}
 }
 
+func TestSaveWithoutHomeFailsInsteadOfWritingIntoCurrentDirectory(t *testing.T) {
+	t.Setenv("BONPREU_CONFIG_DIR", "")
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	t.Chdir(t.TempDir())
+	if err := Save("session.json", map[string]string{"cookie": "secret"}); err == nil || !strings.Contains(err.Error(), "set BONPREU_CONFIG_DIR") {
+		t.Fatalf("Save without a home directory = %v; want explicit config-dir error", err)
+	}
+	if _, err := os.Stat(filepath.Join(".bonpreu", "session.json")); !os.IsNotExist(err) {
+		t.Fatalf("relative session file stat error = %v; want no file to be created", err)
+	}
+}
+
 func TestLoadMissingFileErrors(t *testing.T) {
 	privateConfigTestDir(t)
 	var v map[string]any
