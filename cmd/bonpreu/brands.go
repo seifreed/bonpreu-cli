@@ -129,12 +129,17 @@ func crawlBrands(cl *client.Client, depth, limit int) ([]brandCount, error) {
 	return sortedBrands(counts), nil
 }
 
-// collectCategoryIDs gathers every node's retailerCategoryId from the tree (deduped).
+// collectCategoryIDs gathers every node's category id, preferring its retailer id
+// and falling back to the UUID accepted by CategoryProducts.
 func collectCategoryIDs(cats []client.Category, out *[]string, seen map[string]bool) {
 	for _, c := range cats {
-		if c.RetailerCategoryID != "" && !seen[c.RetailerCategoryID] {
-			seen[c.RetailerCategoryID] = true
-			*out = append(*out, c.RetailerCategoryID)
+		id := c.RetailerCategoryID
+		if id == "" {
+			id = c.CategoryID
+		}
+		if id != "" && !seen[id] {
+			seen[id] = true
+			*out = append(*out, id)
 		}
 		collectCategoryIDs(c.ChildCategories, out, seen)
 	}

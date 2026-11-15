@@ -111,6 +111,31 @@ func TestCrawlBrandsEmptyCategoryTree(t *testing.T) {
 	}
 }
 
+func TestCrawlBrandsUsesCategoryUUIDWhenRetailerIDIsMissing(t *testing.T) {
+	const categoryID = "130716f2-795a-4f0b-ad39-b449817921b3"
+	var productRequests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/v1/categories"):
+			_, _ = w.Write([]byte(`[{"categoryId":"` + categoryID + `","name":"Category"}]`))
+		case strings.HasSuffix(r.URL.Path, "/product-pages"):
+			productRequests++
+			if r.URL.Query().Get("category") != categoryID || r.URL.Query().Get("isRetailerCategoryId") != "false" {
+				t.Errorf("category product query = %q; want UUID category filter", r.URL.RawQuery)
+			}
+			_, _ = w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"productId":"p1","brand":"Marca"}]}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	got, err := crawlBrands(testCartClient(srv), 1, 10)
+	if err != nil || !slices.Equal(got, []brandCount{{Brand: "Marca", Count: 1}}) || productRequests != 1 {
+		t.Fatalf("crawlBrands = %v, %v; category requests=%d", got, err, productRequests)
+	}
+}
+
 func TestCmdBrandsUpdateReturnsCategoryError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "unavailable", http.StatusInternalServerError)
@@ -269,10 +294,16 @@ func TestCollectCategoryIDs(t *testing.T) {
 			{RetailerCategoryID: "0301"}, {RetailerCategoryID: "0302"},
 		}},
 		{RetailerCategoryID: "03"}, // dup, ignored
+		{CategoryID: "cat-parent", ChildCategories: []client.Category{
+			{CategoryID: "cat-child"},
+			{CategoryID: "cat-child"},                                 // duplicate UUID, ignored
+			{RetailerCategoryID: "0303", CategoryID: "cat-preferred"}, // retailer id wins
+		}},
 	}
 	var ids []string
 	collectCategoryIDs(tree, &ids, map[string]bool{})
-	if len(ids) != 3 {
-		t.Fatalf("ids = %v, want 3 distinct", ids)
+	want := []string{"03", "0301", "0302", "cat-parent", "cat-child", "0303"}
+	if !slices.Equal(ids, want) {
+		t.Fatalf("ids = %v, want %v", ids, want)
 	}
 }
