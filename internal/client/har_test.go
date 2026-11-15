@@ -84,11 +84,25 @@ func TestParseHARAcceptsApexAndSubdomains(t *testing.T) {
 }
 
 func TestCookieLooksAuthed(t *testing.T) {
-	if CookieLooksAuthed("VISITORID=x") {
-		t.Error("anonymous cookie should not look authed")
+	tests := []struct {
+		name   string
+		cookie string
+		want   bool
+	}{
+		{name: "anonymous", cookie: "VISITORID=x"},
+		{name: "valid session", cookie: "global_sid=a; aws-waf-token=b", want: true},
+		{name: "additional cookies", cookie: "VISITORID=x; aws-waf-token=b; global_sid=a", want: true},
+		{name: "lookalike names", cookie: "xglobal_sid=a; xaws-waf-token=b"},
+		{name: "markers inside values", cookie: "visitor=global_sid=a; other=aws-waf-token=b"},
+		{name: "empty session value", cookie: "global_sid=; aws-waf-token=b"},
+		{name: "empty WAF value", cookie: "global_sid=a; aws-waf-token="},
 	}
-	if !CookieLooksAuthed("global_sid=a; aws-waf-token=b") {
-		t.Error("session cookie should look authed")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := CookieLooksAuthed(tt.cookie); got != tt.want {
+				t.Errorf("CookieLooksAuthed(%q) = %t, want %t", tt.cookie, got, tt.want)
+			}
+		})
 	}
 }
 

@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	neturl "net/url"
 	"regexp"
 	"strings"
@@ -111,7 +112,20 @@ func harNoCookieErr(sawBonpreuReq, sawCookieHeader bool) error {
 // (global_sid) and WAF clearance (aws-waf-token). Used to skip anonymous
 // pre-login requests when reading a HAR, and to warn on a manually-set cookie.
 func CookieLooksAuthed(v string) bool {
-	return strings.Contains(v, "global_sid=") && strings.Contains(strings.ToLower(v), "aws-waf-token=")
+	req := &http.Request{Header: http.Header{"Cookie": []string{v}}}
+	var sid, waf bool
+	for _, cookie := range req.Cookies() {
+		if cookie.Value == "" {
+			continue
+		}
+		switch cookie.Name {
+		case "global_sid":
+			sid = true
+		case "aws-waf-token":
+			waf = true
+		}
+	}
+	return sid && waf
 }
 
 // SaveHARSession caches the imported session for the authenticated commands.
