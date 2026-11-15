@@ -3,6 +3,7 @@ package client
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -37,5 +38,25 @@ func TestApplyQuantityPostError(t *testing.T) {
 	defer srv.Close()
 	if _, err := testClient(srv).ApplyQuantity([]CartItem{{ProductID: "p", Quantity: 1}}); err == nil {
 		t.Error("apply-quantity 500 should error")
+	}
+}
+
+func TestApplyQuantity503IsNotRetried(t *testing.T) {
+	var postCount int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+			return
+		}
+		postCount++
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	if _, err := testClient(srv).ApplyQuantity([]CartItem{{ProductID: "p", Quantity: 1}}); err == nil || !strings.Contains(err.Error(), "inspect the cart before retrying") {
+		t.Fatal("a 503 from cart mutation must be returned as an ambiguous outcome")
+	}
+	if postCount != 1 {
+		t.Fatalf("cart mutation sent %d times after 503; want one attempt", postCount)
 	}
 }

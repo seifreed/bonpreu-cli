@@ -123,7 +123,7 @@ func (c *Client) ApplyQuantity(items []CartItem) (*Cart, error) {
 		"ecom-request-source": "web",
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cart quantity update outcome is uncertain; inspect the cart before retrying: %w", err)
 	}
 	return &Cart{Raw: raw}, nil
 }

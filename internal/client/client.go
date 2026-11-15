@@ -139,8 +139,8 @@ func (c *Client) newReq(method, url string, body any, extra map[string]string) (
 	return req, nil
 }
 
-// Automatic backoff on throttling (HTTP 429/503): retry up to maxRetries times,
-// honouring Retry-After, else exponential backoff with jitter, each wait capped.
+// Read-only GET/HEAD requests retry throttling (HTTP 429/503) up to maxRetries
+// times. Mutations are never retried without an idempotency key.
 const (
 	maxRetries       = 3
 	defaultRetryBase = 500 * time.Millisecond
@@ -195,7 +195,7 @@ func (c *Client) doJSONHeaders(method, url string, body, out any, extra map[stri
 	backoff := defaultRetryBase
 	for attempt := 0; ; attempt++ {
 		err := c.doOnce(method, url, body, out, extra)
-		if !isRateLimited(err) || attempt >= maxRetries {
+		if (method != http.MethodGet && method != http.MethodHead) || !isRateLimited(err) || attempt >= maxRetries {
 			return err
 		}
 		wait := retryWait(err, backoff)
