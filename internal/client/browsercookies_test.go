@@ -12,15 +12,25 @@ import (
 
 type testBrowser string
 
+type testProfileBrowser struct {
+	browser string
+	profile string
+	path    string
+}
+
 type cookieItem struct {
 	cookie *kooky.Cookie
 	err    error
 }
 
-func (b testBrowser) Browser() string      { return string(b) }
-func (testBrowser) Profile() string        { return "default" }
-func (testBrowser) IsDefaultProfile() bool { return true }
-func (testBrowser) FilePath() string       { return "" }
+func (b testBrowser) Browser() string             { return string(b) }
+func (testBrowser) Profile() string               { return "default" }
+func (testBrowser) IsDefaultProfile() bool        { return true }
+func (testBrowser) FilePath() string              { return "" }
+func (b testProfileBrowser) Browser() string      { return b.browser }
+func (b testProfileBrowser) Profile() string      { return b.profile }
+func (testProfileBrowser) IsDefaultProfile() bool { return false }
+func (b testProfileBrowser) FilePath() string     { return b.path }
 
 func cookieSequence(items ...cookieItem) kooky.CookieSeq {
 	return func(yield func(*kooky.Cookie, error) bool) {
@@ -59,6 +69,19 @@ func TestCookiesFromSequenceGroupsByBrowserAndFilters(t *testing.T) {
 	got, err = cookiesFromSequence("", seq)
 	if err != nil || got.Cookie != "aws-waf-token=token; global_sid=new" {
 		t.Fatalf("unfiltered session = %+v, err %v", got, err)
+	}
+}
+
+func TestCookiesFromSequenceDoesNotCombineProfiles(t *testing.T) {
+	profileA := testProfileBrowser{browser: "chrome", profile: "Default", path: "/chrome/Default/Cookies"}
+	profileB := testProfileBrowser{browser: "chrome", profile: "Profile 1", path: "/chrome/Profile 1/Cookies"}
+	seq := cookieSequence(
+		cookieItem{&kooky.Cookie{Browser: profileA, Cookie: http.Cookie{Name: "global_sid", Value: "session-a", Domain: "." + cookieDomain}}, nil},
+		cookieItem{&kooky.Cookie{Browser: profileB, Cookie: http.Cookie{Name: "aws-waf-token", Value: "token-b", Domain: "." + cookieDomain}}, nil},
+	)
+
+	if got, err := cookiesFromSequence("chrome", seq); err == nil || got.Cookie != "" {
+		t.Fatalf("cookies from separate profiles formed a session: %+v, err %v", got, err)
 	}
 }
 

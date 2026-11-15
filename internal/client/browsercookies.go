@@ -29,18 +29,18 @@ func CookiesFromBrowser(browser string) (Session, error) {
 func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, error) {
 	browser = strings.ToLower(strings.TrimSpace(browser))
 
-	// Collect Bonpreu cookies grouped BY BROWSER, skipping per-store failures: a
-	// browser that isn't installed (or isn't supported on this OS) must not abort
-	// the read of the one the user actually uses. Cookies are kept per browser
-	// rather than merged by name across all of them — a global last-write-wins
-	// merge could splice global_sid from one browser with aws-waf-token from
-	// another, producing an authed-looking but server-rejected session.
+	// Keep cookies within their browser profile and container; combining stores
+	// can splice a session ID and WAF token into an invalid authenticated session.
 	type store struct {
 		val   map[string]string
 		order []string
 	}
-	stores := map[string]*store{}
-	var storeOrder []string
+	type storeKey struct {
+		browser, profile, path, container string
+		defaultProfile                    bool
+	}
+	stores := map[storeKey]*store{}
+	var storeOrder []storeKey
 	var storeErrors []error
 	for c, err := range cookies {
 		if err != nil {
@@ -49,21 +49,24 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 			}
 			continue
 		}
-		if c == nil || c.Name == "" || c.Value == "" || !isBonpreuCookieDomain(c.Domain) {
+		if c == nil || c.Browser == nil || c.Name == "" || c.Value == "" || !isBonpreuCookieDomain(c.Domain) {
 			continue
 		}
-		bname := ""
-		if c.Browser != nil {
-			bname = strings.ToLower(c.Browser.Browser())
+		key := storeKey{
+			browser:        strings.ToLower(c.Browser.Browser()),
+			profile:        c.Browser.Profile(),
+			path:           c.Browser.FilePath(),
+			container:      c.Container,
+			defaultProfile: c.Browser.IsDefaultProfile(),
 		}
-		if browser != "" && bname != browser {
+		if browser != "" && key.browser != browser {
 			continue
 		}
-		s := stores[bname]
+		s := stores[key]
 		if s == nil {
 			s = &store{val: map[string]string{}}
-			stores[bname] = s
-			storeOrder = append(storeOrder, bname)
+			stores[key] = s
+			storeOrder = append(storeOrder, key)
 		}
 		if _, ok := s.val[c.Name]; !ok {
 			s.order = append(s.order, c.Name)
@@ -73,8 +76,8 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 
 	// Use the first browser (in traversal order) whose cookie set is a complete,
 	// authenticated session.
-	for _, bname := range storeOrder {
-		s := stores[bname]
+	for _, key := range storeOrder {
+		s := stores[key]
 		pairs := make([]nameVal, 0, len(s.order))
 		for _, n := range s.order {
 			pairs = append(pairs, nameVal{n, s.val[n]})
