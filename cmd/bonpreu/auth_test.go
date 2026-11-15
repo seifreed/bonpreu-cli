@@ -41,7 +41,7 @@ func importHarWith(t *testing.T, cookie, regionURL string) []string {
 func TestImportHarWarnsWhenNoRegion(t *testing.T) {
 	logs := importHarWith(t,
 		"global_sid=a; aws-waf-token=b",
-		"https://compraonline.bonpreuesclat.cat/api/x") // no regionId param
+		"https://www.compraonline.bonpreuesclat.cat/api/x") // no regionId param
 	if len(logs) != 2 || !strings.Contains(logs[0], "auth.har.imported") || !strings.Contains(logs[1], "no region") {
 		t.Fatalf("expected import and no-region events, got %v", logs)
 	}
@@ -50,7 +50,7 @@ func TestImportHarWarnsWhenNoRegion(t *testing.T) {
 func TestImportHarSilentWhenRegionPresent(t *testing.T) {
 	logs := importHarWith(t,
 		"global_sid=a; aws-waf-token=b",
-		"https://compraonline.bonpreuesclat.cat/api/x?regionId=r-123")
+		"https://www.compraonline.bonpreuesclat.cat/api/x?regionId=r-123")
 	if len(logs) != 1 || !strings.Contains(logs[0], "auth.har.imported") || !strings.Contains(logs[0], "region_configuredtrue") {
 		t.Errorf("region present → only the import event expected, got %v", logs)
 	}
@@ -62,7 +62,7 @@ func TestImportHarPreservesPreviousRegionWhenMissingFromHAR(t *testing.T) {
 	if err := client.SaveSession(previous); err != nil {
 		t.Fatal(err)
 	}
-	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/api/x","headers":[{"name":"cookie","value":"global_sid=new; aws-waf-token=new-waf"}]}}]}}`
+	har := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/api/x","headers":[{"name":"cookie","value":"global_sid=new; aws-waf-token=new-waf"}]}}]}}`
 	path := filepath.Join(t.TempDir(), "regionless.har")
 	if err := os.WriteFile(path, []byte(har), 0o600); err != nil {
 		t.Fatal(err)
@@ -73,6 +73,26 @@ func TestImportHarPreservesPreviousRegionWhenMissingFromHAR(t *testing.T) {
 	got, err := client.LoadSession()
 	if err != nil || got.Cookie != "global_sid=new; aws-waf-token=new-waf" || got.RegionID != previous.RegionID {
 		t.Fatalf("session after regionless HAR = %+v, %v; want new cookie and preserved region", got, err)
+	}
+}
+
+func TestImportHarDoesNotReplaceSessionFromOtherBonpreuHost(t *testing.T) {
+	privateTestConfigDir(t)
+	previous := client.Session{Cookie: "global_sid=shop; aws-waf-token=shop-waf", RegionID: "shop-region"}
+	if err := client.SaveSession(previous); err != nil {
+		t.Fatal(err)
+	}
+	har := `{"log":{"entries":[{"request":{"url":"https://bonpreuesclat.cat/api/x","headers":[{"name":"cookie","value":"global_sid=root; aws-waf-token=root-waf"}]}}]}}`
+	path := filepath.Join(t.TempDir(), "other-host.har")
+	if err := os.WriteFile(path, []byte(har), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdImportHar([]string{"--file", path}); err == nil {
+		t.Fatal("import-har accepted credentials captured on a different Bonpreu host")
+	}
+	got, err := client.LoadSession()
+	if err != nil || got != previous {
+		t.Fatalf("session after rejected HAR = %+v, %v; want unchanged %+v", got, err, previous)
 	}
 }
 
@@ -260,7 +280,7 @@ func TestWhoamiJSONReturnsErrorForUnauthenticatedSession(t *testing.T) {
 
 func TestImportHarSaveError(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", unwritableConfigDir(t))
-	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x?regionId=r1","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
+	har := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x?regionId=r1","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
 	path := filepath.Join(t.TempDir(), "s.har")
 	if err := os.WriteFile(path, []byte(har), 0o600); err != nil {
 		t.Fatal(err)
@@ -272,7 +292,7 @@ func TestImportHarSaveError(t *testing.T) {
 
 func TestImportHarReturnsPreviousSessionReadError(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", unwritableConfigDir(t))
-	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
+	har := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
 	path := filepath.Join(t.TempDir(), "s.har")
 	if err := os.WriteFile(path, []byte(har), 0o600); err != nil {
 		t.Fatal(err)
@@ -342,7 +362,7 @@ func TestImportHarParseError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "anon.har")
 	// bonpreu entry but the cookie is anonymous → ParseHAR errors.
-	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"visitorId=1"}]}}]}}`
+	har := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"visitorId=1"}]}}]}}`
 	if err := os.WriteFile(path, []byte(har), 0o600); err != nil {
 		t.Fatal(err)
 	}

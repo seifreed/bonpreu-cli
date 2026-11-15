@@ -287,7 +287,7 @@ func TestCmdCheckout(t *testing.T) {
 
 func TestImportHarEndToEnd(t *testing.T) {
 	privateTestConfigDir(t)
-	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/api/x?regionId=r-9","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
+	har := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/api/x?regionId=r-9","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
 	path := filepath.Join(t.TempDir(), "s.har")
 	if err := os.WriteFile(path, []byte(har), 0o600); err != nil {
 		t.Fatal(err)

@@ -189,6 +189,10 @@ bonpreu set-cookie --stdin               # paste the Cookie header, then press C
 bonpreu whoami                           # verify the session is accepted
 ```
 
+`import-har` only imports cookies captured on `www.compraonline.bonpreuesclat.cat`;
+HAR request headers do not retain cookie domain/path attributes, so cookies from
+other Bonpreu hosts cannot safely be reused for the online shop.
+
 When an imported HAR has no `regionId`, `import-har` keeps the region from the
 previous saved session instead of silently resetting it.
 

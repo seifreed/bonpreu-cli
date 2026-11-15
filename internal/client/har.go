@@ -39,7 +39,7 @@ func isBonpreuHost(host string) bool {
 	}
 }
 
-// ParseHAR scans a HAR for the freshest authenticated Bonpreu request: its Cookie
+// ParseHAR scans a HAR for the freshest authenticated shop request: its Cookie
 // header (login + WAF clearance) and, when present, the regionId it was using.
 func ParseHAR(data []byte) (HARSession, error) {
 	var har struct {
@@ -67,7 +67,9 @@ func ParseHAR(data []byte) (HARSession, error) {
 		// foreign request that merely mentions the domain in its path/query would be
 		// treated as Bonpreu and its Cookie header read in as the session.
 		u, perr := neturl.Parse(e.Request.URL)
-		if perr != nil || !isBonpreuHost(u.Hostname()) {
+		// HAR request headers omit cookie domain/path attributes, so only import
+		// credentials captured on the exact host that will receive them.
+		if perr != nil || !strings.EqualFold(strings.TrimSuffix(u.Hostname(), "."), cookieTargetHost) {
 			continue
 		}
 		sawBonpreuReq = true

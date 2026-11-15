@@ -27,7 +27,7 @@ func TestParseHAR(t *testing.T) {
 }
 
 func TestParseHARCombinesSplitCookieHeaders(t *testing.T) {
-	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x?regionId=r1","headers":[` +
+	har := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x?regionId=r1","headers":[` +
 		`{"name":"cookie","value":"global_sid=SID"},` +
 		`{"name":"Cookie","value":"aws-waf-token=WAF; VISITORID=abc"}]}}]}}`
 	s, err := ParseHAR([]byte(har))
@@ -41,8 +41,8 @@ func TestParseHARCombinesSplitCookieHeaders(t *testing.T) {
 
 func TestParseHARRejectsConflictingAuthenticationCookies(t *testing.T) {
 	har := `{"log":{"entries":[` +
-		`{"request":{"url":"https://compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=old; aws-waf-token=old"}]}},` +
-		`{"request":{"url":"https://compraonline.bonpreuesclat.cat/x","headers":[` +
+		`{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=old; aws-waf-token=old"}]}},` +
+		`{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x","headers":[` +
 		`{"name":"cookie","value":"global_sid=new"},` +
 		`{"name":"cookie","value":"global_sid=other; aws-waf-token=new"}]}}` +
 		`]}}`
@@ -89,7 +89,7 @@ func TestParseHARDoesNotReuseRegionFromOlderAuthenticatedRequest(t *testing.T) {
 }
 
 func TestParseHARRejectsCookiesCapturedOverHTTP(t *testing.T) {
-	har := `{"log":{"entries":[{"request":{"url":"http://compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=INSECURE; aws-waf-token=INSECURE"}]}}]}}`
+	har := `{"log":{"entries":[{"request":{"url":"http://www.compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=INSECURE; aws-waf-token=INSECURE"}]}}]}}`
 	if _, err := ParseHAR([]byte(har)); err == nil || !strings.Contains(err.Error(), "HTTPS") {
 		t.Fatalf("HTTP cookie import error = %v; want HTTPS requirement", err)
 	}
@@ -97,8 +97,8 @@ func TestParseHARRejectsCookiesCapturedOverHTTP(t *testing.T) {
 
 func TestParseHARIgnoresInsecureCookieWhenHTTPSSessionExists(t *testing.T) {
 	har := `{"log":{"entries":[` +
-		`{"request":{"url":"https://compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=SECURE; aws-waf-token=SECURE"}]}},` +
-		`{"request":{"url":"http://compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=INSECURE; aws-waf-token=INSECURE"}]}}` +
+		`{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=SECURE; aws-waf-token=SECURE"}]}},` +
+		`{"request":{"url":"http://www.compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=INSECURE; aws-waf-token=INSECURE"}]}}` +
 		`]}}`
 	s, err := ParseHAR([]byte(har))
 	if err != nil || s.Cookie != "global_sid=SECURE; aws-waf-token=SECURE" {
@@ -147,19 +147,31 @@ func TestParseHARForeignHostMentioningDomainIsSkipped(t *testing.T) {
 	}
 }
 
-func TestParseHARAcceptsKnownBonpreuWebHosts(t *testing.T) {
-	for _, host := range []string{"compraonline.bonpreuesclat.cat", "www.compraonline.bonpreuesclat.cat", "bonpreuesclat.cat", "www.bonpreuesclat.cat"} {
+func TestParseHARRequiresCookieTargetHost(t *testing.T) {
+	for _, host := range []string{"www.compraonline.bonpreuesclat.cat", "WWW.COMPRAONLINE.BONPREUESCLAT.CAT", "www.compraonline.bonpreuesclat.cat."} {
 		har := `{"log":{"entries":[{"request":{"url":"https://` + host + `/x","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
 		if _, err := ParseHAR([]byte(har)); err != nil {
-			t.Errorf("host %q should be accepted as Bonpreu, got %v", host, err)
+			t.Errorf("cookie target host %q should be accepted, got %v", host, err)
 		}
 	}
-	// Foreign hosts and arbitrary Bonpreu subdomains are not trusted for auth cookies.
-	for _, host := range []string{"bonpreuesclat.cat.evil.example", "evilbonpreuesclat.cat", "attacker.bonpreuesclat.cat"} {
+	// Other Bonpreu hosts may have host-only cookies; their HAR headers do not
+	// prove that those credentials are scoped to the online shop.
+	for _, host := range []string{"compraonline.bonpreuesclat.cat", "bonpreuesclat.cat", "www.bonpreuesclat.cat", "attacker.bonpreuesclat.cat", "evilbonpreuesclat.cat"} {
 		har := `{"log":{"entries":[{"request":{"url":"https://` + host + `/x","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
-		if _, err := ParseHAR([]byte(har)); err == nil {
-			t.Errorf("look-alike host %q must be rejected", host)
+		if _, err := ParseHAR([]byte(har)); err == nil || !strings.Contains(err.Error(), "no compraonline.bonpreuesclat.cat requests") {
+			t.Errorf("non-target host %q must be ignored, got %v", host, err)
 		}
+	}
+}
+
+func TestParseHARIgnoresNewerCredentialsFromOtherBonpreuHosts(t *testing.T) {
+	har := `{"log":{"entries":[` +
+		`{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=shop; aws-waf-token=shop-waf"}]}},` +
+		`{"request":{"url":"https://bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"global_sid=root; aws-waf-token=root-waf"}]}}` +
+		`]}}`
+	s, err := ParseHAR([]byte(har))
+	if err != nil || s.Cookie != "global_sid=shop; aws-waf-token=shop-waf" {
+		t.Fatalf("ParseHAR imported other-host cookies: session=%+v, err=%v", s, err)
 	}
 }
 
@@ -197,7 +209,7 @@ func TestParseHARBadJSON(t *testing.T) {
 
 func TestParseHARNoAuthedCookie(t *testing.T) {
 	// A bonpreu entry whose cookie lacks the auth markers → no session found.
-	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"visitorId=1"}]}}]}}`
+	har := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x","headers":[{"name":"cookie","value":"visitorId=1"}]}}]}}`
 	if _, err := ParseHAR([]byte(har)); err == nil || !strings.Contains(err.Error(), "no authenticated") {
 		t.Errorf("expected no-authed-cookie error, got %v", err)
 	}
@@ -206,7 +218,7 @@ func TestParseHARNoAuthedCookie(t *testing.T) {
 func TestParseHARSkipsNonBonpreu(t *testing.T) {
 	har := `{"log":{"entries":[` +
 		`{"request":{"url":"https://other.example/x","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}},` +
-		`{"request":{"url":"https://compraonline.bonpreuesclat.cat/x?regionId=rr","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}` +
+		`{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x?regionId=rr","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}` +
 		`]}}`
 	s, err := ParseHAR([]byte(har))
 	if err != nil || s.RegionID != "rr" {
@@ -215,7 +227,7 @@ func TestParseHARSkipsNonBonpreu(t *testing.T) {
 }
 
 func TestParseHARIgnoresRelatedButDifferentRegionQueryKeys(t *testing.T) {
-	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x?customerRegionId=wrong-region","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
+	har := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x?customerRegionId=wrong-region","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
 	s, err := ParseHAR([]byte(har))
 	if err != nil {
 		t.Fatalf("ParseHAR: %v", err)
@@ -233,7 +245,7 @@ func TestParseHARIgnoresConflictingRegionAliases(t *testing.T) {
 		{"regionId=region-a&region_id=region-b", ""},
 		{"regionId=region-a&region_id=region-a", "region-a"},
 	} {
-		har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x?` + tc.query + `","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
+		har := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x?` + tc.query + `","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
 		s, err := ParseHAR([]byte(har))
 		if err != nil {
 			t.Fatalf("ParseHAR(%q): %v", tc.query, err)
@@ -245,7 +257,7 @@ func TestParseHARIgnoresConflictingRegionAliases(t *testing.T) {
 }
 
 func TestParseHARIgnoresEmptyRegionValue(t *testing.T) {
-	har := `{"log":{"entries":[{"request":{"url":"https://compraonline.bonpreuesclat.cat/x?regionId=&region_id=region-a","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
+	har := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/x?regionId=&region_id=region-a","headers":[{"name":"cookie","value":"global_sid=a; aws-waf-token=b"}]}}]}}`
 	s, err := ParseHAR([]byte(har))
 	if err != nil {
 		t.Fatalf("ParseHAR: %v", err)
