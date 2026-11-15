@@ -59,11 +59,14 @@ var stateVarRE = regexp.MustCompile(`window\.(__URQL_DATA__|__INITIAL_STATE__|__
 func findProductNode(html, id string) map[string]any {
 	var best map[string]any
 	bestLen := -1
+	bestRepresentation := ""
 	consider := func(m map[string]any) {
 		if v, _ := m["retailerProductId"].(string); v == id {
 			if _, ok := m["name"]; ok {
-				if n := len(fmt.Sprint(m)); n > bestLen {
-					best, bestLen = m, n
+				// Map traversal is unordered, so use stable text to break equal-size ties.
+				representation := fmt.Sprint(m)
+				if n := len(representation); n > bestLen || n == bestLen && representation < bestRepresentation {
+					best, bestLen, bestRepresentation = m, n, representation
 				}
 			}
 		}

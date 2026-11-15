@@ -31,6 +31,20 @@ func TestFindProductNode(t *testing.T) {
 	}
 }
 
+func TestFindProductNodeBreaksEqualRichnessTiesDeterministically(t *testing.T) {
+	html := `<script>window.__INITIAL_STATE__={"one":{"retailerProductId":"duplicate","name":"Water","price":{"amount":"1.00"}},"two":{"retailerProductId":"duplicate","name":"Water","price":{"amount":"2.00"}}}</script>`
+	for range 100 {
+		node := findProductNode(html, "duplicate")
+		if node == nil {
+			t.Fatal("duplicate product node not found")
+		}
+		price := node["price"].(map[string]any)["amount"]
+		if price != "1.00" {
+			t.Fatalf("selected price = %v; want stable tie-break price 1.00", price)
+		}
+	}
+}
+
 func TestCollectDetails(t *testing.T) {
 	ds := collectDetails(fixturePage, "49637")
 	if len(ds) != 1 {
