@@ -33,6 +33,30 @@ func TestCheckoutStatusAndSlotsAndAddresses(t *testing.T) {
 	}
 }
 
+func TestCheckoutStatusRejectsMissingOrNullGroup(t *testing.T) {
+	var body string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	cl := testClient(srv)
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "missing", body: `{"totals":{"itemPriceAfterPromos":{"amount":"40.00"}}}`},
+		{name: "null", body: `{"activeCheckoutGroup":null,"totals":{"itemPriceAfterPromos":{"amount":"40.00"}}}`},
+		{name: "wrong field type", body: `{"activeCheckoutGroup":{"canCheckout":"yes"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body = tc.body
+			if _, _, _, err := cl.CheckoutStatus(); err == nil || !strings.Contains(err.Error(), "activeCheckoutGroup") {
+				t.Fatalf("CheckoutStatus(%s) error = %v; want invalid group error", tc.name, err)
+			}
+		})
+	}
+}
+
 func TestReserveSlotPostsSelectedSlotAndRegion(t *testing.T) {
 	var got map[string]string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -25,7 +25,18 @@ func (c *Client) CheckoutStatus() (*CheckoutGroup, Money, json.RawMessage, error
 	if err != nil {
 		return nil, Money{}, nil, err
 	}
-	return &s.ACG, s.Totals.ItemPriceAfterPromos, raw, nil
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(s.ACG, &fields); err != nil || fields == nil {
+		if err == nil {
+			err = fmt.Errorf("expected an object")
+		}
+		return nil, Money{}, nil, fmt.Errorf("decode active cart response: invalid activeCheckoutGroup: %w", err)
+	}
+	var group CheckoutGroup
+	if err := json.Unmarshal(s.ACG, &group); err != nil {
+		return nil, Money{}, nil, fmt.Errorf("decode active cart response: invalid activeCheckoutGroup: %w", err)
+	}
+	return &group, s.Totals.ItemPriceAfterPromos, raw, nil
 }
 
 // Addresses lists the customer's saved delivery destinations. The slot endpoints

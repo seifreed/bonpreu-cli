@@ -47,7 +47,7 @@ type cartShape struct {
 	Totals struct {
 		ItemPriceAfterPromos Money `json:"itemPriceAfterPromos"`
 	} `json:"totals"`
-	ACG CheckoutGroup `json:"activeCheckoutGroup"`
+	ACG json.RawMessage `json:"activeCheckoutGroup"`
 }
 
 // activeCart fetches the active-cart endpoint once and projects the fields the
