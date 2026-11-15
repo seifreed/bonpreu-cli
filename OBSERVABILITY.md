@@ -44,7 +44,6 @@ Events currently emitted:
 | `security.cookie_external_host` | WARN | parsed host; never cookie contents |
 | `config.load_failed` | WARN | `error_type`; defaults are used |
 | `auth.har.region_missing` | WARN | static remediation message |
-| `auth.cookie.may_be_anonymous` | WARN | static verification guidance |
 | `catalog.category.skipped` | WARN | `category_id`, `error_type` |
 | `cart.quantity.no_change` | INFO | no-op cart write |
 | `cart.quantity.changed` | INFO | operation and quantity delta; no product identity |

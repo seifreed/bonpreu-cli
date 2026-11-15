@@ -185,9 +185,13 @@ bonpreu login
 #    DevTools → Network → right-click a request → "Save all as HAR with sensitive data"
 #    (NOT the ⤓ button — that one is sanitized and strips the cookies)
 bonpreu import-har --file compraonline.har
-bonpreu set-cookie '<cookie header>'     # or --stdin
+bonpreu set-cookie --stdin               # paste the Cookie header, then press Ctrl-D
 bonpreu whoami                           # verify the session is accepted
 ```
+
+`set-cookie` requires both `global_sid` and `aws-waf-token`; a cookie without
+those session keys is rejected without replacing the saved session. Prefer
+`--stdin` so the cookie is not placed in shell history or process arguments.
 
 > `login --from-browser` reads the **decrypted** cookie store (on macOS Chrome this may pop a one-time Keychain prompt). The open-browser `login` uses [chromedp](https://github.com/chromedp/chromedp) and so is gated behind `-tags browserlogin` to keep the default binary dependency-free; without the tag it points you back to `--from-browser`.
 

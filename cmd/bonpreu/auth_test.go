@@ -54,19 +54,18 @@ func TestImportHarSilentWhenRegionPresent(t *testing.T) {
 	}
 }
 
-func TestSetCookieWarnsOnAnonymousCookie(t *testing.T) {
+func TestSetCookieRejectsAnonymousCookieWithoutReplacingSession(t *testing.T) {
 	privateTestConfigDir(t)
-	var logs []string
-	oldInfo, oldWarn := stderrInfo, stderrWarn
-	stderrInfo = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
-	stderrWarn = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
-	defer func() { stderrInfo, stderrWarn = oldInfo, oldWarn }()
-
-	if err := cmdSetCookie([]string{"sessionid=x; other=y"}); err != nil {
-		t.Fatalf("cmdSetCookie: %v", err)
+	previous := client.Session{Cookie: "global_sid=old; aws-waf-token=old-token", RegionID: "old-region"}
+	if err := client.SaveSession(previous); err != nil {
+		t.Fatal(err)
 	}
-	if len(logs) != 2 || !strings.Contains(logs[0], "auth.cookie.saved") || !strings.Contains(logs[1], "anonymous") {
-		t.Fatalf("expected an anonymous-cookie warning, got %v", logs)
+	if err := cmdSetCookie([]string{"sessionid=x; other=y"}); err == nil || !strings.Contains(err.Error(), "global_sid + aws-waf-token") {
+		t.Fatalf("anonymous set-cookie error = %v; want required session-cookie error", err)
+	}
+	got, err := client.LoadSession()
+	if err != nil || got != previous {
+		t.Fatalf("session after rejected cookie = %+v, %v; want unchanged %+v", got, err, previous)
 	}
 }
 
@@ -122,7 +121,7 @@ func TestSetCookieStdinRejectsUnexpectedArgumentsWithoutReplacingSession(t *test
 
 func TestSetCookieSaveEventDoesNotExposeCookie(t *testing.T) {
 	privateTestConfigDir(t)
-	const secret = "global_sid=private-session-value"
+	const secret = "global_sid=private-session-value; aws-waf-token=private-token"
 	var event string
 	oldInfo, oldWarn := stderrInfo, stderrWarn
 	stderrInfo = func(name, _ string, _ ...any) { event = name }

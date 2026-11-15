@@ -64,6 +64,9 @@ func cmdSetCookie(args []string) error {
 	if cookie == "" {
 		return fmt.Errorf("usage: bonpreu set-cookie '<cookie header>'  (or --stdin)")
 	}
+	if !client.CookieLooksAuthed(cookie) {
+		return fmt.Errorf("cookie lacks the required global_sid + aws-waf-token session keys; the previous session was kept")
+	}
 	s, err := client.LoadSession()
 	if err != nil {
 		return err
@@ -73,9 +76,6 @@ func cmdSetCookie(args []string) error {
 		return err
 	}
 	stderrInfo("auth.cookie.saved", "session cookie saved", "operation", "set-cookie")
-	if !client.CookieLooksAuthed(cookie) {
-		stderrWarn("auth.cookie.may_be_anonymous", "cookie lacks expected session keys; verify with bonpreu whoami", "operation", "set-cookie")
-	}
 	return nil
 }
 
