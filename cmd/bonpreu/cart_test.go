@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -356,6 +357,43 @@ func TestCurrentQtySumsDuplicateProductLines(t *testing.T) {
 	q, err := currentQty(testCartClient(srv), "p1")
 	if err != nil || q != 5 {
 		t.Fatalf("currentQty for repeated lines = %v, %v; want 5, nil", q, err)
+	}
+}
+
+func TestDecimalQtySumRejectsInvalidAndOverflow(t *testing.T) {
+	if _, err := decimalQtySum([]client.CartLine{{ProductID: "p", Quantity: math.NaN()}}, "p"); err == nil {
+		t.Fatal("decimal quantity sum should reject an invalid number")
+	}
+	if _, err := decimalQtySum([]client.CartLine{{ProductID: "p", Quantity: math.MaxFloat64}, {ProductID: "p", Quantity: math.MaxFloat64}}, "p"); err == nil {
+		t.Fatal("decimal quantity sum should reject an unrepresentable total")
+	}
+}
+
+func TestCartSetFractionalNoopDoesNotWrite(t *testing.T) {
+	var cartWrites atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/products/23597":
+			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case "/api/cart/v1/carts/active":
+			_, _ = w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":0.1},{"productId":"uuid-23597","quantity":0.2}]}`))
+		case "/":
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active/apply-quantity":
+			cartWrites.Add(1)
+			_, _ = w.Write([]byte(`{"limitedItems":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	if _, err := capture(t, func() error { return cmdCart([]string{"set", "23597", "0.3"}) }); err != nil {
+		t.Fatalf("setting the existing fractional quantity: %v", err)
+	}
+	if got := cartWrites.Load(); got != 0 {
+		t.Fatalf("cart writes = %d, want no write for an unchanged quantity", got)
 	}
 }
 

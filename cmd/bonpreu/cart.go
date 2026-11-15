@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
+	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/seifreed/bonpreu-cli/internal/client"
@@ -252,13 +255,25 @@ func currentQty(cl *client.Client, productID string) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	var quantity float64
-	for _, l := range cart.Lines {
+	return decimalQtySum(cart.Lines, productID)
+}
+
+func decimalQtySum(lines []client.CartLine, productID string) (float64, error) {
+	quantity := new(big.Rat)
+	for _, l := range lines {
 		if l.ProductID == productID {
-			quantity += l.Quantity
+			line, err := ratFromDecimal(strconv.FormatFloat(l.Quantity, 'f', -1, 64))
+			if err != nil {
+				return 0, fmt.Errorf("invalid cart quantity for product %s: %w", productID, err)
+			}
+			quantity.Add(quantity, line)
 		}
 	}
-	return quantity, nil
+	total, _ := quantity.Float64()
+	if math.IsInf(total, 0) {
+		return 0, fmt.Errorf("cart quantity for product %s exceeds the supported range", productID)
+	}
+	return total, nil
 }
 
 // guardLineAdd enforces --max against the resulting product-line value.
