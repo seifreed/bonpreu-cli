@@ -128,7 +128,9 @@ func CheckoutInBrowser(baseURL, cookieHeader string) error {
 	ctx, cancel := chromedp.NewContext(allocCtx)
 	defer cancel()
 
-	fmt.Fprintln(os.Stderr, "→ obrint el checkout oficial; completa y confirma la compra en Chrome y pulsa Enter para cerrar")
+	if _, err := fmt.Fprintln(os.Stderr, "→ obrint el checkout oficial; completa y confirma la compra en Chrome y pulsa Enter para cerrar"); err != nil {
+		return fmt.Errorf("write checkout browser prompt: %w", err)
+	}
 	actions := []chromedp.Action{network.Enable()}
 	for _, cookie := range cookies {
 		cookie := cookie

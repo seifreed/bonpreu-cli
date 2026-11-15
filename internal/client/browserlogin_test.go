@@ -311,6 +311,37 @@ func TestCheckoutInBrowserRejectsUntrustedBaseURL(t *testing.T) {
 	}
 }
 
+func TestCheckoutInBrowserReturnsPromptWriteErrorBeforeLaunching(t *testing.T) {
+	readEnd, writeEnd, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeEnd.Close(); err != nil {
+		t.Fatal(err)
+	}
+	oldStderr, oldRun := os.Stderr, runBrowserActions
+	os.Stderr = writeEnd
+	var runCount int
+	runBrowserActions = func(context.Context, ...chromedp.Action) error {
+		runCount++
+		return nil
+	}
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+		runBrowserActions = oldRun
+		_ = readEnd.Close()
+		_ = writeEnd.Close()
+	})
+
+	err = CheckoutInBrowser("https://www.bonpreuesclat.cat", "global_sid=session; aws-waf-token=waf")
+	if err == nil || !strings.Contains(err.Error(), "write checkout browser prompt") {
+		t.Fatalf("CheckoutInBrowser error = %v; want prompt write error", err)
+	}
+	if runCount != 0 {
+		t.Fatalf("browser launched %d times after the prompt failed; want none", runCount)
+	}
+}
+
 func TestCheckoutInBrowserSetsSessionCookiesAndNavigates(t *testing.T) {
 	executor := &browserLoginExecutor{}
 	useBrowserLoginFakes(t, executor)
