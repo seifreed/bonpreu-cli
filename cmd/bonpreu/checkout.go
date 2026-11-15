@@ -27,8 +27,11 @@ func cmdCheckout(args []string) error {
 	case "browser":
 		return checkoutBrowser(args[1:])
 	default:
-		// No subcommand → treat as `status` with flags.
-		return checkoutStatus(args)
+		if strings.HasPrefix(args[0], "-") {
+			// No subcommand → treat as `status` with flags.
+			return checkoutStatus(args)
+		}
+		return fmt.Errorf("unknown checkout subcommand %q (want status|addresses|slots|reserve|browser)", args[0])
 	}
 }
 

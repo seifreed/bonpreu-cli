@@ -245,3 +245,12 @@ func TestCheckoutDefaultSubcommand(t *testing.T) {
 		t.Fatalf("checkout default→status: %v", err)
 	}
 }
+
+func TestCheckoutRejectsUnknownSubcommand(t *testing.T) {
+	srv := apiServer(t)
+	defer srv.Close()
+	useServer(t, srv, false)
+	if _, err := capture(t, func() error { return cmdCheckout([]string{"stats"}) }); err == nil || !strings.Contains(err.Error(), "unknown checkout subcommand") {
+		t.Fatalf("unknown checkout subcommand error = %v", err)
+	}
+}
