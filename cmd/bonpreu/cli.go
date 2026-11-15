@@ -108,7 +108,7 @@ func addCommon(fs *flag.FlagSet) *common {
 // there is no region flag; the authenticated commands also pick the region up
 // from the imported session. The session cookie (for cart/checkout) is likewise
 // loaded from config/cache by the authenticated commands, not here.
-func newClient(c *common) *client.Client {
+func newClient(c *common) (*client.Client, config.Config) {
 	cl := client.New()
 	cl.Logger = clientLogger(os.Stderr, c.operation)
 	// BONPREU_BASE_URL points the client at an alternate host (a debugging proxy,
@@ -127,7 +127,7 @@ func newClient(c *common) *client.Client {
 	if cfg.Defaults.RegionID != "" {
 		cl.RegionID = cfg.Defaults.RegionID
 	}
-	return cl
+	return cl, cfg
 }
 
 func clientLogger(w io.Writer, operation string) *slog.Logger {

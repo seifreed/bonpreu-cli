@@ -38,7 +38,7 @@ func cmdSearch(args []string) error {
 	if term == "" {
 		return fmt.Errorf("usage: bonpreu search <term...>")
 	}
-	cl := newClient(cf)
+	cl, _ := newClient(cf)
 	pp, err := cl.Search(term, *limit)
 	if err != nil {
 		return err
@@ -158,8 +158,7 @@ func cmdBatch(args []string) error {
 	if len(terms) == 0 {
 		return fmt.Errorf("no terms (use -f file, stdin, or '<term>...' args)")
 	}
-	cl := newClient(cf)
-	cfg, _ := config.LoadConfig()
+	cl, cfg := newClient(cf)
 	override := splitBrands(*brand)
 	offersMode := resolveOffersMode(*offers, cfg.Offers.Mode)
 
@@ -287,7 +286,7 @@ func cmdTotal(args []string) error {
 	if len(lines) == 0 {
 		return fmt.Errorf("no basket lines (use -f file, stdin, or '<id> [<id>...]' args)")
 	}
-	cl := newClient(cf)
+	cl, _ := newClient(cf)
 
 	type lineResult struct {
 		ID       string  `json:"id"`
@@ -359,7 +358,7 @@ func cmdProduct(args []string) error {
 	if fs.NArg() < 1 {
 		return fmt.Errorf("usage: bonpreu product <id>")
 	}
-	cl := newClient(cf)
+	cl, _ := newClient(cf)
 	pd, err := cl.Product(fs.Arg(0))
 	if err != nil {
 		return err
@@ -404,7 +403,7 @@ func cmdCategories(args []string) error {
 	limit := fs.Int("limit", 0, "max products when using --id")
 	cheapest := fs.Bool("cheapest", false, "with --id: rank by unit price (€/kg, €/L, €/u); mark the cheapest per unit")
 	parseFlags(fs, args)
-	cl := newClient(cf)
+	cl, _ := newClient(cf)
 
 	if *id != "" {
 		pp, err := cl.CategoryProducts(*id, *limit)

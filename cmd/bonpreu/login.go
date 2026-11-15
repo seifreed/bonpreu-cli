@@ -42,7 +42,8 @@ func cmdLoginWith(args []string, readBrowser func(string) (client.Session, error
 	if fromBrowserSet {
 		s, err = readBrowser(*fromBrowser)
 	} else {
-		s, err = openBrowser(newClient(cf).BaseURL + "/")
+		cl, _ := newClient(cf)
+		s, err = openBrowser(cl.BaseURL + "/")
 	}
 	if err != nil {
 		return err
@@ -57,7 +58,7 @@ func saveAndVerify(cf *common, s client.Session) error {
 	if err := client.SaveSession(s); err != nil {
 		return err
 	}
-	cl := newClient(cf)
+	cl, _ := newClient(cf)
 	loaded, err := cl.LoadAuth()
 	if err != nil {
 		return err

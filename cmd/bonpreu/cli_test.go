@@ -55,7 +55,7 @@ func TestNewClientWarnsOnMalformedConfig(t *testing.T) {
 	stderrWarn = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
 	defer func() { stderrWarn = old }()
 
-	_ = newClient(&common{})
+	_, _ = newClient(&common{})
 	if len(logs) != 1 || !strings.Contains(logs[0], "config.toml could not be read") {
 		t.Fatalf("expected a malformed-config warning, got %v", logs)
 	}
@@ -68,7 +68,7 @@ func TestNewClientSilentWithoutConfig(t *testing.T) {
 	stderrWarn = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
 	defer func() { stderrWarn = old }()
 
-	_ = newClient(&common{})
+	_, _ = newClient(&common{})
 	if len(logs) != 0 {
 		t.Errorf("missing config is normal → no warning, got %v", logs)
 	}
@@ -164,7 +164,7 @@ func TestNewClientConfigDefaults(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cl := newClient(&common{})
+	cl, _ := newClient(&common{})
 	if cl.Lang != "es" || cl.RegionID != "r-1" {
 		t.Errorf("newClient defaults: lang=%q region=%q", cl.Lang, cl.RegionID)
 	}

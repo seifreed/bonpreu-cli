@@ -35,7 +35,8 @@ func cmdBrands(args []string) error {
 
 	var ranked []brandCount
 	if *update {
-		r, err := crawlBrands(newClient(cf), *depth, *limit)
+		cl, _ := newClient(cf)
+		r, err := crawlBrands(cl, *depth, *limit)
 		if err != nil {
 			return err
 		}

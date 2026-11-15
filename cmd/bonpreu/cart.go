@@ -29,7 +29,7 @@ func cmdCart(args []string) error {
 }
 
 func authedClient(cf *common) (*client.Client, error) {
-	cl := newClient(cf)
+	cl, _ := newClient(cf)
 	loaded, err := cl.LoadAuth()
 	if err != nil {
 		return nil, err
