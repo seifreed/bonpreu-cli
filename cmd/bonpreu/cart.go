@@ -309,9 +309,26 @@ func cartClear(args []string) error {
 		}
 		return nil
 	}
-	items := make([]client.CartItem, 0, len(cart.Lines))
+	quantities := make(map[string]*big.Rat, len(cart.Lines))
+	productIDs := make([]string, 0, len(cart.Lines))
 	for _, l := range cart.Lines {
-		items = append(items, client.CartItem{ProductID: l.ProductID, Quantity: -l.Quantity})
+		quantity, err := quantityRat(l.Quantity)
+		if err != nil {
+			return fmt.Errorf("read cart quantity for product %s: %w", l.ProductID, err)
+		}
+		if quantities[l.ProductID] == nil {
+			quantities[l.ProductID] = new(big.Rat)
+			productIDs = append(productIDs, l.ProductID)
+		}
+		quantities[l.ProductID].Add(quantities[l.ProductID], quantity)
+	}
+	items := make([]client.CartItem, 0, len(productIDs))
+	for _, productID := range productIDs {
+		quantity, err := quantityFloat64(quantities[productID], productID)
+		if err != nil {
+			return err
+		}
+		items = append(items, client.CartItem{ProductID: productID, Quantity: -quantity})
 	}
 	updated, err := cl.ApplyQuantity(items)
 	if err != nil {
@@ -329,14 +346,14 @@ func cartClear(args []string) error {
 	if len(remaining.Lines) > 0 {
 		return fmt.Errorf("cart clear was accepted but %d cart line(s) remain; inspect the cart before retrying", len(remaining.Lines))
 	}
-	stderrInfo("cart.clear.completed", "cart lines cleared", "operation", cf.operation, "line_count", len(items))
+	stderrInfo("cart.clear.completed", "cart lines cleared", "operation", cf.operation, "line_count", len(cart.Lines))
 	if done, err := emitStructured(cf, updated.Raw); done {
 		if err != nil {
 			return fmt.Errorf("cart update was accepted but confirmation output failed; inspect the cart before retrying: %w", err)
 		}
 		return nil
 	}
-	if err := writeStdout("ok — removed %d line(s)\n", len(items)); err != nil {
+	if err := writeStdout("ok — removed %d line(s)\n", len(cart.Lines)); err != nil {
 		return fmt.Errorf("cart update was accepted but confirmation output failed; inspect the cart before retrying: %w", err)
 	}
 	return nil

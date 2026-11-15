@@ -959,6 +959,46 @@ func TestCartClearApplyError(t *testing.T) {
 	}
 }
 
+func TestCartClearCombinesDuplicateProductLines(t *testing.T) {
+	var cartReads, writes atomic.Int32
+	appliedCh := make(chan []client.CartItem, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active":
+			if cartReads.Add(1) == 1 {
+				_, _ = w.Write([]byte(`{"items":[{"productId":"p","quantity":1},{"productId":"p","quantity":2}]}`))
+			} else {
+				_, _ = w.Write([]byte(`{"items":[]}`))
+			}
+		case "/api/cart/v1/carts/active/apply-quantity":
+			writes.Add(1)
+			var applied []client.CartItem
+			if err := json.NewDecoder(r.Body).Decode(&applied); err != nil {
+				t.Errorf("decode cart update: %v", err)
+			}
+			appliedCh <- applied
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	if _, err := capture(t, func() error { return cmdCart([]string{"clear"}) }); err != nil {
+		t.Fatalf("cart clear: %v", err)
+	}
+	if got := writes.Load(); got != 1 {
+		t.Fatalf("cart writes = %d, want 1", got)
+	}
+	applied := <-appliedCh
+	if len(applied) != 1 || applied[0].ProductID != "p" || applied[0].Quantity != -3 {
+		t.Fatalf("cart clear payload = %+v, want one -3 delta for p", applied)
+	}
+}
+
 func TestCartClearReportsServerQuantityLimit(t *testing.T) {
 	var cartWrites atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
