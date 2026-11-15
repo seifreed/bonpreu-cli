@@ -14,9 +14,9 @@ import (
 
 func TestGuardLineAddWarnsWhenUnpriceable(t *testing.T) {
 	var logs []string
-	old := stderrWarnf
-	stderrWarnf = func(event, f string, a ...any) { logs = append(logs, event+" "+fmt.Sprintf(f, a...)) }
-	defer func() { stderrWarnf = old }()
+	old := stderrWarn
+	stderrWarn = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
+	defer func() { stderrWarn = old }()
 
 	pd := &client.ProductDetail{}
 	pd.Name = "Mystery item"
@@ -27,7 +27,7 @@ func TestGuardLineAddWarnsWhenUnpriceable(t *testing.T) {
 	if err := guardLineAdd(50, pd, 2); err != nil {
 		t.Fatalf("unpriceable line must not block: %v", err)
 	}
-	if len(logs) != 1 || !strings.Contains(logs[0], "not enforced") {
+	if len(logs) != 1 || !strings.Contains(logs[0], "cart.guard.price_unavailable") || !strings.Contains(logs[0], "not enforced") || strings.Contains(logs[0], pd.Name) {
 		t.Fatalf("expected one '--max not enforced' warning, got %v", logs)
 	}
 }
@@ -36,9 +36,9 @@ func TestGuardLineAddSilentWithoutLimit(t *testing.T) {
 	t.Setenv("BONPREU_MAX_EUR", "")             // no limit from env
 	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir()) // no limit from a real config.toml
 	var logs []string
-	old := stderrWarnf
-	stderrWarnf = func(event, f string, a ...any) { logs = append(logs, event+" "+fmt.Sprintf(f, a...)) }
-	defer func() { stderrWarnf = old }()
+	old := stderrWarn
+	stderrWarn = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
+	defer func() { stderrWarn = old }()
 
 	pd := &client.ProductDetail{}
 	pd.Name = "Mystery item"

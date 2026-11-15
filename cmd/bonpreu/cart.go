@@ -183,7 +183,8 @@ func guardLineAdd(flagMax float64, pd *client.ProductDetail, qty float64) error 
 		// Unpriceable line: don't block. But if a limit is set, say so — silently
 		// skipping the spending guard would defeat the --max safety contract.
 		if maxEUR > 0 {
-			stderrWarnf("cart.guard.price_unavailable", "could not price cart line (%T) — --max not enforced on this line", perr)
+			stderrWarn("cart.guard.price_unavailable", "could not price cart line; --max was not enforced",
+				"error_type", fmt.Sprintf("%T", perr))
 		}
 		return nil
 	}

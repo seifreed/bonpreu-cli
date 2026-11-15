@@ -38,7 +38,7 @@ func cmdImportHar(args []string) error {
 	}
 	fmt.Fprintln(os.Stderr, " → ~/.bonpreu/session.json")
 	if s.RegionID == "" {
-		stderrWarnf("auth.har.region_missing", "no region found in the HAR — cart/checkout prices will use the server default; set [defaults].region_id in config.toml to pin one")
+		stderrWarn("auth.har.region_missing", "no region found in the HAR; cart/checkout use the server default until a region is configured")
 	}
 	return nil
 }
@@ -69,7 +69,7 @@ func cmdSetCookie(args []string) error {
 	}
 	fmt.Fprintln(os.Stderr, "saved cookie → ~/.bonpreu/session.json")
 	if !client.CookieLooksAuthed(cookie) {
-		stderrWarnf("auth.cookie.may_be_anonymous", "cookie has no global_sid/aws-waf-token — it may be anonymous; run `bonpreu whoami` to verify")
+		stderrWarn("auth.cookie.may_be_anonymous", "cookie lacks expected session keys; verify with bonpreu whoami")
 	}
 	return nil
 }

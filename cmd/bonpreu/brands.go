@@ -95,7 +95,8 @@ func crawlBrands(cl *client.Client, depth, limit int) ([]brandCount, error) {
 	for i, id := range ids {
 		pp, perr := cl.CategoryProducts(id, limit)
 		if perr != nil {
-			stderrWarnf("catalog.category.skipped", "category %s skipped (%T)", id, perr)
+			stderrWarn("catalog.category.skipped", "category crawl failed; skipping it",
+				"category_id", id, "error_type", fmt.Sprintf("%T", perr))
 			continue
 		}
 		tallyBrands(counts, pp.Products())

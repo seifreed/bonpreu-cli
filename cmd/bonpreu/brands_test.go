@@ -102,18 +102,18 @@ func TestCrawlBrandsSkipsCategoryFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	old := stderrWarnf
+	old := stderrWarn
 	var warnings []string
-	stderrWarnf = func(event, format string, args ...any) {
-		warnings = append(warnings, event+" "+fmt.Sprintf(format, args...))
+	stderrWarn = func(event, message string, attrs ...any) {
+		warnings = append(warnings, event+" "+message+fmt.Sprint(attrs...))
 	}
-	defer func() { stderrWarnf = old }()
+	defer func() { stderrWarn = old }()
 
 	got, err := crawlBrands(testCartClient(srv), 1, 10)
 	if err != nil || len(got) != 0 {
 		t.Fatalf("crawlBrands = %v, %v; want empty result without abort", got, err)
 	}
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "catalog.category.skipped") || strings.Contains(warnings[0], "remote details") {
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "catalog.category.skipped") || !strings.Contains(warnings[0], "category_id0301") || strings.Contains(warnings[0], "remote details") {
 		t.Fatalf("expected one safe category warning, got %q", warnings)
 	}
 }

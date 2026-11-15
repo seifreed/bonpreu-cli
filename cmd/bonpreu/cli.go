@@ -21,8 +21,9 @@ var stderrInfo = func(event, message string, attrs ...any) {
 	defaultLogger().Info(message, append(fields, attrs...)...)
 }
 
-var stderrWarnf = func(event, format string, args ...any) {
-	defaultLogger().Warn(fmt.Sprintf(format, args...), "service", "bonpreu", "component", "cli", "event_name", event)
+var stderrWarn = func(event, message string, attrs ...any) {
+	fields := []any{"service", "bonpreu", "component", "cli", "event_name", event}
+	defaultLogger().Warn(message, append(fields, attrs...)...)
 }
 
 func defaultLogger() *slog.Logger {
@@ -90,7 +91,7 @@ func newClient(c *common) *client.Client {
 	}
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		stderrWarnf("config.load_failed", "config.toml could not be read (%T) — using defaults", err)
+		stderrWarn("config.load_failed", "config.toml could not be read; using defaults", "error_type", fmt.Sprintf("%T", err))
 	}
 	if v := firstNonEmpty(c.lang, cfg.Defaults.Lang); v != "" {
 		cl.Lang = v
