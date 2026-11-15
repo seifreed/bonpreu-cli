@@ -111,6 +111,37 @@ func TestLoginViaBrowserCapturesBonpreuCookies(t *testing.T) {
 	}
 }
 
+func TestLoginViaBrowserReturnsPromptWriteErrorBeforeLaunching(t *testing.T) {
+	readEnd, writeEnd, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeEnd.Close(); err != nil {
+		t.Fatal(err)
+	}
+	oldStderr, oldRun := os.Stderr, runBrowserActions
+	os.Stderr = writeEnd
+	var runCount int
+	runBrowserActions = func(context.Context, ...chromedp.Action) error {
+		runCount++
+		return nil
+	}
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+		runBrowserActions = oldRun
+		_ = readEnd.Close()
+		_ = writeEnd.Close()
+	})
+
+	_, err = LoginViaBrowser("https://www.bonpreuesclat.cat/")
+	if err == nil || !strings.Contains(err.Error(), "write browser login prompt") {
+		t.Fatalf("LoginViaBrowser error = %v; want prompt write error", err)
+	}
+	if runCount != 0 {
+		t.Fatalf("browser launched %d times after the prompt failed; want none", runCount)
+	}
+}
+
 func TestLoginViaBrowserRejectsUntrustedURLsBeforeLaunching(t *testing.T) {
 	for _, loginURL := range []string{
 		"http://www.bonpreuesclat.cat/",
