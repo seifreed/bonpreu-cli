@@ -75,8 +75,14 @@ func New() *Client {
 }
 
 func checkRedirect(req *http.Request, via []*http.Request) error {
-	if len(via) > 0 && strings.EqualFold(via[len(via)-1].URL.Scheme, "https") && !strings.EqualFold(req.URL.Scheme, "https") {
-		return errors.New("refusing HTTPS-to-HTTP redirect")
+	if len(via) > 0 {
+		previous := via[len(via)-1]
+		if strings.EqualFold(previous.URL.Scheme, "https") && !strings.EqualFold(req.URL.Scheme, "https") {
+			return errors.New("refusing HTTPS-to-HTTP redirect")
+		}
+		if previous.Header.Get("Cookie") != "" {
+			return errors.New("refusing redirect carrying a session cookie")
+		}
 	}
 	if len(via) >= 10 {
 		return errors.New("stopped after 10 redirects")

@@ -293,6 +293,18 @@ func TestCheckRedirectAllowsSafeRedirectAndEnforcesLimit(t *testing.T) {
 	if err := checkRedirect(req, []*http.Request{req}); err != nil {
 		t.Fatalf("same-scheme redirect error = %v", err)
 	}
+	authenticated, err := http.NewRequest(http.MethodGet, "https://example.test/path", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authenticated.Header.Set("Cookie", "session=secret")
+	redirect, err := http.NewRequest(http.MethodGet, "https://example.test/next", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkRedirect(redirect, []*http.Request{authenticated}); err == nil || !strings.Contains(err.Error(), "session cookie") {
+		t.Fatalf("cookie-bearing redirect error = %v", err)
+	}
 	via := make([]*http.Request, 10)
 	for i := range via {
 		via[i] = req
