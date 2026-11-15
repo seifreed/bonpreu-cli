@@ -268,6 +268,26 @@ func TestBatchReportsMissingBrandPolicy(t *testing.T) {
 	}
 }
 
+func TestBatchRejectsInvalidBrandModeBeforeSearching(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","brand":"Second","price":{"amount":"1.00"}}]}]}`))
+	}))
+	defer srv.Close()
+	dir := useServer(t, srv, false)
+	config := "[brands]\npreferred = [\"First\", \"Second\"]\nmode = \"strict_priorty\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := capture(t, func() error { return cmdBatch([]string{"--json", "x"}) }); err == nil || !strings.Contains(err.Error(), "invalid [brands].mode") {
+		t.Fatalf("batch with invalid brand mode error = %v", err)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("invalid brand mode made %d network request(s) before failing", got)
+	}
+}
+
 func TestTotalBadFileAndUnpriceable(t *testing.T) {
 	if err := cmdTotal([]string{"-f", filepath.Join(t.TempDir(), "nope")}); err == nil {
 		t.Error("total with a missing file should error")

@@ -160,6 +160,9 @@ func cmdBatch(args []string) error {
 		return fmt.Errorf("no terms (use -f file, stdin, or '<term>...' args)")
 	}
 	cl, cfg := newClient(cf)
+	if mode := cfg.Brands.Mode; mode != "" && mode != "cheapest_among" && mode != "strict_priority" {
+		return fmt.Errorf("invalid [brands].mode %q (want cheapest_among or strict_priority)", mode)
+	}
 	override := splitBrands(*brand)
 	offersMode := resolveOffersMode(*offers, cfg.Offers.Mode)
 
