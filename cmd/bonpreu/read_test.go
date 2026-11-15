@@ -45,6 +45,27 @@ func TestRankByUnit(t *testing.T) {
 	}
 }
 
+func TestPrintProductLinesMarksWinnersAndIndentation(t *testing.T) {
+	products := []client.Product{
+		{RetailerProductID: "winner", Name: "A", UnitPrice: client.UnitPrice{Unit: "fop.price.per.kg"}},
+		{RetailerProductID: "other", Name: "B"},
+	}
+	out, err := capture(t, func() error {
+		printProductLines(products, map[string]bool{"winner": true}, true)
+		return nil
+	})
+	if err != nil || !strings.Contains(out, "  ★") || !strings.Contains(out, "    ") || !strings.Contains(out, "millor /kg") {
+		t.Fatalf("cheapest product output = %q, err %v", out, err)
+	}
+	out, err = capture(t, func() error {
+		printProductLines(products[1:], nil, false)
+		return nil
+	})
+	if err != nil || !strings.HasPrefix(out, "  ") || strings.HasPrefix(out, "    ") {
+		t.Fatalf("ordinary product output = %q, err %v", out, err)
+	}
+}
+
 func TestRankByUnitSkipsSponsored(t *testing.T) {
 	perKg := func(amount string) client.UnitPrice {
 		return client.UnitPrice{Price: client.Money{Amount: amount}, Unit: "fop.price.per.kg", UnitName: "PER_1KG"}
