@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/seifreed/bonpreu-cli/internal/client"
@@ -162,8 +163,36 @@ func TestCartAddArgErrorsAndApplyError(t *testing.T) {
 	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597"}) }); err == nil {
 		t.Error("add with one arg should error (need id + qty)")
 	}
+	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1", "unexpected"}) }); err == nil {
+		t.Error("add with extra args should error instead of mutating the cart")
+	}
 	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1"}) }); err == nil {
 		t.Error("add should surface the apply-quantity error")
+	}
+}
+
+func TestCartMutationsRejectSurplusArgumentsBeforeRequests(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	for _, args := range [][]string{
+		{"clear", "23597"},
+		{"add", "23597", "1", "unexpected"},
+		{"set", "23597", "2", "unexpected"},
+	} {
+		requests.Store(0)
+		_, err := capture(t, func() error { return cmdCart(args) })
+		if err == nil || !strings.Contains(err.Error(), "usage:") {
+			t.Errorf("cart %v error = %v; want usage error", args, err)
+		}
+		if got := requests.Load(); got != 0 {
+			t.Errorf("cart %v made %d requests before rejecting malformed args", args, got)
+		}
 	}
 }
 

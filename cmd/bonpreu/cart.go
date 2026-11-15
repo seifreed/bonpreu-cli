@@ -86,7 +86,7 @@ func cartWrite(args []string, set bool) error {
 	fs, cf := newCommonFlags("cart write")
 	maxEUR := fs.Float64("max", 0, "refuse if the added line would exceed this many €")
 	parseFlags(fs, args)
-	if fs.NArg() < 2 {
+	if fs.NArg() != 2 {
 		return fmt.Errorf("usage: bonpreu cart %s <id> <qty>", verb)
 	}
 	retailerID := fs.Arg(0)
@@ -137,6 +137,9 @@ func cartWrite(args []string, set bool) error {
 func cartClear(args []string) error {
 	fs, cf := newCommonFlags("cart clear")
 	parseFlags(fs, args)
+	if fs.NArg() != 0 {
+		return fmt.Errorf("usage: bonpreu cart clear")
+	}
 	cl, err := authedClient(cf)
 	if err != nil {
 		return err
