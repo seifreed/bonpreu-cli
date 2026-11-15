@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -29,10 +30,7 @@ var (
 	runBrowserActions = chromedp.Run
 	loginNow          = time.Now
 	loginSleep        = sleepCtx
-	checkoutWait      = func() error {
-		_, err := bufio.NewReader(os.Stdin).ReadString('\n')
-		return err
-	}
+	checkoutWait      = func(ctx context.Context) error { return waitForCheckout(ctx, os.Stdin) }
 )
 
 // LoginViaBrowser opens a visible Chrome window at loginURL, lets the user log in
@@ -140,10 +138,27 @@ func CheckoutInBrowser(baseURL, cookieHeader string) error {
 	if err := runBrowserActions(ctx, actions...); err != nil {
 		return fmt.Errorf("open checkout browser: %w", err)
 	}
-	if err := checkoutWait(); err != nil {
+	if err := checkoutWait(baseCtx); err != nil {
 		return fmt.Errorf("wait for checkout confirmation: %w", err)
 	}
 	return nil
+}
+
+func waitForCheckout(ctx context.Context, input io.Reader) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	readDone := make(chan error, 1)
+	go func() {
+		_, err := bufio.NewReader(input).ReadString('\n')
+		readDone <- err
+	}()
+	select {
+	case err := <-readDone:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func checkoutPageURL(baseURL string) (string, error) {

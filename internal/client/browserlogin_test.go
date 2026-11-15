@@ -5,6 +5,7 @@ package client
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +25,17 @@ type browserLoginExecutor struct {
 	cookiesError      error
 	navigationURL     string
 	cookieURLs        []string
+}
+
+type blockingCheckoutReader struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (r *blockingCheckoutReader) Read([]byte) (int, error) {
+	close(r.started)
+	<-r.release
+	return 0, io.EOF
 }
 
 func (e *browserLoginExecutor) Execute(_ context.Context, method string, params, result any) error {
@@ -207,7 +219,7 @@ func TestCheckoutInBrowserRejectsUntrustedBaseURL(t *testing.T) {
 func TestCheckoutInBrowserSetsSessionCookiesAndNavigates(t *testing.T) {
 	executor := &browserLoginExecutor{}
 	useBrowserLoginFakes(t, executor)
-	checkoutWait = func() error { return nil }
+	checkoutWait = func(context.Context) error { return nil }
 	if err := CheckoutInBrowser("https://www.compraonline.bonpreuesclat.cat/ignored", "global_sid=session; aws-waf-token=waf"); err != nil {
 		t.Fatal(err)
 	}
@@ -245,11 +257,42 @@ func TestCheckoutInBrowserReturnsNavigationCookieAndWaitErrors(t *testing.T) {
 			executor := &browserLoginExecutor{}
 			tc.setup(executor)
 			useBrowserLoginFakes(t, executor)
-			checkoutWait = func() error { return tc.waitErr }
+			checkoutWait = func(context.Context) error { return tc.waitErr }
 			err := CheckoutInBrowser("https://www.bonpreuesclat.cat", "global_sid=session; aws-waf-token=waf")
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("CheckoutInBrowser error = %v; want %q", err, tc.want)
 			}
 		})
 	}
+}
+
+func TestWaitForCheckoutReadsLineAndStopsOnCancellation(t *testing.T) {
+	if err := waitForCheckout(context.Background(), strings.NewReader("\n")); err != nil {
+		t.Fatalf("waitForCheckout with Enter = %v", err)
+	}
+	preCanceled, preCancel := context.WithCancel(context.Background())
+	preCancel()
+	if err := waitForCheckout(preCanceled, strings.NewReader("\n")); !errors.Is(err, context.Canceled) {
+		t.Fatalf("waitForCheckout with canceled context = %v", err)
+	}
+
+	reader := &blockingCheckoutReader{started: make(chan struct{}), release: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- waitForCheckout(ctx, reader) }()
+	select {
+	case <-reader.started:
+	case <-time.After(time.Second):
+		t.Fatal("waitForCheckout did not start reading")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("waitForCheckout cancellation = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("waitForCheckout did not return after cancellation")
+	}
+	close(reader.release)
 }
