@@ -47,6 +47,7 @@ func TestReorderArgs(t *testing.T) {
 func TestNewClientWarnsOnMalformedConfig(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	t.Setenv("BONPREU_ALLOW_EXTERNAL_COOKIE_HOST", "")
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("bad = toml ["), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -63,6 +64,7 @@ func TestNewClientWarnsOnMalformedConfig(t *testing.T) {
 
 func TestNewClientSilentWithoutConfig(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir()) // no config.toml present
+	t.Setenv("BONPREU_ALLOW_EXTERNAL_COOKIE_HOST", "")
 	var logs []string
 	old := stderrWarn
 	stderrWarn = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
@@ -160,13 +162,14 @@ func TestNewClientConfigDefaults(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("BONPREU_CONFIG_DIR", dir)
 	t.Setenv("BONPREU_BASE_URL", "")
+	t.Setenv("BONPREU_ALLOW_EXTERNAL_COOKIE_HOST", "1")
 	body := "[defaults]\nlang = \"es\"\nregion_id = \"r-1\"\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cl, _ := newClient(&common{})
-	if cl.Lang != "es" || cl.RegionID != "r-1" {
-		t.Errorf("newClient defaults: lang=%q region=%q", cl.Lang, cl.RegionID)
+	if cl.Lang != "es" || cl.RegionID != "r-1" || !cl.AllowExternalCookieHost {
+		t.Errorf("newClient defaults: lang=%q region=%q allow_external_cookie_host=%t", cl.Lang, cl.RegionID, cl.AllowExternalCookieHost)
 	}
 }
 

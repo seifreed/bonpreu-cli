@@ -87,18 +87,24 @@ func (c *Client) warnExternalCookieHost(cookie string) {
 	}
 }
 
-func (c *Client) validateCookieTransport(cookie string) error {
+func (c *Client) validateCookieTransport(cookie, targetURL string) error {
 	if cookie == "" {
 		return nil
 	}
-	u, err := url.Parse(c.BaseURL)
+	u, err := url.Parse(targetURL)
 	if err != nil || u.Hostname() == "" {
-		return fmt.Errorf("cannot safely send session cookie to invalid base URL")
-	}
-	if strings.EqualFold(u.Scheme, "https") {
-		return nil
+		return fmt.Errorf("cannot safely send session cookie to invalid target URL")
 	}
 	host := u.Hostname()
+	if strings.EqualFold(u.Scheme, "https") {
+		if isBonpreuHost(host) || c.AllowExternalCookieHost || strings.EqualFold(host, "localhost") {
+			return nil
+		}
+		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			return nil
+		}
+		return fmt.Errorf("refusing to send session cookie to non-Bonpreu host %q; explicitly allow only trusted staging hosts", host)
+	}
 	if strings.EqualFold(host, "localhost") {
 		return nil
 	}

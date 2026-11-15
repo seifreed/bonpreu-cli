@@ -35,6 +35,10 @@ type Client struct {
 	UserAgent string
 	Lang      string // "ca" or "es"; sent via accept-language
 
+	// AllowExternalCookieHost explicitly permits sending the session cookie to a
+	// remote HTTPS host other than Bonpreu (for trusted staging environments).
+	AllowExternalCookieHost bool
+
 	// Region scopes prices/availability. Bonpreu serves the anonymous catalog
 	// without one, so it is optional for reads; cart/checkout resolve it from the
 	// session. Empty = let the server use its default region.
@@ -147,7 +151,7 @@ func (c *Client) newReq(method, url string, body any, extra map[string]string) (
 		req.Header.Set("content-type", "application/json")
 	}
 	if c.Cookie != "" {
-		if err := c.validateCookieTransport(c.Cookie); err != nil {
+		if err := c.validateCookieTransport(c.Cookie, url); err != nil {
 			return nil, err
 		}
 		req.Header.Set("cookie", c.Cookie)

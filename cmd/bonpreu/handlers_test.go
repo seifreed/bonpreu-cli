@@ -56,6 +56,7 @@ func useServer(t *testing.T, srv *httptest.Server, authed bool) string {
 	dir := t.TempDir()
 	t.Setenv("BONPREU_CONFIG_DIR", dir)
 	t.Setenv("BONPREU_MAX_EUR", "")
+	t.Setenv("BONPREU_ALLOW_EXTERNAL_COOKIE_HOST", "")
 	if authed {
 		if err := client.SaveSession(client.Session{Cookie: "global_sid=a; aws-waf-token=b", RegionID: "r-1"}); err != nil {
 			t.Fatal(err)

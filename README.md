@@ -287,6 +287,8 @@ State lives in `~/.bonpreu/` (override with `BONPREU_CONFIG_DIR`):
 
 The brand catalogue ships **in the repo/binary** (`internal/branddata/brands.json`), not under `~/.bonpreu/`.
 
+`BONPREU_BASE_URL` can point the CLI at a mock or staging API. Session cookies are sent only to Bonpreu hosts and loopback by default. For a trusted remote HTTPS staging host, explicitly set `BONPREU_ALLOW_EXTERNAL_COOKIE_HOST=1`; the CLI still emits a security warning for that host.
+
 ---
 
 ## Status

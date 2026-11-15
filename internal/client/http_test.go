@@ -260,6 +260,38 @@ func TestNewReqRejectsRemoteHTTPCookie(t *testing.T) {
 	}
 }
 
+func TestNewReqRejectsForeignHTTPSCookieByDefault(t *testing.T) {
+	cl := &Client{BaseURL: "https://evil.example", Cookie: "global_sid=secret"}
+	if _, err := cl.newReq(http.MethodGet, cl.BaseURL+"/api", nil, nil); err == nil || !strings.Contains(err.Error(), "non-Bonpreu") {
+		t.Fatalf("newReq error = %v, want foreign-host rejection", err)
+	}
+}
+
+func TestNewReqValidatesActualCookieTarget(t *testing.T) {
+	cl := &Client{BaseURL: BaseURL, Cookie: "global_sid=secret"}
+	if _, err := cl.newReq(http.MethodGet, "https://evil.example/api", nil, nil); err == nil || !strings.Contains(err.Error(), "non-Bonpreu") {
+		t.Fatalf("newReq error = %v, want foreign request target rejection", err)
+	}
+}
+
+func TestNewReqAllowsExplicitTrustedHTTPSHost(t *testing.T) {
+	cl := &Client{BaseURL: "https://staging.example", Cookie: "global_sid=secret", AllowExternalCookieHost: true}
+	req, err := cl.newReq(http.MethodGet, cl.BaseURL+"/api", nil, nil)
+	if err != nil {
+		t.Fatalf("newReq with explicit staging opt-in: %v", err)
+	}
+	if got := req.Header.Get("Cookie"); got != "global_sid=secret" {
+		t.Fatalf("request Cookie = %q, want explicitly allowed session", got)
+	}
+}
+
+func TestCheckAuthWithCookieRejectsForeignHTTPSByDefault(t *testing.T) {
+	cl := &Client{BaseURL: "https://evil.example"}
+	if _, err := cl.CheckAuthWithCookie("global_sid=secret"); err == nil || !strings.Contains(err.Error(), "non-Bonpreu") {
+		t.Fatalf("CheckAuthWithCookie error = %v, want foreign-host rejection", err)
+	}
+}
+
 func TestClientDoesNotForwardCookieOnHTTPSDowngradeRedirect(t *testing.T) {
 	var destinationRequests atomic.Int32
 	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -316,20 +348,23 @@ func TestCheckRedirectAllowsSafeRedirectAndEnforcesLimit(t *testing.T) {
 
 func TestValidateCookieTransport(t *testing.T) {
 	for _, tc := range []struct {
-		name, baseURL, cookie string
-		wantErr               bool
+		name, targetURL, cookie string
+		allowExternal           bool
+		wantErr                 bool
 	}{
 		{name: "empty cookie"},
-		{name: "bad url", baseURL: "://bad", cookie: "secret", wantErr: true},
-		{name: "https", baseURL: "https://example.test", cookie: "secret"},
-		{name: "uppercase https", baseURL: "HTTPS://example.test", cookie: "secret"},
-		{name: "localhost", baseURL: "http://localhost:8080", cookie: "secret"},
-		{name: "loopback ip", baseURL: "http://127.0.0.1:8080", cookie: "secret"},
-		{name: "remote http", baseURL: "http://example.test", cookie: "secret", wantErr: true},
+		{name: "bad url", targetURL: "://bad", cookie: "secret", wantErr: true},
+		{name: "bonpreu https", targetURL: "https://www.compraonline.bonpreuesclat.cat", cookie: "secret"},
+		{name: "uppercase https", targetURL: "HTTPS://www.compraonline.bonpreuesclat.cat", cookie: "secret"},
+		{name: "foreign https", targetURL: "https://example.test", cookie: "secret", wantErr: true},
+		{name: "trusted foreign https", targetURL: "https://example.test", cookie: "secret", allowExternal: true},
+		{name: "localhost", targetURL: "http://localhost:8080", cookie: "secret"},
+		{name: "loopback ip", targetURL: "http://127.0.0.1:8080", cookie: "secret"},
+		{name: "remote http", targetURL: "http://example.test", cookie: "secret", allowExternal: true, wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cl := &Client{BaseURL: tc.baseURL}
-			err := cl.validateCookieTransport(tc.cookie)
+			cl := &Client{AllowExternalCookieHost: tc.allowExternal}
+			err := cl.validateCookieTransport(tc.cookie, tc.targetURL)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("validateCookieTransport = %v, wantErr %v", err, tc.wantErr)
 			}

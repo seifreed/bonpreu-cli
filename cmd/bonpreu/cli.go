@@ -116,6 +116,7 @@ func newClient(c *common) (*client.Client, config.Config) {
 	if u := os.Getenv("BONPREU_BASE_URL"); u != "" {
 		cl.BaseURL = u
 	}
+	cl.AllowExternalCookieHost = os.Getenv("BONPREU_ALLOW_EXTERNAL_COOKIE_HOST") == "1"
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		stderrWarn("config.load_failed", "config.toml could not be read; using defaults",

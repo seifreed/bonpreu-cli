@@ -223,6 +223,7 @@ COMMON FLAGS (may go anywhere after the (sub)command):
 
 ENV:
   BONPREU_BASE_URL        override the API host (debugging proxy, mock, staging)
+  BONPREU_ALLOW_EXTERNAL_COOKIE_HOST=1  explicitly allow session cookies to a trusted remote HTTPS staging host
   BONPREU_CONFIG_DIR      override ~/.bonpreu
   BONPREU_MAX_EUR         default spending cap (see --max)
 
