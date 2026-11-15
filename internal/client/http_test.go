@@ -591,19 +591,28 @@ func TestCartProjectionMismatchReturnsDecodeError(t *testing.T) {
 }
 
 func TestGetCartRejectsMissingOrNullItems(t *testing.T) {
-	for _, body := range []string{`{}`, `{"items":null}`} {
-		t.Run(body, func(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, want string
+	}{
+		{"missing items", `{}`, "missing or null items"},
+		{"null items", `{"items":null}`, "missing or null items"},
+		{"missing product ID", `{"items":[{}]}`, "invalid item at index 0"},
+		{"missing quantity", `{"items":[{"productId":"p1"}]}`, "invalid item at index 0"},
+		{"zero quantity", `{"items":[{"productId":"p1","quantity":0}]}`, "invalid item at index 0"},
+		{"negative quantity", `{"items":[{"productId":"p1","quantity":-1}]}`, "invalid item at index 0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.Write([]byte(body))
+				w.Write([]byte(tc.body))
 			}))
 			defer srv.Close()
 
 			cart, err := testClient(srv).GetCart()
-			if err == nil || !strings.Contains(err.Error(), "missing or null items") {
-				t.Fatalf("GetCart(%s) error = %v; want missing items error", body, err)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("GetCart(%s) error = %v; want %q", tc.body, err, tc.want)
 			}
 			if cart != nil {
-				t.Fatalf("GetCart(%s) returned a cart after schema failure: %+v", body, cart)
+				t.Fatalf("GetCart(%s) returned a cart after schema failure: %+v", tc.body, cart)
 			}
 		})
 	}

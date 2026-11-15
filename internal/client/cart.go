@@ -74,6 +74,12 @@ func (c *Client) GetCart() (*Cart, error) {
 	if s.Items == nil {
 		return nil, fmt.Errorf("decode active cart response: missing or null items")
 	}
+	for i, item := range s.Items {
+		if strings.TrimSpace(item.ProductID) == "" || item.Quantity <= 0 ||
+			math.IsNaN(item.Quantity) || math.IsInf(item.Quantity, 0) {
+			return nil, fmt.Errorf("decode active cart response: invalid item at index %d", i)
+		}
+	}
 	return &Cart{
 		Lines: s.Items,
 		Total: s.Totals.ItemPriceAfterPromos,
