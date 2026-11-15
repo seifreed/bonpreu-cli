@@ -208,6 +208,9 @@ func readBonpreuCookies(ctx context.Context, url string) (string, error) {
 		if c == nil || c.Name == "" || c.Value == "" || !isBonpreuCookieDomain(c.Domain) {
 			continue
 		}
+		if value, ok := val[c.Name]; ok && value != c.Value && isAuthCookieName(c.Name) {
+			return "", fmt.Errorf("conflicting Bonpreu authentication cookies apply to the requested page")
+		}
 		if _, ok := val[c.Name]; !ok {
 			order = append(order, c.Name)
 		}
@@ -218,6 +221,11 @@ func readBonpreuCookies(ctx context.Context, url string) (string, error) {
 		pairs = append(pairs, nameVal{n, val[n]})
 	}
 	return buildCookieHeader(pairs), nil
+}
+
+func isBonpreuCookieDomain(domain string) bool {
+	domain = strings.Trim(strings.ToLower(strings.TrimSpace(domain)), ".")
+	return domain == cookieDomain || strings.HasSuffix(domain, "."+cookieDomain)
 }
 
 // sleepCtx waits d, returning early (with an error) if the browser context dies —

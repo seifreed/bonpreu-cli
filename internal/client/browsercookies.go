@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/browserutils/kooky"
 	_ "github.com/browserutils/kooky/browser/all" // register Chrome/Firefox/Safari/Edge/Brave finders
@@ -14,6 +15,7 @@ import (
 
 // cookieDomain is the registrable domain shared by Bonpreu's site cookies.
 const cookieDomain = "bonpreuesclat.cat"
+const cookieTargetHost = "www.compraonline.bonpreuesclat.cat"
 
 type nameVal struct{ name, val string }
 
@@ -32,8 +34,9 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 	// Keep cookies within their browser profile and container; combining stores
 	// can splice a session ID and WAF token into an invalid authenticated session.
 	type store struct {
-		val   map[string]string
-		order []string
+		val                   map[string]string
+		order                 []string
+		conflictingAuthCookie bool
 	}
 	type storeKey struct {
 		browser, profile, path, container string
@@ -43,6 +46,7 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 	var storeOrder []storeKey
 	var storeErrors []error
 	unsupportedStoreCount := 0
+	now := time.Now()
 	for c, err := range cookies {
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -55,7 +59,7 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 			}
 			continue
 		}
-		if c == nil || c.Browser == nil || c.Name == "" || c.Value == "" || !isBonpreuCookieDomain(c.Domain) {
+		if c == nil || c.Browser == nil || c.Name == "" || c.Value == "" || !cookieAppliesToShopHome(c, now) {
 			continue
 		}
 		key := storeKey{
@@ -74,10 +78,16 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 			stores[key] = s
 			storeOrder = append(storeOrder, key)
 		}
+		if value, ok := s.val[c.Name]; ok && value != c.Value {
+			if isAuthCookieName(c.Name) {
+				s.conflictingAuthCookie = true
+			}
+			continue
+		}
 		if _, ok := s.val[c.Name]; !ok {
 			s.order = append(s.order, c.Name)
 		}
-		s.val[c.Name] = c.Value // last write wins within a single browser
+		s.val[c.Name] = c.Value
 	}
 
 	where := "your browser"
@@ -85,12 +95,17 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 		where = browser
 	}
 	var authenticatedCookie string
+	conflictingAuthCookie := false
 	ambiguityHint := "pass --from-browser <name>"
 	if browser != "" {
 		ambiguityHint = "leave only one authenticated profile in that browser"
 	}
 	for _, key := range storeOrder {
 		s := stores[key]
+		if s.conflictingAuthCookie {
+			conflictingAuthCookie = true
+			continue
+		}
 		pairs := make([]nameVal, 0, len(s.order))
 		for _, n := range s.order {
 			pairs = append(pairs, nameVal{n, s.val[n]})
@@ -101,6 +116,9 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 			}
 			authenticatedCookie = cookie
 		}
+	}
+	if conflictingAuthCookie {
+		return Session{}, fmt.Errorf("conflicting Bonpreu authentication cookies apply to the shop home page in %s; remove duplicate sessions and retry", where)
 	}
 	if authenticatedCookie != "" {
 		return Session{Cookie: authenticatedCookie}, nil
@@ -117,9 +135,25 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 		"(or pass --from-browser <chrome|firefox|safari|edge|brave>)", where)
 }
 
-func isBonpreuCookieDomain(domain string) bool {
-	domain = strings.Trim(strings.ToLower(strings.TrimSpace(domain)), ".")
-	return domain == cookieDomain || strings.HasSuffix(domain, "."+cookieDomain)
+func isAuthCookieName(name string) bool {
+	return name == "global_sid" || name == "aws-waf-token"
+}
+
+func cookieAppliesToShopHome(c *kooky.Cookie, now time.Time) bool {
+	domain := strings.ToLower(strings.TrimSpace(c.Domain))
+	domainCookie := strings.HasPrefix(domain, ".")
+	domain = strings.TrimPrefix(domain, ".")
+	if domainCookie {
+		if cookieTargetHost != domain && !strings.HasSuffix(cookieTargetHost, "."+domain) {
+			return false
+		}
+	} else if domain != cookieTargetHost {
+		return false
+	}
+	if c.Path != "" && c.Path != "/" {
+		return false
+	}
+	return c.Expires.IsZero() || c.Expires.After(now)
 }
 
 func isUnsupportedCookieStoreError(err error) bool {

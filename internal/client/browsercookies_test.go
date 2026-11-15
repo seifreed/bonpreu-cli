@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/browserutils/kooky"
 )
@@ -54,7 +55,6 @@ func browserCookieForDomain(browser, name, value, domain string) *kooky.Cookie {
 func TestCookiesFromSequenceGroupsByBrowserAndFilters(t *testing.T) {
 	seq := cookieSequence(
 		cookieItem{nil, errors.New("store unreadable")},
-		cookieItem{browserCookie("chrome", "global_sid", "old"), nil},
 		cookieItem{browserCookie("chrome", "global_sid", "new"), nil},
 		cookieItem{browserCookie("firefox", "aws-waf-token", "other-browser"), nil},
 		cookieItem{browserCookie("chrome", "aws-waf-token", "token"), nil},
@@ -70,6 +70,37 @@ func TestCookiesFromSequenceGroupsByBrowserAndFilters(t *testing.T) {
 	got, err = cookiesFromSequence("", seq)
 	if err != nil || got.Cookie != "aws-waf-token=token; global_sid=new" {
 		t.Fatalf("unfiltered session = %+v, err %v", got, err)
+	}
+}
+
+func TestCookiesFromSequenceUsesOnlyCookiesApplicableToShopHome(t *testing.T) {
+	now := time.Now()
+	valid := browserCookieForDomain("chrome", "global_sid", "session", ".bonpreuesclat.cat")
+	waf := browserCookieForDomain("chrome", "aws-waf-token", "token", ".www.compraonline.bonpreuesclat.cat")
+	wrongPath := browserCookieForDomain("chrome", "ignored-path", "value", ".bonpreuesclat.cat")
+	wrongPath.Path = "/api"
+	expired := browserCookieForDomain("chrome", "expired", "value", ".bonpreuesclat.cat")
+	expired.Expires = now.Add(-time.Minute)
+	wrongHost := browserCookieForDomain("chrome", "sibling", "value", ".www.bonpreuesclat.cat")
+	hostOnlySibling := browserCookieForDomain("chrome", "host-only-sibling", "value", "bonpreuesclat.cat")
+
+	got, err := cookiesFromSequence("chrome", cookieSequence(
+		cookieItem{valid, nil}, cookieItem{waf, nil}, cookieItem{wrongPath, nil},
+		cookieItem{expired, nil}, cookieItem{wrongHost, nil}, cookieItem{hostOnlySibling, nil},
+	))
+	if err != nil || got.Cookie != "aws-waf-token=token; global_sid=session" {
+		t.Fatalf("shop-home cookies = %+v, %v", got, err)
+	}
+}
+
+func TestCookiesFromSequenceRejectsConflictingAuthenticationCookies(t *testing.T) {
+	_, err := cookiesFromSequence("chrome", cookieSequence(
+		cookieItem{browserCookie("chrome", "global_sid", "old"), nil},
+		cookieItem{browserCookieForDomain("chrome", "global_sid", "new", ".www.compraonline.bonpreuesclat.cat"), nil},
+		cookieItem{browserCookie("chrome", "aws-waf-token", "token"), nil},
+	))
+	if err == nil || !strings.Contains(err.Error(), "conflicting Bonpreu authentication cookies") {
+		t.Fatalf("conflicting auth cookies error = %v", err)
 	}
 }
 
