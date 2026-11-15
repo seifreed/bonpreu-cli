@@ -45,7 +45,7 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 	var storeErrors []error
 	for c, err := range cookies {
 		if err != nil {
-			if !errors.Is(err, fs.ErrNotExist) && !strings.Contains(strings.ToLower(err.Error()), "not implemented") {
+			if !isUnsupportedCookieStoreError(err) {
 				storeErrors = append(storeErrors, err)
 			}
 			continue
@@ -95,6 +95,20 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 	return Session{}, fmt.Errorf("no Bonpreu session found in %s — "+
 		"log in at compraonline.bonpreuesclat.cat in that browser first "+
 		"(or pass --from-browser <chrome|firefox|safari|edge|brave>)", where)
+}
+
+func isUnsupportedCookieStoreError(err error) bool {
+	if errors.Is(err, fs.ErrNotExist) {
+		return true
+	}
+	for err != nil {
+		switch strings.ToLower(err.Error()) {
+		case "not implemented", "dpapi method not implemented on this platform":
+			return true
+		}
+		err = errors.Unwrap(err)
+	}
+	return false
 }
 
 // buildCookieHeader renders cookie name/value pairs as a "n1=v1; n2=v2" header.

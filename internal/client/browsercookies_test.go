@@ -2,6 +2,7 @@ package client
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -78,6 +79,25 @@ func TestCookiesFromSequenceReturnsStoreErrorsWhenNoSession(t *testing.T) {
 	))
 	if err == nil || !strings.Contains(err.Error(), "profile decryption failed") {
 		t.Fatalf("browser cookie error = %v; want underlying profile-read failure", err)
+	}
+}
+
+func TestCookiesFromSequenceOnlySkipsKnownUnsupportedStoreErrors(t *testing.T) {
+	for _, message := range []string{"not implemented", "DPAPI method not implemented on this platform"} {
+		_, err := cookiesFromSequence("chrome", cookieSequence(
+			cookieItem{nil, fmt.Errorf("cookie store: %w", errors.New(message))},
+			cookieItem{browserCookie("chrome", "global_sid", "half-session"), nil},
+		))
+		if err == nil || !strings.Contains(err.Error(), "no Bonpreu session found") {
+			t.Errorf("known unsupported error %q should be skipped, got %v", message, err)
+		}
+	}
+
+	_, err := cookiesFromSequence("chrome", cookieSequence(
+		cookieItem{nil, errors.New("profile not implemented: decryption failed")},
+	))
+	if err == nil || !strings.Contains(err.Error(), "profile not implemented: decryption failed") {
+		t.Errorf("unrelated store error containing unsupported wording must be preserved, got %v", err)
 	}
 }
 
