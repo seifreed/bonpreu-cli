@@ -37,17 +37,18 @@ func (f *failingTemp) Close() error {
 
 func TestWriteTempClosesAndReturnsFailures(t *testing.T) {
 	writeFailure := errors.New("disk write failed")
-	tmp := &failingTemp{writeErr: writeFailure, closeErr: errors.New("close also failed")}
-	if err := writeTemp(tmp, []byte("secret")); !errors.Is(err, writeFailure) {
-		t.Fatalf("writeTemp error = %v, want original write failure", err)
+	closeFailure := errors.New("close also failed")
+	tmp := &failingTemp{writeErr: writeFailure, closeErr: closeFailure}
+	if err := writeTemp(tmp, []byte("secret")); !errors.Is(err, writeFailure) || !errors.Is(err, closeFailure) {
+		t.Fatalf("writeTemp error = %v, want write and close failures", err)
 	}
 	if !tmp.closed {
 		t.Fatal("temporary file must be closed after write failure")
 	}
 
-	closeFailure := errors.New("close failed")
-	tmp = &failingTemp{closeErr: closeFailure}
-	if err := writeTemp(tmp, []byte("data")); !errors.Is(err, closeFailure) {
+	closeOnlyFailure := errors.New("close failed")
+	tmp = &failingTemp{closeErr: closeOnlyFailure}
+	if err := writeTemp(tmp, []byte("data")); !errors.Is(err, closeOnlyFailure) {
 		t.Fatalf("writeTemp error = %v, want close failure", err)
 	}
 	if !tmp.closed {
@@ -57,6 +58,25 @@ func TestWriteTempClosesAndReturnsFailures(t *testing.T) {
 	tmp = &failingTemp{}
 	if err := writeTemp(tmp, []byte("data")); err != nil || !tmp.closed {
 		t.Fatalf("successful write/close = %v, closed %v", err, tmp.closed)
+	}
+}
+
+func TestSaveReportsTemporaryCleanupFailure(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BONPREU_CONFIG_DIR", dir)
+	tmpPath := filepath.Join(dir, "session.json.tmp-test")
+	if err := os.Mkdir(tmpPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpPath, "partial"), []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeFailure := errors.New("disk write failed")
+	err := save("session.json", map[string]string{"cookie": "secret"}, func(_, _ string) (io.WriteCloser, string, error) {
+		return &failingTemp{writeErr: writeFailure}, tmpPath, nil
+	})
+	if !errors.Is(err, writeFailure) || !strings.Contains(err.Error(), "remove temporary config file") {
+		t.Fatalf("save error = %v; want write and cleanup errors", err)
 	}
 }
 

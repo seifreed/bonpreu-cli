@@ -5,6 +5,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -108,7 +109,7 @@ func Save(name string, v any) error {
 	})
 }
 
-func save(name string, v any, createTemp func(string, string) (io.WriteCloser, string, error)) error {
+func save(name string, v any, createTemp func(string, string) (io.WriteCloser, string, error)) (resultErr error) {
 	if err := ensureDir(); err != nil {
 		return err
 	}
@@ -121,17 +122,27 @@ func save(name string, v any, createTemp func(string, string) (io.WriteCloser, s
 	if err != nil {
 		return err
 	}
-	defer func() { _ = os.Remove(tmpName) }() // cleanup on error; no-op once the rename below succeeds
+	renamed := false
+	defer func() {
+		if !renamed {
+			if err := os.Remove(tmpName); err != nil && !os.IsNotExist(err) {
+				resultErr = errors.Join(resultErr, fmt.Errorf("remove temporary config file: %w", err))
+			}
+		}
+	}()
 	if err := writeTemp(tmp, b); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, filepath.Join(dir, name))
+	if err := os.Rename(tmpName, filepath.Join(dir, name)); err != nil {
+		return err
+	}
+	renamed = true
+	return nil
 }
 
 func writeTemp(tmp io.WriteCloser, data []byte) error {
 	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
+		return errors.Join(err, tmp.Close())
 	}
 	return tmp.Close()
 }
