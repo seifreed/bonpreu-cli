@@ -1,6 +1,8 @@
 package config
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +16,51 @@ func TestDirHomeFallback(t *testing.T) {
 		t.Errorf("Dir() = %q, want ~/.bonpreu", got)
 	}
 }
+
+type failingTemp struct {
+	writeErr error
+	closeErr error
+	closed   bool
+}
+
+func (f *failingTemp) Write(p []byte) (int, error) {
+	if f.writeErr != nil {
+		return 0, f.writeErr
+	}
+	return len(p), nil
+}
+
+func (f *failingTemp) Close() error {
+	f.closed = true
+	return f.closeErr
+}
+
+func TestWriteTempClosesAndReturnsFailures(t *testing.T) {
+	writeFailure := errors.New("disk write failed")
+	tmp := &failingTemp{writeErr: writeFailure, closeErr: errors.New("close also failed")}
+	if err := writeTemp(tmp, []byte("secret")); !errors.Is(err, writeFailure) {
+		t.Fatalf("writeTemp error = %v, want original write failure", err)
+	}
+	if !tmp.closed {
+		t.Fatal("temporary file must be closed after write failure")
+	}
+
+	closeFailure := errors.New("close failed")
+	tmp = &failingTemp{closeErr: closeFailure}
+	if err := writeTemp(tmp, []byte("data")); !errors.Is(err, closeFailure) {
+		t.Fatalf("writeTemp error = %v, want close failure", err)
+	}
+	if !tmp.closed {
+		t.Fatal("temporary file must be closed after successful write")
+	}
+
+	tmp = &failingTemp{}
+	if err := writeTemp(tmp, []byte("data")); err != nil || !tmp.closed {
+		t.Fatalf("successful write/close = %v, closed %v", err, tmp.closed)
+	}
+}
+
+var _ io.WriteCloser = (*failingTemp)(nil)
 
 func TestDirNoHome(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", "")

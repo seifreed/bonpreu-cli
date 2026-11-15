@@ -20,6 +20,12 @@ func TestNormBrand(t *testing.T) {
 			t.Errorf("normBrand(%q) = %q, want %q", in, got, want)
 		}
 	}
+	if got := normBrand("àáâä èéêë íìîï òóôö úùûü ç ñ Æ"); got != "aaaaeeeeiiiioooouuuucn" {
+		t.Errorf("accent folding = %q", got)
+	}
+	if got := normBrand("東京"); got != "" {
+		t.Errorf("unsupported scripts should normalize to empty, got %q", got)
+	}
 }
 
 func TestPreferredFor(t *testing.T) {
@@ -72,6 +78,23 @@ func TestPickByBrand(t *testing.T) {
 	// no preferred brand stocked → matched=false.
 	if _, ok := pickByBrand(prods, []string{"Calvé"}, "cheapest_among"); ok {
 		t.Error("expected matched=false when no preferred brand present")
+	}
+	if _, ok := pickByBrand(prods, []string{"!!!"}, "strict_priority"); ok {
+		t.Error("punctuation-only preferences should be ignored")
+	}
+	if _, ok := pickByBrand(prods, []string{"Calvé"}, "strict_priority"); ok {
+		t.Error("strict priority should report no match")
+	}
+}
+
+func TestCheapestOfUnparseablePriceAndStableTie(t *testing.T) {
+	products := []client.Product{
+		prod("bad", "A", "unknown"),
+		prod("first", "B", "1.00"),
+		prod("second", "C", "1.00"),
+	}
+	if got := cheapestOf(products); got.RetailerProductID != "first" {
+		t.Fatalf("cheapestOf = %q; want first parseable item and stable tie", got.RetailerProductID)
 	}
 }
 

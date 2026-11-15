@@ -6,6 +6,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -112,12 +113,16 @@ func Save(name string, v any) error {
 	}
 	tmpName := tmp.Name()
 	defer func() { _ = os.Remove(tmpName) }() // cleanup on error; no-op once the rename below succeeds
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
+	if err := writeTemp(tmp, b); err != nil {
 		return err
 	}
 	return os.Rename(tmpName, filepath.Join(dir, name))
+}
+
+func writeTemp(tmp io.WriteCloser, data []byte) error {
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	return tmp.Close()
 }
