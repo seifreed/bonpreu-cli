@@ -213,6 +213,9 @@ func cartClear(args []string) error {
 	}
 	if len(cart.Lines) == 0 {
 		stderrInfo("cart.clear.already_empty", "cart is already empty", "operation", "cart clear")
+		if done, err := emitStructured(cf, cart.Raw); done {
+			return err
+		}
 		return nil
 	}
 	items := make([]client.CartItem, 0, len(cart.Lines))
@@ -229,6 +232,12 @@ func cartClear(args []string) error {
 		}
 	}
 	stderrInfo("cart.clear.completed", "cart lines cleared", "operation", cf.operation, "line_count", len(items))
+	if done, err := emitStructured(cf, updated.Raw); done {
+		if err != nil {
+			return fmt.Errorf("cart update was accepted but confirmation output failed; inspect the cart before retrying: %w", err)
+		}
+		return nil
+	}
 	if err := writeStdout("ok — removed %d line(s)\n", len(items)); err != nil {
 		return fmt.Errorf("cart update was accepted but confirmation output failed; inspect the cart before retrying: %w", err)
 	}

@@ -443,6 +443,67 @@ func TestCartClearOutputFailureAfterCartWrite(t *testing.T) {
 	}
 }
 
+func TestCartClearJSONOutput(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active":
+			_, _ = w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":1}]}`))
+		case "/api/cart/v1/carts/active/apply-quantity":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	out, err := capture(t, func() error { return cmdCart([]string{"clear", "--json"}) })
+	if err != nil || !strings.Contains(out, `"items": []`) {
+		t.Fatalf("cart clear --json output = %q, error = %v", out, err)
+	}
+}
+
+func TestCartClearJSONOutputFailureAfterWrite(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active":
+			_, _ = w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":1}]}`))
+		case "/api/cart/v1/carts/active/apply-quantity":
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	err := withFailingStdout(t, func() error { return cmdCart([]string{"clear", "--json"}) })
+	if err == nil || !strings.Contains(err.Error(), "inspect the cart before retrying") {
+		t.Fatalf("cart clear JSON output error = %v, want read-back guidance after write", err)
+	}
+}
+
+func TestCartClearEmptyJSONOutput(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/cart/v1/carts/active" {
+			_, _ = w.Write([]byte(`{"items":[],"totals":{"itemPriceAfterPromos":{"amount":"0.00"}}}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	out, err := capture(t, func() error { return cmdCart([]string{"clear", "--json"}) })
+	if err != nil || !strings.Contains(out, `"items": []`) {
+		t.Fatalf("empty cart clear --json output = %q, error = %v", out, err)
+	}
+}
+
 // `set` for a product not currently in the cart exercises currentQty's
 // not-found return.
 func TestCartSetNewProduct(t *testing.T) {
