@@ -51,7 +51,7 @@ func TestRankByUnit(t *testing.T) {
 
 func TestPrintProductLinesMarksWinnersAndIndentation(t *testing.T) {
 	products := []client.Product{
-		{RetailerProductID: "winner", Name: "A", UnitPrice: client.UnitPrice{Unit: "fop.price.per.kg"}},
+		{RetailerProductID: "winner", Name: "A", Available: true, UnitPrice: client.UnitPrice{Unit: "fop.price.per.kg"}},
 		{RetailerProductID: "other", Name: "B"},
 	}
 	out, err := capture(t, func() error {
@@ -65,6 +65,23 @@ func TestPrintProductLinesMarksWinnersAndIndentation(t *testing.T) {
 	})
 	if err != nil || !strings.HasPrefix(out, "  ") || strings.HasPrefix(out, "    ") {
 		t.Fatalf("ordinary product output = %q, err %v", out, err)
+	}
+}
+
+func TestPrintProductLinesDoesNotMarkSponsoredDuplicateAsWinner(t *testing.T) {
+	products := []client.Product{
+		{RetailerProductID: "same", Name: "Patrocinat", Available: true, ExternalAdvertID: "ad"},
+		{RetailerProductID: "same", Name: "Orgànic", Available: true},
+		{RetailerProductID: "out", Name: "No disponible", Available: false},
+	}
+	out, err := capture(t, func() error {
+		return printProductLines(products, map[string]bool{"same": true, "out": true}, true)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(out, "★") != 1 || strings.Contains(out, "★ [same] Patrocinat") || strings.Contains(out, "★ [out] No disponible") {
+		t.Fatalf("only the available organic placement should be marked as winner: %q", out)
 	}
 }
 

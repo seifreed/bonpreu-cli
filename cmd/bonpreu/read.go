@@ -67,7 +67,7 @@ func cmdSearch(args []string) error {
 func printProductLines(prods []client.Product, winners map[string]bool, cheapest bool) error {
 	var output strings.Builder
 	for _, p := range prods {
-		if winners[p.RetailerProductID] {
+		if winners[p.RetailerProductID] && p.Available && !p.Sponsored() {
 			fmt.Fprintln(&output, "  ★ "+productLine(p)+"  ← millor "+unitSuffix(p.UnitPrice))
 			continue
 		}
