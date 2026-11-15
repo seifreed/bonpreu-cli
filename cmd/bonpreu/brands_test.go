@@ -143,6 +143,10 @@ func TestWriteBrandsCSVWriteFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected CSV writer error")
 	}
+	err = writeBrandsCSV(failingWriter{}, []brandCount{{Brand: strings.Repeat("x", 1<<16), Count: 1}})
+	if err == nil {
+		t.Fatal("expected buffered CSV row write error")
+	}
 }
 
 type failingWriter struct{}

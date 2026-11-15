@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -63,6 +64,16 @@ func TestPrintProductLinesMarksWinnersAndIndentation(t *testing.T) {
 	})
 	if err != nil || !strings.HasPrefix(out, "  ") || strings.HasPrefix(out, "    ") {
 		t.Fatalf("ordinary product output = %q, err %v", out, err)
+	}
+}
+
+func TestSplitBrandsTrimsAndDropsEmptyEntries(t *testing.T) {
+	got := splitBrands("  Finish, ,  Somat  ,,")
+	if !reflect.DeepEqual(got, []string{"Finish", "Somat"}) {
+		t.Fatalf("splitBrands = %#v", got)
+	}
+	if got := splitBrands(" , , "); len(got) != 0 {
+		t.Fatalf("empty brand list = %#v", got)
 	}
 }
 
