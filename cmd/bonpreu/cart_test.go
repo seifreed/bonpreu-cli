@@ -172,12 +172,25 @@ func TestCartWriteBranches(t *testing.T) {
 	srv := apiServer(t)
 	defer srv.Close()
 	useServer(t, srv, true)
+	var events []string
+	oldInfo := stderrInfo
+	stderrInfo = func(event, _ string, _ ...any) { events = append(events, event) }
+	defer func() { stderrInfo = oldInfo }()
 
 	// `set` to the quantity already in the cart (2) → "already at target", no write.
 	if out, err := capture(t, func() error { return cmdCart([]string{"set", "23597", "2"}) }); err != nil {
 		t.Fatalf("set same qty: %v", err)
 	} else {
 		_ = out
+	}
+	if len(events) != 1 || events[0] != "cart.quantity.no_change" {
+		t.Fatalf("no-change event = %v", events)
+	}
+	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1"}) }); err != nil {
+		t.Fatalf("add with no limit: %v", err)
+	}
+	if len(events) != 2 || events[1] != "cart.quantity.changed" {
+		t.Fatalf("cart write events = %v", events)
 	}
 	// --max exceeded: price 1.69 × 100 > 1€ → refused.
 	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "100", "--max", "1"}) }); err == nil {

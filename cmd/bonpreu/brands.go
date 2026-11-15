@@ -40,7 +40,7 @@ func cmdBrands(args []string) error {
 			return err
 		}
 		ranked = r
-		stderrInfo("catalog.brand_crawl.completed", "brand crawl completed", "brand_count", len(ranked))
+		stderrInfo("catalog.brand_crawl.completed", "brand crawl completed", "operation", cf.operation, "brand_count", len(ranked))
 	} else {
 		if err := json.Unmarshal(branddata.JSON, &ranked); err != nil {
 			return fmt.Errorf("read shipped brand snapshot: %w", err)
@@ -95,12 +95,12 @@ func crawlBrands(cl *client.Client, depth, limit int) ([]brandCount, error) {
 		pp, perr := cl.CategoryProducts(id, limit)
 		if perr != nil {
 			stderrWarn("catalog.category.skipped", "category crawl failed; skipping it",
-				"category_id", id, "error_type", fmt.Sprintf("%T", perr))
+				"operation", "brands", "category_id", id, "error_type", fmt.Sprintf("%T", perr))
 			continue
 		}
 		tallyBrands(counts, pp.Products())
-		stderrInfo("catalog.brand_crawl.progress", "brand crawl progress",
-			"category_index", i+1, "category_total", len(ids), "brand_count", len(counts))
+		stderrDebug("catalog.brand_crawl.progress", "brand crawl progress",
+			"operation", "brands", "category_index", i+1, "category_total", len(ids), "brand_count", len(counts))
 	}
 	return sortedBrands(counts), nil
 }

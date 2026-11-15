@@ -29,6 +29,11 @@ func cmdLoginWith(args []string, readBrowser func(string) (client.Session, error
 
 	var s client.Session
 	var err error
+	source := "interactive_browser"
+	if fromBrowserSet {
+		source = "browser_store"
+	}
+	stderrInfo("auth.login.started", "browser login started", "operation", cf.operation, "source", source)
 	if fromBrowserSet {
 		s, err = readBrowser(*fromBrowser)
 	} else {
@@ -55,11 +60,12 @@ func saveAndVerify(cf *common, s client.Session) error {
 	if err != nil {
 		return fmt.Errorf("could not verify session: %w", err)
 	}
-	if done, err := emitStructured(cf, map[string]any{"authenticated": ok, "region": cl.RegionID}); done {
-		return err
-	}
 	if !ok {
 		return fmt.Errorf("cookie saved but NOT authenticated — it may be expired or anonymous; log in again")
+	}
+	stderrInfo("auth.session.verified", "saved session was accepted", "operation", cf.operation)
+	if done, err := emitStructured(cf, map[string]any{"authenticated": ok, "region": cl.RegionID}); done {
+		return err
 	}
 	fmt.Printf("ok — authenticated (region %s)\n", firstNonEmpty(cl.RegionID, "default"))
 	return nil

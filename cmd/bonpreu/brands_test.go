@@ -67,10 +67,11 @@ func TestCmdBrandsSnapshotAndUpdate(t *testing.T) {
 	if err != nil || !strings.Contains(out, "BONPREU") {
 		t.Fatalf("human table output = %q, err %v", out[:min(120, len(out))], err)
 	}
-	oldInfo := stderrInfo
+	oldInfo, oldDebug := stderrInfo, stderrDebug
 	var events []string
 	stderrInfo = func(event, _ string, _ ...any) { events = append(events, event) }
-	defer func() { stderrInfo = oldInfo }()
+	stderrDebug = func(event, _ string, _ ...any) { events = append(events, event) }
+	defer func() { stderrInfo, stderrDebug = oldInfo, oldDebug }()
 	out, err = captureFile(t, func() error {
 		return cmdBrands([]string{"--update", "--json", "--depth", "2", "--limit", "10"})
 	})

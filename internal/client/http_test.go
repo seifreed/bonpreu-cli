@@ -115,6 +115,32 @@ func TestHTTPDebugEventHasSafeRequestContext(t *testing.T) {
 	}
 }
 
+func TestHTTPTraceStartEventOmitsRequestData(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+	var logs bytes.Buffer
+	cl := testClient(srv)
+	cl.Logger = slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug - 4}))
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/search?term=private-query", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Cookie", "session=private-cookie")
+	if _, err := cl.do(req); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(logs.String(), `"event_name":"http.request.start"`) || !strings.Contains(logs.String(), `"http.request.method":"GET"`) {
+		t.Fatalf("trace start event missing: %q", logs.String())
+	}
+	for _, secret := range []string{"private-query", "private-cookie", "private response", srv.URL} {
+		if strings.Contains(logs.String(), secret) {
+			t.Errorf("trace event leaked %q: %q", secret, logs.String())
+		}
+	}
+}
+
 func TestHTTPDebugEventRedactsTransportError(t *testing.T) {
 	var logs bytes.Buffer
 	cl := New()

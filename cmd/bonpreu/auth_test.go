@@ -23,9 +23,10 @@ func importHarWith(t *testing.T, cookie, regionURL string) []string {
 	}
 
 	var logs []string
-	old := stderrWarn
+	oldInfo, oldWarn := stderrInfo, stderrWarn
+	stderrInfo = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
 	stderrWarn = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
-	defer func() { stderrWarn = old }()
+	defer func() { stderrInfo, stderrWarn = oldInfo, oldWarn }()
 
 	if err := cmdImportHar([]string{"--file", path}); err != nil {
 		t.Fatalf("cmdImportHar: %v", err)
@@ -37,8 +38,8 @@ func TestImportHarWarnsWhenNoRegion(t *testing.T) {
 	logs := importHarWith(t,
 		"global_sid=a; aws-waf-token=b",
 		"https://compraonline.bonpreuesclat.cat/api/x") // no regionId param
-	if len(logs) != 1 || !strings.Contains(logs[0], "no region") {
-		t.Fatalf("expected a no-region warning, got %v", logs)
+	if len(logs) != 2 || !strings.Contains(logs[0], "auth.har.imported") || !strings.Contains(logs[1], "no region") {
+		t.Fatalf("expected import and no-region events, got %v", logs)
 	}
 }
 
@@ -46,22 +47,23 @@ func TestImportHarSilentWhenRegionPresent(t *testing.T) {
 	logs := importHarWith(t,
 		"global_sid=a; aws-waf-token=b",
 		"https://compraonline.bonpreuesclat.cat/api/x?regionId=r-123")
-	if len(logs) != 0 {
-		t.Errorf("region present → no warning expected, got %v", logs)
+	if len(logs) != 1 || !strings.Contains(logs[0], "auth.har.imported") || !strings.Contains(logs[0], "region_configuredtrue") {
+		t.Errorf("region present → only the import event expected, got %v", logs)
 	}
 }
 
 func TestSetCookieWarnsOnAnonymousCookie(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
 	var logs []string
-	old := stderrWarn
+	oldInfo, oldWarn := stderrInfo, stderrWarn
+	stderrInfo = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
 	stderrWarn = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
-	defer func() { stderrWarn = old }()
+	defer func() { stderrInfo, stderrWarn = oldInfo, oldWarn }()
 
 	if err := cmdSetCookie([]string{"sessionid=x; other=y"}); err != nil {
 		t.Fatalf("cmdSetCookie: %v", err)
 	}
-	if len(logs) != 1 || !strings.Contains(logs[0], "anonymous") {
+	if len(logs) != 2 || !strings.Contains(logs[0], "auth.cookie.saved") || !strings.Contains(logs[1], "anonymous") {
 		t.Fatalf("expected an anonymous-cookie warning, got %v", logs)
 	}
 }
@@ -69,15 +71,32 @@ func TestSetCookieWarnsOnAnonymousCookie(t *testing.T) {
 func TestSetCookieSilentOnAuthedCookie(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
 	var logs []string
-	old := stderrWarn
+	oldInfo, oldWarn := stderrInfo, stderrWarn
+	stderrInfo = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
 	stderrWarn = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
-	defer func() { stderrWarn = old }()
+	defer func() { stderrInfo, stderrWarn = oldInfo, oldWarn }()
 
 	if err := cmdSetCookie([]string{"global_sid=a; aws-waf-token=b"}); err != nil {
 		t.Fatalf("cmdSetCookie: %v", err)
 	}
-	if len(logs) != 0 {
-		t.Errorf("authed cookie → no warning, got %v", logs)
+	if len(logs) != 1 || !strings.Contains(logs[0], "auth.cookie.saved") {
+		t.Errorf("authed cookie → one safe save event expected, got %v", logs)
+	}
+}
+
+func TestSetCookieSaveEventDoesNotExposeCookie(t *testing.T) {
+	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir())
+	const secret = "global_sid=private-session-value"
+	var event string
+	oldInfo, oldWarn := stderrInfo, stderrWarn
+	stderrInfo = func(name, _ string, _ ...any) { event = name }
+	stderrWarn = func(string, string, ...any) {}
+	defer func() { stderrInfo, stderrWarn = oldInfo, oldWarn }()
+	if err := cmdSetCookie([]string{secret}); err != nil {
+		t.Fatal(err)
+	}
+	if event != "auth.cookie.saved" || strings.Contains(event, secret) {
+		t.Fatalf("cookie save event = %q; expected safe event name only", event)
 	}
 }
 
@@ -85,6 +104,25 @@ func TestSetCookieSaveError(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", unwritableConfigDir(t))
 	if err := cmdSetCookie([]string{"global_sid=a; aws-waf-token=b"}); err == nil {
 		t.Error("set-cookie should fail when the session cannot be saved")
+	}
+}
+
+func TestWhoamiJSONReturnsErrorForUnauthenticatedSession(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/order/v6/orders") {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+	out, err := capture(t, func() error { return cmdWhoami([]string{"--json"}) })
+	if err == nil || !strings.Contains(err.Error(), "NOT authenticated") {
+		t.Fatalf("whoami --json error = %v, want unauthenticated error", err)
+	}
+	if strings.Contains(out, `"authenticated"`) {
+		t.Fatalf("unauthenticated session emitted success JSON: %q", out)
 	}
 }
 

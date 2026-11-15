@@ -42,7 +42,7 @@ func LoginViaBrowser(loginURL string) (Session, error) {
 	// WAF challenge can take a long time to fire `load`, and page.Navigate (unlike
 	// chromedp.Navigate) returns as soon as navigation starts rather than blocking
 	// on it — so the prompt and the window appear right away.
-	fmt.Println("→ obrint el navegador… inicia sessió a la finestra; capturaré la sessió automàticament")
+	fmt.Fprintln(os.Stderr, "→ obrint el navegador… inicia sessió a la finestra; capturaré la sessió automàticament")
 	err := chromedp.Run(ctx, network.Enable(), chromedp.ActionFunc(func(ctx context.Context) error {
 		_, _, errText, _, err := page.Navigate(loginURL).Do(ctx)
 		if err != nil {

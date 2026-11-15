@@ -32,13 +32,10 @@ func cmdImportHar(args []string) error {
 	if err := client.SaveHARSession(s); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "imported session cookie (%d bytes)", len(s.Cookie))
-	if s.RegionID != "" {
-		fmt.Fprintf(os.Stderr, ", region %s", s.RegionID)
-	}
-	fmt.Fprintln(os.Stderr, " → ~/.bonpreu/session.json")
+	stderrInfo("auth.har.imported", "HAR session imported",
+		"operation", "import-har", "region_configured", s.RegionID != "")
 	if s.RegionID == "" {
-		stderrWarn("auth.har.region_missing", "no region found in the HAR; cart/checkout use the server default until a region is configured")
+		stderrWarn("auth.har.region_missing", "no region found in the HAR; cart/checkout use the server default until a region is configured", "operation", "import-har")
 	}
 	return nil
 }
@@ -67,9 +64,9 @@ func cmdSetCookie(args []string) error {
 	if err := client.SaveSession(s); err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, "saved cookie → ~/.bonpreu/session.json")
+	stderrInfo("auth.cookie.saved", "session cookie saved", "operation", "set-cookie")
 	if !client.CookieLooksAuthed(cookie) {
-		stderrWarn("auth.cookie.may_be_anonymous", "cookie lacks expected session keys; verify with bonpreu whoami")
+		stderrWarn("auth.cookie.may_be_anonymous", "cookie lacks expected session keys; verify with bonpreu whoami", "operation", "set-cookie")
 	}
 	return nil
 }
@@ -87,11 +84,12 @@ func cmdWhoami(args []string) error {
 	if err != nil {
 		return fmt.Errorf("could not verify session: %w", err)
 	}
-	if done, err := emitStructured(cf, map[string]any{"authenticated": ok, "region": cl.RegionID}); done {
-		return err
-	}
 	if !ok {
 		return fmt.Errorf("cookie present but NOT authenticated (the session expired or is anonymous) — re-export a fresh HAR while logged in")
+	}
+	stderrInfo("auth.session.verified", "stored session was accepted", "operation", cf.operation)
+	if done, err := emitStructured(cf, map[string]any{"authenticated": ok, "region": cl.RegionID}); done {
+		return err
 	}
 	fmt.Printf("ok — authenticated (region %s)\n", firstNonEmpty(cl.RegionID, "default"))
 	return nil

@@ -19,7 +19,7 @@ func TestSaveAndVerify(t *testing.T) {
 		wantOutput string
 	}{
 		{name: "authenticated JSON", status: http.StatusOK, cookie: "global_sid=s; aws-waf-token=t", json: true, wantOutput: `"authenticated": true`},
-		{name: "unauthenticated cookie", status: http.StatusUnauthorized, cookie: "global_sid=s; aws-waf-token=t", wantErr: "NOT authenticated"},
+		{name: "unauthenticated JSON cookie", status: http.StatusUnauthorized, cookie: "global_sid=s; aws-waf-token=t", json: true, wantErr: "NOT authenticated"},
 		{name: "verification failure", status: http.StatusInternalServerError, cookie: "global_sid=s; aws-waf-token=t", wantErr: "could not verify session"},
 		{name: "missing cookie", status: http.StatusOK, wantErr: "carried no cookie"},
 	} {
@@ -34,6 +34,10 @@ func TestSaveAndVerify(t *testing.T) {
 			defer srv.Close()
 			useServer(t, srv, false)
 			cf := &common{jsonOut: tc.json}
+			var events []string
+			oldInfo := stderrInfo
+			stderrInfo = func(event, _ string, _ ...any) { events = append(events, event) }
+			defer func() { stderrInfo = oldInfo }()
 			out, err := capture(t, func() error {
 				return saveAndVerify(cf, client.Session{Cookie: tc.cookie, RegionID: "r1"})
 			})
@@ -41,10 +45,16 @@ func TestSaveAndVerify(t *testing.T) {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("error = %v, want containing %q", err, tc.wantErr)
 				}
+				if len(events) != 0 {
+					t.Errorf("failed verification emitted success events: %v", events)
+				}
 				return
 			}
 			if err != nil || !strings.Contains(out, tc.wantOutput) {
 				t.Fatalf("output = %q, err %v", out, err)
+			}
+			if len(events) != 1 || events[0] != "auth.session.verified" {
+				t.Errorf("successful verification events = %v", events)
 			}
 		})
 	}
@@ -68,6 +78,10 @@ func TestCmdLoginSelectsBrowserSource(t *testing.T) {
 	}))
 	defer srv.Close()
 	useServer(t, srv, false)
+	var events []string
+	oldInfo := stderrInfo
+	stderrInfo = func(event, _ string, _ ...any) { events = append(events, event) }
+	defer func() { stderrInfo = oldInfo }()
 
 	cases := []struct {
 		name string
@@ -79,6 +93,7 @@ func TestCmdLoginSelectsBrowserSource(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			events = nil
 			fromCalled, openCalled := false, false
 			out, err := capture(t, func() error {
 				return cmdLoginWith(tc.args,
@@ -102,6 +117,9 @@ func TestCmdLoginSelectsBrowserSource(t *testing.T) {
 			}
 			if fromCalled != (tc.args != nil) || openCalled == fromCalled {
 				t.Fatalf("source calls: from-browser=%v open-browser=%v", fromCalled, openCalled)
+			}
+			if len(events) != 2 || events[0] != "auth.login.started" || events[1] != "auth.session.verified" {
+				t.Fatalf("login events = %v", events)
 			}
 			if got := client.LoadSession().Cookie; got != tc.want {
 				t.Fatalf("saved session cookie = %q, want %q", got, tc.want)

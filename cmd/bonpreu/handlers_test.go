@@ -159,9 +159,16 @@ func TestCmdWhoami(t *testing.T) {
 	srv := apiServer(t)
 	defer srv.Close()
 	useServer(t, srv, true)
+	var events []string
+	oldInfo := stderrInfo
+	stderrInfo = func(event, _ string, _ ...any) { events = append(events, event) }
+	defer func() { stderrInfo = oldInfo }()
 	out, err := capture(t, func() error { return cmdWhoami(nil) })
 	if err != nil || !strings.Contains(out, "authenticated") {
 		t.Fatalf("whoami: %q err %v", out, err)
+	}
+	if len(events) != 1 || events[0] != "auth.session.verified" {
+		t.Fatalf("whoami events = %v", events)
 	}
 }
 
@@ -169,6 +176,10 @@ func TestCmdCart(t *testing.T) {
 	srv := apiServer(t)
 	defer srv.Close()
 	useServer(t, srv, true)
+	var events []string
+	oldInfo := stderrInfo
+	stderrInfo = func(event, _ string, _ ...any) { events = append(events, event) }
+	defer func() { stderrInfo = oldInfo }()
 
 	if out, err := capture(t, func() error { return cmdCart([]string{"get"}) }); err != nil || !strings.Contains(out, "uuid-23597") {
 		t.Fatalf("cart get: %q err %v", out, err)
@@ -182,15 +193,28 @@ func TestCmdCart(t *testing.T) {
 	if _, err := capture(t, func() error { return cmdCart([]string{"clear"}) }); err != nil {
 		t.Fatalf("cart clear: %v", err)
 	}
+	for _, event := range events {
+		if event == "cart.clear.completed" {
+			return
+		}
+	}
+	t.Fatalf("cart events missing clear completion: %v", events)
 }
 
 func TestCmdCheckout(t *testing.T) {
 	srv := apiServer(t)
 	defer srv.Close()
 	useServer(t, srv, true)
+	var events []string
+	oldInfo := stderrInfo
+	stderrInfo = func(event, _ string, _ ...any) { events = append(events, event) }
+	defer func() { stderrInfo = oldInfo }()
 
 	if out, err := capture(t, func() error { return cmdCheckout([]string{"status"}) }); err != nil || !strings.Contains(out, "mínim") {
 		t.Fatalf("checkout status: %q err %v", out, err)
+	}
+	if len(events) != 1 || events[0] != "checkout.status.checked" {
+		t.Fatalf("checkout status events = %v", events)
 	}
 	if _, err := capture(t, func() error { return cmdCheckout([]string{"addresses"}) }); err != nil {
 		t.Fatalf("checkout addresses: %v", err)

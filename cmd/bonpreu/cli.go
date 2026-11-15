@@ -15,34 +15,58 @@ import (
 	"github.com/seifreed/bonpreu-cli/internal/config"
 )
 
+const (
+	traceLevel = slog.LevelDebug - 4
+	fatalLevel = slog.LevelError + 4
+)
+
 // stderrInfo emits structured CLI events without mixing diagnostics into stdout.
 var stderrInfo = func(event, message string, attrs ...any) {
-	fields := []any{"service", "bonpreu", "component", "cli", "event_name", event}
+	fields := []any{"component", "cli", "event_name", event}
 	defaultLogger().Info(message, append(fields, attrs...)...)
 }
 
+var stderrDebug = func(event, message string, attrs ...any) {
+	fields := []any{"component", "cli", "event_name", event}
+	defaultLogger().Debug(message, append(fields, attrs...)...)
+}
+
 var stderrWarn = func(event, message string, attrs ...any) {
-	fields := []any{"service", "bonpreu", "component", "cli", "event_name", event}
+	fields := []any{"component", "cli", "event_name", event}
 	defaultLogger().Warn(message, append(fields, attrs...)...)
 }
 
 func defaultLogger() *slog.Logger {
-	return newLogger(os.Stderr)
+	return newLogger(os.Stderr).With("service", "bonpreu", "process.pid", os.Getpid())
 }
 
 func newLogger(w io.Writer) *slog.Logger {
 	level := slog.LevelInfo
 	switch strings.ToLower(os.Getenv("BONPREU_LOG_LEVEL")) {
+	case "trace":
+		level = traceLevel
 	case "debug":
 		level = slog.LevelDebug
 	case "warn", "warning":
 		level = slog.LevelWarn
 	case "error":
 		level = slog.LevelError
+	case "fatal", "critical":
+		level = fatalLevel
 	}
 	opts := &slog.HandlerOptions{Level: level, ReplaceAttr: func(_ []string, attr slog.Attr) slog.Attr {
-		if attr.Key == slog.TimeKey && attr.Value.Kind() == slog.KindTime {
-			attr.Value = slog.Time(attr.Key, attr.Value.Time().UTC()).Value
+		switch attr.Key {
+		case slog.TimeKey:
+			if attr.Value.Kind() == slog.KindTime {
+				attr.Value = slog.Time(attr.Key, attr.Value.Time().UTC()).Value
+			}
+		case slog.LevelKey:
+			switch attr.Value.Any().(slog.Level) {
+			case traceLevel:
+				attr.Value = slog.StringValue("TRACE")
+			case fatalLevel:
+				attr.Value = slog.StringValue("FATAL")
+			}
 		}
 		return attr
 	}}
@@ -94,7 +118,8 @@ func newClient(c *common) *client.Client {
 	}
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		stderrWarn("config.load_failed", "config.toml could not be read; using defaults", "error_type", fmt.Sprintf("%T", err))
+		stderrWarn("config.load_failed", "config.toml could not be read; using defaults",
+			"operation", c.operation, "error_type", fmt.Sprintf("%T", err))
 	}
 	if v := firstNonEmpty(c.lang, cfg.Defaults.Lang); v != "" {
 		cl.Lang = v
@@ -106,7 +131,7 @@ func newClient(c *common) *client.Client {
 }
 
 func clientLogger(w io.Writer, operation string) *slog.Logger {
-	return newLogger(w).With("service", "bonpreu", "operation", operation)
+	return newLogger(w).With("service", "bonpreu", "operation", operation, "process.pid", os.Getpid())
 }
 
 // parseFlags parses args into fs, letting flags appear among positionals (see

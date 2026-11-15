@@ -227,6 +227,10 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 			}
 		}
 	})
+	if c.Logger != nil {
+		c.Logger.Log(req.Context(), slog.LevelDebug-4, "HTTP request started",
+			"event_name", "http.request.start", "component", "client", "http.request.method", req.Method)
+	}
 	started := time.Now()
 	resp, err := c.HTTP.Do(req)
 	if err != nil {

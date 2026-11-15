@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/seifreed/bonpreu-cli/internal/client"
 )
@@ -109,7 +108,7 @@ func cartWrite(args []string, set bool) error {
 		}
 		delta = qty - cur
 		if delta == 0 {
-			fmt.Fprintln(os.Stderr, "already at target quantity; nothing to do")
+			stderrInfo("cart.quantity.no_change", "cart line is already at target quantity", "operation", "cart write")
 			return nil
 		}
 	}
@@ -123,6 +122,7 @@ func cartWrite(args []string, set bool) error {
 	if err != nil {
 		return err
 	}
+	stderrInfo("cart.quantity.changed", "cart line quantity updated", "operation", cf.operation, "quantity_delta", delta)
 	if done, err := emitStructured(cf, cart.Raw); done {
 		return err
 	}
@@ -142,7 +142,7 @@ func cartClear(args []string) error {
 		return err
 	}
 	if len(cart.Lines) == 0 {
-		fmt.Fprintln(os.Stderr, "cart already empty")
+		stderrInfo("cart.clear.already_empty", "cart is already empty", "operation", "cart clear")
 		return nil
 	}
 	items := make([]client.CartItem, 0, len(cart.Lines))
@@ -152,6 +152,7 @@ func cartClear(args []string) error {
 	if _, err := cl.ApplyQuantity(items); err != nil {
 		return err
 	}
+	stderrInfo("cart.clear.completed", "cart lines cleared", "operation", cf.operation, "line_count", len(items))
 	fmt.Printf("ok — removed %d line(s)\n", len(items))
 	return nil
 }
@@ -184,7 +185,7 @@ func guardLineAdd(flagMax float64, pd *client.ProductDetail, qty float64) error 
 		// skipping the spending guard would defeat the --max safety contract.
 		if maxEUR > 0 {
 			stderrWarn("cart.guard.price_unavailable", "could not price cart line; --max was not enforced",
-				"error_type", fmt.Sprintf("%T", perr))
+				"operation", "cart write", "error_type", fmt.Sprintf("%T", perr))
 		}
 		return nil
 	}

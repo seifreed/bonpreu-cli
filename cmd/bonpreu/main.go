@@ -9,8 +9,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"runtime/debug"
+	"time"
+
+	"github.com/seifreed/bonpreu-cli/internal/client"
 )
 
 // Build metadata, injected at release time via -ldflags (GoReleaser).
@@ -21,15 +26,38 @@ var (
 	exitProcess = os.Exit
 )
 
-func main() { exitProcess(run(os.Args[1:])) }
+func main() { exitProcess(runSafely(os.Args[1:])) }
+
+func runSafely(args []string) int {
+	operation := "startup"
+	if len(args) > 0 {
+		operation = commandOperation(args)
+	}
+	return recoverCommand(operation, func() int { return run(args) })
+}
+
+func recoverCommand(operation string, invoke func() int) (code int) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			defaultLogger().Log(context.Background(), fatalLevel, "command panicked",
+				"component", "cli", "event_name", "command.panicked", "operation", operation,
+				"error_type", fmt.Sprintf("%T", recovered), "stack_trace", string(debug.Stack()))
+			code = 2
+		}
+	}()
+	return invoke()
+}
 
 // run dispatches a command and returns the process exit code. Split from main so
 // it is testable without os.Exit.
 func run(args []string) int {
 	if len(args) < 1 {
+		logInvalidCommand("startup")
 		usage()
 		return 2
 	}
+	started := time.Now()
+	operation := commandOperation(args)
 	var err error
 	switch args[0] {
 	case "search":
@@ -58,18 +86,65 @@ func run(args []string) int {
 		err = cmdCheckout(args[1:])
 	case "version", "--version", "-v":
 		fmt.Println(versionString())
+		return 0
 	case "help", "-h", "--help":
 		usage()
+		return 0
 	default:
+		logInvalidCommand("unknown")
 		fmt.Fprintf(os.Stderr, "unknown command %q\n\n", args[0])
 		usage()
 		return 2
 	}
 	if err != nil {
+		attrs := []any{"component", "cli", "event_name", "command.failed",
+			"operation", operation, "duration_ms", time.Since(started).Milliseconds()}
+		if status, ok := client.HTTPStatus(err); ok {
+			attrs = append(attrs, "error_type", "APIError", "error_code", status)
+		} else {
+			attrs = append(attrs, "error_type", fmt.Sprintf("%T", err))
+		}
+		defaultLogger().Error("command failed", attrs...)
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
 	}
+	defaultLogger().Info("command completed",
+		"component", "cli", "event_name", "command.completed",
+		"operation", operation, "duration_ms", time.Since(started).Milliseconds(), "outcome", "success")
 	return 0
+}
+
+func logInvalidCommand(operation string) {
+	defaultLogger().Warn("invalid command",
+		"component", "cli", "event_name", "command.invalid",
+		"operation", operation, "error_type", "UsageError")
+}
+
+func commandOperation(args []string) string {
+	if len(args) == 0 {
+		return "startup"
+	}
+	switch args[0] {
+	case "cart":
+		if len(args) > 1 {
+			switch args[1] {
+			case "add", "set":
+				return "cart write"
+			case "get", "clear":
+				return "cart " + args[1]
+			}
+		}
+		return "cart"
+	case "checkout":
+		if len(args) > 1 && (args[1] == "addresses" || args[1] == "slots") {
+			return "checkout " + args[1]
+		}
+		return "checkout"
+	case "search", "batch", "total", "product", "categories", "brands", "login", "import-har", "set-cookie", "whoami", "version", "--version", "-v", "help", "-h", "--help":
+		return args[0]
+	default:
+		return "unknown"
+	}
 }
 
 func versionString() string {

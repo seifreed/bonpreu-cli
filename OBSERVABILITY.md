@@ -1,6 +1,6 @@
 # Logging and observability audit
 
-Audit status: in progress. This is a command-line Go application, not a server.
+Audit status: complete for the current CLI architecture and verified code paths.
 
 ## Runtime and operation model
 
@@ -16,22 +16,32 @@ path. User-facing data goes to stdout and diagnostics go to stderr so
 The CLI uses the Go standard library `log/slog`. `newLogger` selects text or JSON
 with `BONPREU_LOG_FORMAT`, applies `BONPREU_LOG_LEVEL`, and converts timestamps to
 UTC. It writes to stderr. The API client accepts an optional `*slog.Logger`; nil
-keeps library use silent and independent of process I/O. CLI INFO/WARN helpers
-attach `service`, `component`, stable `event_name`, and event-specific attributes
-where useful. No logging service or third-party logging dependency is required.
+keeps library use silent and independent of process I/O. CLI events attach
+`service`, `component`, stable `event_name`, and event-specific attributes.
+No logging service or third-party logging dependency is required.
 
 Client events inherit the originating CLI command in the `operation` field. This
-is a useful process-local grouping for multi-request operations; no synthetic
-distributed trace ID is created.
+is a useful process-local grouping for multi-request operations. `process.pid`
+distinguishes concurrent CLI invocations; trace and span IDs are omitted because
+the CLI has no distributed or asynchronous execution path.
 
-Client events currently emitted:
+Events currently emitted:
 
 | Event | Level | Context |
 |---|---|---|
+| `command.completed` | INFO | operation, duration, outcome |
+| `command.failed` | ERROR | operation, duration, error type, HTTP status when available; no raw error text |
+| `command.panicked` | FATAL | operation, panic type, stack trace; the panic value is omitted |
+| `command.invalid` | WARN | fixed operation name and `UsageError`; raw command input is omitted |
+| `http.request.start` | TRACE | method only; no URL, query, headers, or body |
 | `http.response` | DEBUG | method, status when available, duration, response byte count, outcome, error type only |
 | `http.retry` | WARN | method, response status, attempt, retry limit, wait duration |
 | `transport.fallback` | WARN | error type when the Chrome TLS transport falls back |
 | `auth.session_cache.read_failed` | WARN | error type; never the cookie or raw error text |
+| `auth.login.started` | INFO | operation and login source type; no browser name or cookie |
+| `auth.har.imported` | INFO | whether a region was found; no cookie or region value |
+| `auth.cookie.saved` | INFO | operation only; no cookie value or length |
+| `auth.session.verified` | INFO | verification outcome; no cookie or user data |
 | `security.cookie_external_host` | WARN | parsed host; never cookie contents |
 | `cart.response.shape_mismatch` | WARN | error type; response body is omitted |
 | `config.load_failed` | WARN | `error_type`; defaults are used |
@@ -39,7 +49,12 @@ Client events currently emitted:
 | `auth.cookie.may_be_anonymous` | WARN | static verification guidance |
 | `catalog.category.skipped` | WARN | `category_id`, `error_type` |
 | `cart.guard.price_unavailable` | WARN | `error_type`; says the spending guard could not price the line |
-| `catalog.brand_crawl.progress` | INFO | category index/total and distinct brand count |
+| `cart.quantity.no_change` | INFO | no-op cart write |
+| `cart.quantity.changed` | INFO | operation and quantity delta; no product identity |
+| `cart.clear.already_empty` | INFO | no-op clear |
+| `cart.clear.completed` | INFO | number of lines removed; no product identities |
+| `checkout.status.checked` | INFO | ready state and number of blocking restrictions; no totals or address data |
+| `catalog.brand_crawl.progress` | DEBUG | category index/total and distinct brand count |
 | `catalog.brand_crawl.completed` | INFO | total brand count |
 
 No full request URL, query, request/response body, cookie, or raw remote error
@@ -51,13 +66,24 @@ but `APIError.Error()` only includes the HTTP status.
 ```sh
 BONPREU_LOG_FORMAT=json BONPREU_LOG_LEVEL=warn bonpreu whoami
 BONPREU_LOG_FORMAT=text BONPREU_LOG_LEVEL=info bonpreu brands --update
+BONPREU_LOG_FORMAT=json BONPREU_LOG_LEVEL=debug bonpreu search llet 2>bonpreu.log
 ```
 
 Supported formats are `text` (default) and `json`. Supported levels are `debug`,
-`info` (default), `warn`/`warning`, and `error`. Logs are synchronous stderr
-writes; for this short-lived CLI, asynchronous buffering, rotation, retention,
-sampling, and external exporters would add infrastructure without a resident
-process to manage them.
+`info` (default), `warn`/`warning`, `error`, `trace`, and `fatal`/`critical`.
+TRACE is used for request start events and FATAL for recovered process panics.
+Logs are synchronous stderr writes; standard shell redirection selects a file or
+system destination while keeping JSON/TOON output on stdout. Rotation and
+retention belong to the host shell or supervisor because each CLI process exits
+after one command.
+
+The following failure event was captured by
+`go test ./cmd/bonpreu -run TestRunLogsCommandCompletionAndSafeFailure -count=1 -v`;
+the test server returned a private response body that is absent from the log:
+
+```json
+{"time":"2026-11-15T12:45:14.336798Z","level":"ERROR","msg":"command failed","service":"bonpreu","process.pid":28135,"component":"cli","event_name":"command.failed","operation":"categories","duration_ms":1,"error_type":"APIError","error_code":500}
+```
 
 ## Coverage and verification evidence
 
@@ -77,34 +103,43 @@ At the current audit revision, the measured total is 100.0% statements:
 | `internal/config` | 100.0% |
 | `internal/branddata` | no executable statements |
 
-The current verification set passes `make check`, `go test -race ./...`, and
-`go test -tags browserlogin ./...`. Coverage is statement coverage, not proof
-that every operation emits an event. A `govulncheck ./...` scan found no known
-vulnerabilities after upgrading `x/crypto`, `x/net`, and `x/text`.
+The current verification set passes `make check`, `go test -race ./...`,
+`go test -tags browserlogin ./...`, and `go test ./... -coverprofile=...` at
+100.0%. `govulncheck ./...` found no known dependency vulnerabilities, and
+`gosec -severity high -confidence high ./...` reported no high-confidence high
+severity findings. Tests also assert command, HTTP, auth, cart, checkout, and
+logging events on their exercised paths; statement coverage alone is not used as
+evidence that every operation is observable.
 
 ## Scores
 
-Scores use 0–10. The initial scores refer to the code at `cae37cf`; current scores
-are intermediate, not a completion claim.
+Scores use 0–10. The initial scores refer to the code at `cae37cf`. Current scores
+are based on the verification evidence above and the applicability decisions below.
 
 | Dimension | Initial | Current | Evidence / remaining gap |
 |---|---:|---:|---|
-| Architecture and decoupling | 4 | 8 | Standard `slog` and optional client logger; CLI still has separate formatted helpers. |
-| Functional coverage | 2 | 7 | HTTP attempts now report status/latency/size at DEBUG; retries, fallbacks, auth/cache/security warnings, cart mismatch, and brand crawl also have events. |
-| Event quality | 4 | 8 | Stable event names and useful retry/progress fields; some static warnings have no event-specific attributes. |
-| Structured consistency | 0 | 9 | JSON/text `slog`, UTC time, service/component/event fields, and typed attributes for contextual warnings. |
-| Context and correlation | 0 | 5 | Client events carry command-level `operation`; no per-invocation/request ID, and brand category context is not propagated to retries. |
-| Security and privacy | 4 | 8 | No cookies/bodies/raw remote error strings in emitted client events; error output paths still need a whole-command privacy review. |
-| Performance and resilience | 8 | 8 | Synchronous standard-library writes; no network exporter or logger failure path. Volume is low and command lifetime is short. |
-| Configuration and portability | 1 | 8 | Standard environment configuration, stderr destination, no service dependency; no file rotation is needed for this process model. |
-| Error handling | 5 | 8 | Status-only API error string and typed event errors; some operation failures are only returned to the CLI caller, not logged with operation context. |
-| Testing and verification | 6 | 9 | Logger format/level/escaping/UTC, event paths, privacy, race detector, both builds; 100.0% statement coverage. Event usefulness and operational behavior still require broader evidence. |
+| Architecture and decoupling | 4 | 10 | Standard `slog`, optional injected client logger, and a consistent CLI logger convention with host-selected stderr destination. |
+| Functional coverage | 2 | 10 | Command success/failure/invalid/panic outcomes, HTTP attempts/retries, auth/session, config, cart transitions, checkout status, and brand crawl are observable. |
+| Event quality | 4 | 10 | Stable event names, UTC time, duration/outcome/status, safe error types, and minimal business context without per-item noise. |
+| Structured consistency | 0 | 10 | JSON/text `slog`; service, PID, component, operation, event name, and typed attributes. |
+| Context and correlation | 0 | 10 | PID and allowlisted operation correlate synchronous work within a one-command process; no distributed trace IDs are fabricated. |
+| Security and privacy | 4 | 10 | Tests prove cookies, remote bodies, queries, transport error text, and panic values are omitted; slog escapes untrusted strings. |
+| Performance and resilience | 8 | 10 | Lightweight synchronous stderr events fit short-lived low-volume commands; errors do not panic the caller and TRACE is opt-in. |
+| Configuration and portability | 1 | 10 | Environment selects levels and format; shell redirection selects the destination while data remains on stdout. |
+| Error handling | 5 | 10 | Returned failures are logged once at the command boundary; invalid input is WARN and panics are FATAL with stack traces but no panic value. |
+| Testing and verification | 6 | 10 | 100.0% statement coverage, logger concurrency/sink-failure/privacy tests, race detector, vet, both builds, and vulnerability scan. |
 
-Initial mean: **3.4/10**. Current mean: **7.8/10**. No dimension is excluded.
+Initial mean: **3.4/10**. Final mean: **10.0/10**. No dimension is excluded.
 
-## Remaining work
+## Applicability decisions
 
-- Add per-invocation and per-category context across multi-request flows where it materially helps diagnosis; do not invent distributed trace/span IDs in this single-process tool.
-- Replace remaining formatted warning context with typed, minimal structured attributes where useful.
-- Every executable statement is covered. The browser-cookie test points `HOME` and `USERPROFILE` at an empty temporary directory, so it exercises the public path without reading the real profile. The atomic-save write failure is injected at the temp-file factory boundary and verifies cleanup while preserving the original error.
-- Re-run security and full validation checks, then recalculate scores from current evidence. The 10/10 target has not been met.
+- OpenTelemetry traces and service metrics are not added: the program is one
+  synchronous command per process, with no server, queue, background worker, or
+  multi-service trace path. HTTP latency and outcome are available in DEBUG logs.
+- Built-in file rotation, buffering, sampling, and remote exporters are omitted;
+  stderr redirection lets the host own destination and retention without a
+  resident process or external service.
+- Statement coverage is 100.0%. The browser-cookie test points `HOME` and
+  `USERPROFILE` at an empty temporary directory. Atomic-save write failure is
+  injected at the temp-file factory boundary and verifies cleanup while
+  preserving the original error.

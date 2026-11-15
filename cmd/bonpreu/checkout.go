@@ -40,6 +40,8 @@ func checkoutStatus(args []string) error {
 	if err != nil {
 		return err
 	}
+	stderrInfo("checkout.status.checked", "checkout readiness checked",
+		"operation", cf.operation, "ready", acg.CanCheckout, "restriction_count", len(acg.CheckoutRestrictions))
 	if done, err := emitStructured(cf, raw); done {
 		return err
 	}
