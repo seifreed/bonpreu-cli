@@ -3,6 +3,7 @@ package client
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"strings"
 	"testing"
@@ -148,6 +149,15 @@ func TestCookiesFromSequenceOnlySkipsKnownUnsupportedStoreErrors(t *testing.T) {
 	))
 	if err == nil || !strings.Contains(err.Error(), "profile not implemented: decryption failed") {
 		t.Errorf("unrelated store error containing unsupported wording must be preserved, got %v", err)
+	}
+}
+
+func TestCookiesFromSequenceDoesNotCallMissingStoreUnsupported(t *testing.T) {
+	_, err := cookiesFromSequence("chrome", cookieSequence(
+		cookieItem{nil, fmt.Errorf("cookie store: %w", fs.ErrNotExist)},
+	))
+	if err == nil || !strings.Contains(err.Error(), "no Bonpreu session found") || strings.Contains(err.Error(), "unsupported on this platform") {
+		t.Fatalf("missing cookie store should produce the no-session diagnostic, got %v", err)
 	}
 }
 

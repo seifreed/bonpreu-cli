@@ -45,6 +45,9 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 	unsupportedStoreCount := 0
 	for c, err := range cookies {
 		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
 			if isUnsupportedCookieStoreError(err) {
 				unsupportedStoreCount++
 			} else {
@@ -111,9 +114,6 @@ func isBonpreuCookieDomain(domain string) bool {
 }
 
 func isUnsupportedCookieStoreError(err error) bool {
-	if errors.Is(err, fs.ErrNotExist) {
-		return true
-	}
 	for err != nil {
 		switch strings.ToLower(err.Error()) {
 		case "not implemented", "dpapi method not implemented on this platform":
