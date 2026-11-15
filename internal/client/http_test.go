@@ -670,6 +670,9 @@ func TestCapWaitAndRetryAfter(t *testing.T) {
 	if parseRetryAfter("9999999999999999999") != maxRetryWait {
 		t.Error("oversized delta-seconds Retry-After should be capped")
 	}
+	if parseRetryAfter("999999999999999999999999999999999999") != maxRetryWait {
+		t.Error("delta-seconds beyond uint64 should still be capped, not treated as absent")
+	}
 }
 
 func TestRequestBuildError(t *testing.T) {

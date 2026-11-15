@@ -181,11 +181,15 @@ func parseRetryAfter(h string) time.Duration {
 	if h == "" {
 		return -1
 	}
-	if secs, err := strconv.ParseUint(h, 10, 64); err == nil {
+	secs, err := strconv.ParseUint(h, 10, 64)
+	if err == nil {
 		if secs > uint64(maxRetryWait/time.Second) {
 			return maxRetryWait
 		}
 		return time.Duration(secs) * time.Second
+	}
+	if errors.Is(err, strconv.ErrRange) {
+		return maxRetryWait
 	}
 	if at, err := http.ParseTime(h); err == nil {
 		wait := time.Until(at)
