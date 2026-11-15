@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -86,8 +87,19 @@ func LoadConfig() (Config, error) {
 		}
 		return c, fmt.Errorf("stat config %s: %w", p, err)
 	}
-	_, err := toml.DecodeFile(p, &c)
-	return c, err
+	metadata, err := toml.DecodeFile(p, &c)
+	if err != nil {
+		return c, err
+	}
+	undecoded := metadata.Undecoded()
+	if len(undecoded) > 0 {
+		keys := make([]string, len(undecoded))
+		for i, key := range undecoded {
+			keys[i] = key.String()
+		}
+		return c, fmt.Errorf("unknown config key(s): %s", strings.Join(keys, ", "))
+	}
+	return c, nil
 }
 
 // ensureDir creates the config dir privately and rejects permissive existing dirs.

@@ -72,6 +72,26 @@ func TestLoadConfigMissingIsEmpty(t *testing.T) {
 	}
 }
 
+func TestLoadConfigRejectsUnknownKeys(t *testing.T) {
+	dir := privateConfigTestDir(t)
+	if err := os.WriteFile(filepath.Join(dir, configFile), []byte("[limits]\nmax_eur_limit = 5\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "limits.max_eur_limit") {
+		t.Fatalf("LoadConfig error = %v, want unknown key path", err)
+	}
+}
+
+func TestLoadConfigReturnsMalformedTOMLError(t *testing.T) {
+	dir := privateConfigTestDir(t)
+	if err := os.WriteFile(filepath.Join(dir, configFile), []byte("[limits\nmax_eur = 5\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadConfig(); err == nil {
+		t.Fatal("LoadConfig accepted malformed TOML")
+	}
+}
+
 func TestConfigReadsRejectPermissiveExistingDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows ACLs are not represented by Go permission bits")

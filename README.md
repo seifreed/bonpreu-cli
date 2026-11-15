@@ -288,6 +288,8 @@ State lives in `~/.bonpreu/` (override with `BONPREU_CONFIG_DIR`):
 On Unix-like systems, the CLI reads and writes state only when the config directory is private
 (`0700`). If an existing directory is more accessible, restrict it with `chmod 700 <directory>`.
 On Windows, restrict the directory's ACL to the current user; Go's permission bits cannot verify it.
+Unknown TOML keys are rejected, so a misspelling of `limits.max_eur` cannot silently fall back to a
+zero spending cap.
 
 The brand catalogue ships **in the repo/binary** (`internal/branddata/brands.json`), not under `~/.bonpreu/`.
 

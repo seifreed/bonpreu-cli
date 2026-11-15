@@ -82,3 +82,14 @@ func TestResolveMaxFailsOnMalformedConfig(t *testing.T) {
 		t.Fatal("a malformed config must surface an error, not silently disable the limit")
 	}
 }
+
+func TestResolveMaxFailsOnMisspelledLimitKey(t *testing.T) {
+	dir := privateTestConfigDir(t)
+	t.Setenv("BONPREU_MAX_EUR", "")
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("[limits]\nmax_eur_limt = 5\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveMax(0, false); err == nil {
+		t.Fatal("an unknown limit key must not silently disable the spending guard")
+	}
+}
