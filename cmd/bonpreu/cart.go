@@ -44,7 +44,7 @@ func authedClient(cf *common) (*client.Client, error) {
 		return nil, fmt.Errorf("not authenticated — run `bonpreu import-har --file <har>` first")
 	}
 	// A stored cookie that lacks the session markers (global_sid + aws-waf-token) is
-	// anonymous — set-cookie warns about it but still saves it. Reject it here with a
+	// anonymous. Reject it here with a
 	// clear message instead of letting cart/checkout hit the API and surface a raw
 	// HTTP 400/403. (whoami goes through this gate too; an expired-but-well-formed
 	// session still passes here and is caught by its live CheckAuth.)

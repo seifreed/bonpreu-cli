@@ -60,9 +60,11 @@ func TestSetCookieRejectsAnonymousCookieWithoutReplacingSession(t *testing.T) {
 	if err := client.SaveSession(previous); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdSetCookie([]string{"sessionid=x; other=y"}); err == nil || !strings.Contains(err.Error(), "global_sid + aws-waf-token") {
-		t.Fatalf("anonymous set-cookie error = %v; want required session-cookie error", err)
-	}
+	withStdin(t, "sessionid=x; other=y", func() {
+		if err := cmdSetCookie([]string{"--stdin"}); err == nil || !strings.Contains(err.Error(), "global_sid + aws-waf-token") {
+			t.Fatalf("anonymous set-cookie error = %v; want required session-cookie error", err)
+		}
+	})
 	got, err := client.LoadSession()
 	if err != nil || got != previous {
 		t.Fatalf("session after rejected cookie = %+v, %v; want unchanged %+v", got, err, previous)
@@ -77,9 +79,11 @@ func TestSetCookieSilentOnAuthedCookie(t *testing.T) {
 	stderrWarn = func(event, message string, attrs ...any) { logs = append(logs, event+" "+message+fmt.Sprint(attrs...)) }
 	defer func() { stderrInfo, stderrWarn = oldInfo, oldWarn }()
 
-	if err := cmdSetCookie([]string{"global_sid=a; aws-waf-token=b"}); err != nil {
-		t.Fatalf("cmdSetCookie: %v", err)
-	}
+	withStdin(t, "global_sid=a; aws-waf-token=b", func() {
+		if err := cmdSetCookie([]string{"--stdin"}); err != nil {
+			t.Fatalf("cmdSetCookie: %v", err)
+		}
+	})
 	if len(logs) != 1 || !strings.Contains(logs[0], "auth.cookie.saved") {
 		t.Errorf("authed cookie → one safe save event expected, got %v", logs)
 	}
@@ -119,6 +123,21 @@ func TestSetCookieStdinRejectsUnexpectedArgumentsWithoutReplacingSession(t *test
 	}
 }
 
+func TestSetCookieRejectsCookieArgumentWithoutReplacingSession(t *testing.T) {
+	privateTestConfigDir(t)
+	previous := client.Session{Cookie: "previous=session"}
+	if err := client.SaveSession(previous); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdSetCookie([]string{"global_sid=new; aws-waf-token=new-token"}); err == nil || !strings.Contains(err.Error(), "usage") {
+		t.Fatalf("set-cookie argument error = %v; want usage error", err)
+	}
+	got, err := client.LoadSession()
+	if err != nil || got != previous {
+		t.Fatalf("session after rejected argument = %+v, %v; want unchanged %+v", got, err, previous)
+	}
+}
+
 func TestSetCookieSaveEventDoesNotExposeCookie(t *testing.T) {
 	privateTestConfigDir(t)
 	const secret = "global_sid=private-session-value; aws-waf-token=private-token"
@@ -127,9 +146,11 @@ func TestSetCookieSaveEventDoesNotExposeCookie(t *testing.T) {
 	stderrInfo = func(name, _ string, _ ...any) { event = name }
 	stderrWarn = func(string, string, ...any) {}
 	defer func() { stderrInfo, stderrWarn = oldInfo, oldWarn }()
-	if err := cmdSetCookie([]string{secret}); err != nil {
-		t.Fatal(err)
-	}
+	withStdin(t, secret, func() {
+		if err := cmdSetCookie([]string{"--stdin"}); err != nil {
+			t.Fatal(err)
+		}
+	})
 	if event != "auth.cookie.saved" || strings.Contains(event, secret) {
 		t.Fatalf("cookie save event = %q; expected safe event name only", event)
 	}
@@ -137,9 +158,11 @@ func TestSetCookieSaveEventDoesNotExposeCookie(t *testing.T) {
 
 func TestSetCookieSaveError(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", unwritableConfigDir(t))
-	if err := cmdSetCookie([]string{"global_sid=a; aws-waf-token=b"}); err == nil {
-		t.Error("set-cookie should fail when the session cannot be saved")
-	}
+	withStdin(t, "global_sid=a; aws-waf-token=b", func() {
+		if err := cmdSetCookie([]string{"--stdin"}); err == nil {
+			t.Error("set-cookie should fail when the session cannot be saved")
+		}
+	})
 }
 
 func TestSetCookieReturnsSaveError(t *testing.T) {
@@ -147,9 +170,11 @@ func TestSetCookieReturnsSaveError(t *testing.T) {
 	oldSave := persistSession
 	persistSession = func(client.Session) error { return fmt.Errorf("disk write failed") }
 	t.Cleanup(func() { persistSession = oldSave })
-	if err := cmdSetCookie([]string{"global_sid=a; aws-waf-token=b"}); err == nil || !strings.Contains(err.Error(), "disk write failed") {
-		t.Fatalf("set-cookie error = %v; want save error", err)
-	}
+	withStdin(t, "global_sid=a; aws-waf-token=b", func() {
+		if err := cmdSetCookie([]string{"--stdin"}); err == nil || !strings.Contains(err.Error(), "disk write failed") {
+			t.Fatalf("set-cookie error = %v; want save error", err)
+		}
+	})
 }
 
 func TestWhoamiJSONReturnsErrorForUnauthenticatedSession(t *testing.T) {

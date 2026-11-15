@@ -191,7 +191,7 @@ AUTHENTICATED COMMANDS (bring your own browser session):
   login                   open a browser, log in, capture the session
                           (needs a build with -tags browserlogin + Chrome)
   import-har --file f     import a DevTools HAR ("Save all as HAR with sensitive data")
-  set-cookie '<cookie>'   seed a raw Cookie header manually (--stdin supported)
+  set-cookie --stdin      seed a raw Cookie header from stdin (paste, then Ctrl-D)
   whoami                  verify the session is accepted
   cart get                show the active cart (--json for the raw response)
   cart add <id> <qty>     add qty of a product (additive)

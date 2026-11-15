@@ -46,23 +46,18 @@ func cmdImportHar(args []string) error {
 // cache — the manual alternative to import-har.
 func cmdSetCookie(args []string) error {
 	fs := flag.NewFlagSet("set-cookie", flag.ExitOnError)
-	stdin := fs.Bool("stdin", false, "read the cookie from stdin")
+	stdin := fs.Bool("stdin", false, "read the cookie from stdin (required)")
 	parseFlags(fs, args)
-	var cookie string
-	if *stdin {
-		if fs.NArg() != 0 {
-			return fmt.Errorf("usage: bonpreu set-cookie --stdin")
-		}
-		b, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return err
-		}
-		cookie = strings.TrimSpace(string(b))
-	} else if fs.NArg() > 0 {
-		cookie = strings.Join(fs.Args(), " ")
+	if !*stdin || fs.NArg() != 0 {
+		return fmt.Errorf("usage: bonpreu set-cookie --stdin")
 	}
+	b, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return err
+	}
+	cookie := strings.TrimSpace(string(b))
 	if cookie == "" {
-		return fmt.Errorf("usage: bonpreu set-cookie '<cookie header>'  (or --stdin)")
+		return fmt.Errorf("usage: bonpreu set-cookie --stdin")
 	}
 	if !client.CookieLooksAuthed(cookie) {
 		return fmt.Errorf("cookie lacks the required global_sid + aws-waf-token session keys; the previous session was kept")
