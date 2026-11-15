@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -43,17 +44,22 @@ func collectBasket(file string, posArgs []string) ([]basketLine, error) {
 // file (or stdin when path is "-"), with the line's 1-based number for error
 // messages. It owns opening/closing the source and the large-line buffer.
 func scanSource(path string, fn func(lineNo int, text string) error) error {
-	var r io.Reader
 	if path == "-" {
-		r = os.Stdin
-	} else {
-		f, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		r = f
+		return scanReader(os.Stdin, fn)
 	}
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	return scanAndClose(f, fn)
+}
+
+func scanAndClose(r io.ReadCloser, fn func(lineNo int, text string) error) (err error) {
+	defer func() { err = errors.Join(err, r.Close()) }()
+	return scanReader(r, fn)
+}
+
+func scanReader(r io.Reader, fn func(lineNo int, text string) error) error {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	ln := 0

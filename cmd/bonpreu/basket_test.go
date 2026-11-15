@@ -1,12 +1,32 @@
 package main
 
 import (
+	"errors"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+type failingCloseReader struct {
+	io.Reader
+	err error
+}
+
+func (r failingCloseReader) Close() error { return r.err }
+
+func TestScanSourcePreservesInputAndCloseErrors(t *testing.T) {
+	closeErr := errors.New("close failed")
+	callbackErr := errors.New("invalid basket line")
+	err := scanAndClose(failingCloseReader{Reader: strings.NewReader("line\n"), err: closeErr}, func(int, string) error {
+		return callbackErr
+	})
+	if !errors.Is(err, callbackErr) || !errors.Is(err, closeErr) {
+		t.Fatalf("scanAndClose error = %v; want callback and close errors", err)
+	}
+}
 
 func TestPriceCents(t *testing.T) {
 	cases := map[string]int64{
