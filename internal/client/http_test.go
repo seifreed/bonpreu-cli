@@ -56,6 +56,9 @@ func TestAPIErrorOnNon2xx(t *testing.T) {
 	if !ok || ae.Status != 404 {
 		t.Fatalf("want APIError 404, got %v", err)
 	}
+	if strings.Contains(err.Error(), `"error"`) {
+		t.Fatalf("error string leaked response body: %v", err)
+	}
 }
 
 func TestRetryOnRateLimit(t *testing.T) {

@@ -91,7 +91,9 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
-	return fmt.Sprintf("bonpreu api: HTTP %d: %s", e.Status, truncate(e.Body, 300))
+	// Response bodies are controlled by the remote service and can contain echoed
+	// credentials or personal data; keep them available via Body, never in logs.
+	return fmt.Sprintf("bonpreu api: HTTP %d", e.Status)
 }
 
 // HTTPStatus reports the HTTP status carried by err when it is (or wraps) an

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -17,7 +19,32 @@ import (
 // stderr, prefixed, so they never mix with --json data on stdout. It is a var so
 // tests can capture what would be logged.
 var stderrLogf = func(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "bonpreu: "+format+"\n", args...)
+	defaultLogger().Info(fmt.Sprintf(format, args...), "service", "bonpreu", "component", "cli")
+}
+
+var stderrWarnf = func(format string, args ...any) {
+	defaultLogger().Warn(fmt.Sprintf(format, args...), "service", "bonpreu", "component", "client")
+}
+
+func defaultLogger() *slog.Logger {
+	return newLogger(os.Stderr)
+}
+
+func newLogger(w io.Writer) *slog.Logger {
+	level := slog.LevelInfo
+	switch strings.ToLower(os.Getenv("BONPREU_LOG_LEVEL")) {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn", "warning":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	}
+	opts := &slog.HandlerOptions{Level: level}
+	if strings.EqualFold(os.Getenv("BONPREU_LOG_FORMAT"), "json") {
+		return slog.New(slog.NewJSONHandler(w, opts))
+	}
+	return slog.New(slog.NewTextHandler(w, opts))
 }
 
 // common flags shared by every subcommand.
@@ -51,7 +78,7 @@ func addCommon(fs *flag.FlagSet) *common {
 // loaded from config/cache by the authenticated commands, not here.
 func newClient(c *common) *client.Client {
 	cl := client.New()
-	cl.Logf = stderrLogf
+	cl.Logf = stderrWarnf
 	// BONPREU_BASE_URL points the client at an alternate host (a debugging proxy,
 	// a mock, or a staging endpoint) instead of the production API.
 	if u := os.Getenv("BONPREU_BASE_URL"); u != "" {

@@ -51,6 +51,12 @@ It's a port of [`mercadona-cli`](https://github.com/ivorpad/mercadona-cli) to Bo
 
 ### Supported Outputs
 
+Diagnostics use Go's standard `log/slog` and go to stderr, keeping
+`--json`/`--toon` stdout machine-readable. Text is the default; set
+`BONPREU_LOG_FORMAT=json` for structured JSON and `BONPREU_LOG_LEVEL` to
+`debug`, `info` (default), `warn`, or `error`. Remote HTTP response bodies are
+excluded from error strings because they are untrusted and may contain secrets.
+
 ```text
 Catalog data    Human tables, JSON (--json)
 Basket total    Per-line subtotals + total (integer-cent exact)
