@@ -80,7 +80,7 @@ func saveAndVerify(cf *common, s client.Session) error {
 		return fmt.Errorf("could not verify session: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("cookie NOT authenticated — the previous session was kept; log in again")
+		return rejectCommand("authentication_rejected", "cookie NOT authenticated — the previous session was kept; log in again")
 	}
 	if err := persistSession(s); err != nil {
 		return err

@@ -69,7 +69,7 @@ func cmdSetCookie(args []string) error {
 		return invalidCommandf("usage: bonpreu set-cookie --stdin")
 	}
 	if !client.CookieLooksAuthed(cookie) {
-		return fmt.Errorf("cookie lacks the required global_sid + aws-waf-token session keys; the previous session was kept")
+		return rejectCommand("invalid_session_cookie", "cookie lacks the required global_sid + aws-waf-token session keys; the previous session was kept")
 	}
 	s, err := client.LoadSession()
 	if err != nil {
@@ -100,7 +100,7 @@ func cmdWhoami(args []string) error {
 		return fmt.Errorf("could not verify session: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("cookie present but NOT authenticated (the session expired or is anonymous) — re-export a fresh HAR while logged in")
+		return rejectCommand("authentication_rejected", "cookie present but NOT authenticated (the session expired or is anonymous) — re-export a fresh HAR while logged in")
 	}
 	stderrInfo("auth.session.verified", "stored session was accepted", "operation", cf.operation)
 	if done, err := emitStructured(cf, map[string]any{"authenticated": ok, "region": cl.RegionID}); done {

@@ -258,7 +258,7 @@ func cartUpdateLimitError(raw json.RawMessage, productID string) error {
 			return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: limited item is missing productId")
 		}
 		if item.ProductID == productID {
-			return fmt.Errorf("cart quantity was limited by the server (%s); inspect the cart before retrying", terminalText(firstNonEmpty(item.Reason, "quantity limit")))
+			return rejectCommand("cart_quantity_limited", "cart quantity was limited by the server (%s); inspect the cart before retrying", terminalText(firstNonEmpty(item.Reason, "quantity limit")))
 		}
 	}
 	for _, item := range result.UnavailableData {
@@ -266,7 +266,7 @@ func cartUpdateLimitError(raw json.RawMessage, productID string) error {
 			return fmt.Errorf("cart update was accepted but the server result could not be inspected; check the cart before retrying: unavailable item is missing productId")
 		}
 		if item.ProductID == productID {
-			return fmt.Errorf("cart product is unavailable (%s); inspect the cart before retrying", terminalText(firstNonEmpty(item.Reason, "unavailable")))
+			return rejectCommand("cart_product_unavailable", "cart product is unavailable (%s); inspect the cart before retrying", terminalText(firstNonEmpty(item.Reason, "unavailable")))
 		}
 	}
 	return nil

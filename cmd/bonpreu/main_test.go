@@ -144,6 +144,83 @@ func TestRunLogsBudgetRejectionAsWarning(t *testing.T) {
 	}
 }
 
+func TestRunLogsRecoverableCartAndDeliveryOutcomesAsWarnings(t *testing.T) {
+	t.Run("cart quantity limited", func(t *testing.T) {
+		t.Setenv("BONPREU_LOG_FORMAT", "json")
+		t.Setenv("BONPREU_LOG_LEVEL", "info")
+		var cartWrites, forbiddenWrites atomic.Int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := strings.ToLower(r.URL.Path)
+			if strings.Contains(path, "checkout") || strings.Contains(path, "order") ||
+				(r.Method == http.MethodPost && r.URL.Path != "/api/cart/v1/carts/active/apply-quantity") {
+				forbiddenWrites.Add(1)
+			}
+			switch r.URL.Path {
+			case "/products/23597":
+				_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"2.00"}}}</html>`))
+			case "/":
+				_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+			case "/api/cart/v1/carts/active/apply-quantity":
+				cartWrites.Add(1)
+				_, _ = w.Write([]byte(`{"limitedItems":[{"productId":"uuid-23597","reason":"EXCEEDED_MAX_QUANTITY_SINGLE"}]}`))
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer srv.Close()
+		useServer(t, srv, true)
+
+		code, logs := runWithStderr(t, []string{"cart", "add", "23597", "1"})
+		assertRejectedWarning(t, code, logs, "cart_quantity_limited")
+		if got := cartWrites.Load(); got != 1 {
+			t.Fatalf("cart writes = %d, want one cart-only write", got)
+		}
+		if got := forbiddenWrites.Load(); got != 0 {
+			t.Fatalf("non-cart writes = %d, want 0", got)
+		}
+	})
+
+	t.Run("delivery slots unavailable", func(t *testing.T) {
+		t.Setenv("BONPREU_LOG_FORMAT", "json")
+		t.Setenv("BONPREU_LOG_LEVEL", "info")
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "/ecomslots/") {
+				http.NotFound(w, r)
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer srv.Close()
+		useServer(t, srv, true)
+
+		code, logs := runWithStderr(t, []string{"checkout", "slots", "--address", "address-1"})
+		assertRejectedWarning(t, code, logs, "no_delivery_slots")
+	})
+
+	t.Run("expired session", func(t *testing.T) {
+		t.Setenv("BONPREU_LOG_FORMAT", "json")
+		t.Setenv("BONPREU_LOG_LEVEL", "info")
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		}))
+		defer srv.Close()
+		useServer(t, srv, true)
+
+		code, logs := runWithStderr(t, []string{"whoami"})
+		assertRejectedWarning(t, code, logs, "authentication_rejected")
+	})
+}
+
+func assertRejectedWarning(t *testing.T, code int, logs, reason string) {
+	t.Helper()
+	if code != 1 || !strings.Contains(logs, `"level":"WARN"`) || !strings.Contains(logs, `"event_name":"command.rejected"`) || !strings.Contains(logs, `"reason":"`+reason+`"`) {
+		t.Fatalf("rejection exit=%d logs=%q; want WARN reason %s", code, logs, reason)
+	}
+	if strings.Contains(logs, `"level":"ERROR"`) || strings.Contains(logs, `"event_name":"command.failed"`) {
+		t.Fatalf("expected recoverable outcome was logged as operational failure: %q", logs)
+	}
+}
+
 func TestCommandOperationNames(t *testing.T) {
 	for _, tc := range []struct {
 		args []string

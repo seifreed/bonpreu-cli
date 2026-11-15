@@ -107,12 +107,12 @@ func run(args []string) int {
 			fmt.Fprintln(os.Stderr, "error:", terminalText(err.Error()))
 			return 1
 		}
-		var rejected *budgetExceededError
+		var rejected *commandRejectedError
 		if errors.As(err, &rejected) {
-			defaultLogger().Warn("command rejected by spending limit",
+			defaultLogger().Warn("command rejected by an expected condition",
 				"component", "cli", "event_name", "command.rejected",
 				"operation", operation, "duration_ms", time.Since(started).Milliseconds(),
-				"outcome", "rejected", "reason", "budget_exceeded")
+				"outcome", "rejected", "reason", rejected.reason)
 			fmt.Fprintln(os.Stderr, "error:", terminalText(err.Error()))
 			return 1
 		}

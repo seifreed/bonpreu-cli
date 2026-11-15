@@ -72,7 +72,7 @@ func checkoutReserve(args []string) error {
 	}
 	regionID := firstNonEmpty(*region, cl.RegionID)
 	if strings.TrimSpace(regionID) == "" {
-		return fmt.Errorf("missing delivery region — pass --region or save region_id in the authenticated session/config")
+		return invalidCommandf("missing delivery region — pass --region or save region_id in the authenticated session/config")
 	}
 	if _, err := cl.ReserveSlot(regionID, *address, *slot, *externalAddress); err != nil {
 		return err
@@ -168,7 +168,7 @@ func checkoutSlots(args []string) error {
 		// shows a "slot service down" card for the same case) — not a bad id. Say
 		// so honestly, and still point at `addresses` in case the id is wrong.
 		if status, _ := client.HTTPStatus(err); status == 404 {
-			return fmt.Errorf("no slots offered for address %s right now — Bonpreu's slot service "+
+			return rejectCommand("no_delivery_slots", "no slots offered for address %s right now — Bonpreu's slot service "+
 				"returned nothing (often temporarily down, or no open slots for the area); "+
 				"verify the id with `bonpreu checkout addresses`", *addr)
 		}

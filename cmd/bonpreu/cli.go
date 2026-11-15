@@ -92,6 +92,17 @@ func invalidCommandf(format string, args ...any) error {
 	return &invalidCommandError{message: fmt.Sprintf(format, args...)}
 }
 
+type commandRejectedError struct {
+	reason  string
+	message string
+}
+
+func (e *commandRejectedError) Error() string { return e.message }
+
+func rejectCommand(reason, format string, args ...any) error {
+	return &commandRejectedError{reason: reason, message: fmt.Sprintf(format, args...)}
+}
+
 // newCommonFlags builds a flag set carrying the common flags (--lang, --json),
 // the starting point for every command that takes them.
 func newCommonFlags(name string) (*flag.FlagSet, *common) {

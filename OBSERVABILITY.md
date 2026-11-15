@@ -31,7 +31,7 @@ Events currently emitted:
 |---|---|---|
 | `command.completed` | INFO | operation, duration, outcome |
 | `command.failed` | ERROR | operation, duration, error type, HTTP status when available; no raw error text |
-| `command.rejected` | WARN | expected spending-limit refusal; operation, duration, outcome, fixed reason code |
+| `command.rejected` | WARN | expected refusal or unavailable outcome (budget limit, cart quantity/product constraint, expired session, or no delivery slots); operation, duration, outcome, fixed reason code |
 | `command.panicked` | FATAL | operation, panic type, stack trace; the panic value is omitted |
 | `command.invalid` | WARN | invalid CLI usage/subcommand, operation, and fixed `UsageError` type; raw arguments are omitted |
 | `http.request.start` | TRACE | method only; no URL, query, headers, or body |
