@@ -164,6 +164,15 @@ func cartWrite(args []string, set bool) error {
 		return err
 	}
 	limitErr := cartUpdateLimitError(cart.Raw, pd.ProductID)
+	if set && limitErr == nil {
+		actual, err := currentQty(cl, pd.ProductID)
+		if err != nil {
+			return fmt.Errorf("cart set was accepted but the result could not be verified; inspect the cart before retrying: %w", err)
+		}
+		if actual != qty {
+			return fmt.Errorf("cart set was accepted but resulting quantity is %s, not requested %s; inspect the cart before retrying", fmtQty(actual), fmtQty(qty))
+		}
+	}
 	if limitErr == nil {
 		stderrInfo("cart.quantity.changed", "cart line quantity updated", "operation", cf.operation, "quantity_delta", delta)
 	}

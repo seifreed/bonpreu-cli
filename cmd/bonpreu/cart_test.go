@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -48,6 +50,50 @@ func testCartClient(srv *httptest.Server) *client.Client {
 	cl.BaseURL = srv.URL
 	cl.HTTP = srv.Client()
 	return cl
+}
+
+func statefulCartServer(t *testing.T, initialQty float64) *httptest.Server {
+	t.Helper()
+	var mu sync.Mutex
+	quantities := map[string]float64{"uuid-23597": initialQty}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/products/"):
+			id := strings.TrimPrefix(r.URL.Path, "/products/")
+			_, _ = fmt.Fprintf(w, `<html>window.__URQL_DATA__ = {"p":{"retailerProductId":%q,"productId":"uuid-%s","name":"Llet","price":{"amount":"1.69"}}}</html>`, id, id)
+		case r.URL.Path == "/":
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case r.URL.Path == "/api/cart/v1/carts/active":
+			mu.Lock()
+			items := make([]client.CartLine, 0, len(quantities))
+			for productID, qty := range quantities {
+				if qty > 0 {
+					items = append(items, client.CartLine{ProductID: productID, Quantity: qty})
+				}
+			}
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(struct {
+				Items []client.CartLine `json:"items"`
+			}{Items: items})
+		case r.URL.Path == "/api/cart/v1/carts/active/apply-quantity":
+			var items []client.CartItem
+			if err := json.NewDecoder(r.Body).Decode(&items); err != nil {
+				http.Error(w, "invalid cart update", http.StatusBadRequest)
+				return
+			}
+			mu.Lock()
+			for _, item := range items {
+				quantities[item.ProductID] += item.Quantity
+				if quantities[item.ProductID] <= 0 {
+					delete(quantities, item.ProductID)
+				}
+			}
+			mu.Unlock()
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
 }
 
 func TestCartAddDoesNotCheckoutOrPlaceOrder(t *testing.T) {
@@ -306,6 +352,73 @@ func TestCartSetRejectsInvalidLimitBeforeReadingCart(t *testing.T) {
 	}
 	if got := writes.Load(); got != 0 {
 		t.Fatalf("cart set sent %d writes despite an invalid limit", got)
+	}
+}
+
+func TestCartSetReportsConcurrentQuantityChange(t *testing.T) {
+	var cartReads, writes atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/products/"):
+			w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case r.URL.Path == "/api/cart/v1/carts/active":
+			if cartReads.Add(1) == 1 {
+				w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":2}]}`))
+			} else {
+				// Simulate another client changing the cart between our read and delta POST.
+				w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":4}]}`))
+			}
+		case r.URL.Path == "/":
+			w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case strings.Contains(r.URL.Path, "/apply-quantity"):
+			writes.Add(1)
+			w.Write([]byte(`{"items":[]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	out, err := capture(t, func() error { return cmdCart([]string{"set", "23597", "3"}) })
+	if err == nil || !strings.Contains(err.Error(), "resulting quantity is 4, not requested 3") {
+		t.Fatalf("cart set output %q, error = %v; want concurrent change diagnostic", out, err)
+	}
+	if got := writes.Load(); got != 1 {
+		t.Fatalf("cart set sent %d writes, want one delta write", got)
+	}
+}
+
+func TestCartSetReportsReadbackErrorAfterAcceptedWrite(t *testing.T) {
+	var cartReads, writes atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/products/"):
+			w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case r.URL.Path == "/api/cart/v1/carts/active":
+			if cartReads.Add(1) > 1 {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":2}]}`))
+		case r.URL.Path == "/":
+			w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case strings.Contains(r.URL.Path, "/apply-quantity"):
+			writes.Add(1)
+			w.Write([]byte(`{"items":[]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	_, err := capture(t, func() error { return cmdCart([]string{"set", "23597", "3"}) })
+	if err == nil || !strings.Contains(err.Error(), "accepted but the result could not be verified") || !strings.Contains(err.Error(), "HTTP 500") {
+		t.Fatalf("cart set error = %v; want accepted-write readback error", err)
+	}
+	if got := writes.Load(); got != 1 {
+		t.Fatalf("cart set sent %d writes, want one", got)
 	}
 }
 
@@ -603,7 +716,7 @@ func TestCartClearEmptyJSONOutput(t *testing.T) {
 // `set` for a product not currently in the cart exercises currentQty's
 // not-found return.
 func TestCartSetNewProduct(t *testing.T) {
-	srv := apiServer(t)
+	srv := statefulCartServer(t, 0)
 	defer srv.Close()
 	useServer(t, srv, true)
 	if _, err := capture(t, func() error { return cmdCart([]string{"set", "00944", "2"}) }); err != nil {

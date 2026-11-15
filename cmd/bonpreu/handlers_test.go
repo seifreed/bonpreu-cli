@@ -173,7 +173,7 @@ func TestCmdWhoami(t *testing.T) {
 }
 
 func TestCmdCart(t *testing.T) {
-	srv := apiServer(t)
+	srv := statefulCartServer(t, 2)
 	defer srv.Close()
 	useServer(t, srv, true)
 	var events []string
