@@ -15,10 +15,10 @@ import (
 	"github.com/seifreed/bonpreu-cli/internal/config"
 )
 
-// stderrLogf routes CLI diagnostics to stderr so they never mix with --json data
-// on stdout. It is a var so tests can capture what would be logged.
-var stderrLogf = func(format string, args ...any) {
-	defaultLogger().Info(fmt.Sprintf(format, args...), "service", "bonpreu", "component", "cli", "event_name", "cli.diagnostic")
+// stderrInfo emits structured CLI events without mixing diagnostics into stdout.
+var stderrInfo = func(event, message string, attrs ...any) {
+	fields := []any{"service", "bonpreu", "component", "cli", "event_name", event}
+	defaultLogger().Info(message, append(fields, attrs...)...)
 }
 
 var stderrWarnf = func(event, format string, args ...any) {

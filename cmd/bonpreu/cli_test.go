@@ -64,9 +64,9 @@ func TestNewClientWarnsOnMalformedConfig(t *testing.T) {
 func TestNewClientSilentWithoutConfig(t *testing.T) {
 	t.Setenv("BONPREU_CONFIG_DIR", t.TempDir()) // no config.toml present
 	var logs []string
-	old := stderrLogf
-	stderrLogf = func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }
-	defer func() { stderrLogf = old }()
+	old := stderrWarnf
+	stderrWarnf = func(event, f string, a ...any) { logs = append(logs, event+" "+fmt.Sprintf(f, a...)) }
+	defer func() { stderrWarnf = old }()
 
 	_ = newClient(&common{})
 	if len(logs) != 0 {
