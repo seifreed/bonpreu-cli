@@ -120,6 +120,16 @@ func cartWrite(args []string, set bool) error {
 		return fmt.Errorf("product %s has no cart product ID", retailerID)
 	}
 
+	if set {
+		limit, err := resolveMax(*maxEUR, maxSet)
+		if err != nil {
+			return err
+		}
+		if err := guardResultingLine(limit, pd, qty); err != nil {
+			return err
+		}
+	}
+
 	delta := qty
 	if set {
 		cur, qerr := currentQty(cl, pd.ProductID)
@@ -131,21 +141,20 @@ func cartWrite(args []string, set bool) error {
 			stderrInfo("cart.quantity.no_change", "cart line is already at target quantity", "operation", "cart write")
 			return nil
 		}
-	}
-	if delta > 0 {
+	} else if delta > 0 {
 		limit, err := resolveMax(*maxEUR, maxSet)
 		if err != nil {
 			return err
 		}
 		lineQty := qty
-		if !set && limit > 0 {
+		if limit > 0 {
 			current, err := currentQty(cl, pd.ProductID)
 			if err != nil {
 				return fmt.Errorf("read current cart quantity: %w", err)
 			}
 			lineQty += current
 		}
-		if err := guardLineAdd(limit, pd, lineQty); err != nil {
+		if err := guardResultingLine(limit, pd, lineQty); err != nil {
 			return err
 		}
 	}
@@ -276,8 +285,8 @@ func decimalQtySum(lines []client.CartLine, productID string) (float64, error) {
 	return total, nil
 }
 
-// guardLineAdd enforces --max against the resulting product-line value.
-func guardLineAdd(maxEUR float64, pd *client.ProductDetail, qty float64) error {
+// guardResultingLine enforces --max against the resulting product-line value.
+func guardResultingLine(maxEUR float64, pd *client.ProductDetail, qty float64) error {
 	if maxEUR == 0 {
 		return nil
 	}

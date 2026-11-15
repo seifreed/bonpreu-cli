@@ -14,31 +14,31 @@ import (
 	"github.com/seifreed/bonpreu-cli/internal/client"
 )
 
-func TestGuardLineAddRejectsUnpriceableWhenLimitSet(t *testing.T) {
+func TestGuardResultingLineRejectsUnpriceableWhenLimitSet(t *testing.T) {
 	pd := &client.ProductDetail{}
 	pd.Name = "Mystery item"
 	pd.Price.Amount = "" // unparseable → priceCents fails
 
-	if err := guardLineAdd(50, pd, 2); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
+	if err := guardResultingLine(50, pd, 2); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
 		t.Fatalf("unpriceable line must fail closed when --max is set, got %v", err)
 	}
 }
 
-func TestGuardLineAddRejectsOverflowWhenLimitSet(t *testing.T) {
+func TestGuardResultingLineRejectsOverflowWhenLimitSet(t *testing.T) {
 	pd := &client.ProductDetail{}
 	pd.Price.Amount = "1.00"
-	if err := guardLineAdd(50, pd, 1e300); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
+	if err := guardResultingLine(50, pd, 1e300); err == nil || !strings.Contains(err.Error(), "cannot enforce") {
 		t.Fatalf("unrepresentable line subtotal must fail closed, got %v", err)
 	}
 }
 
-func TestGuardLineAddSilentWithoutLimit(t *testing.T) {
+func TestGuardResultingLineSilentWithoutLimit(t *testing.T) {
 	t.Setenv("BONPREU_MAX_EUR", "") // no limit from env
 	privateTestConfigDir(t)         // no limit from a real config.toml
 
 	pd := &client.ProductDetail{}
 	pd.Name = "Mystery item"
-	if err := guardLineAdd(0, pd, 2); err != nil { // no limit set
+	if err := guardResultingLine(0, pd, 2); err != nil { // no limit set
 		t.Fatalf("no limit: %v", err)
 	}
 }
@@ -248,6 +248,64 @@ func TestCartWriteLimitAppliesToResultingLine(t *testing.T) {
 				t.Fatalf("cart %s sent %d writes despite resulting line exceeding limit", tc.name, got)
 			}
 		})
+	}
+}
+
+func TestCartSetDecreaseStillEnforcesResultingLineLimit(t *testing.T) {
+	var writes atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/":
+			w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case strings.HasPrefix(r.URL.Path, "/products/"):
+			w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case r.URL.Path == "/api/cart/v1/carts/active":
+			w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":2}]}`))
+		case strings.Contains(r.URL.Path, "/apply-quantity"):
+			writes.Add(1)
+			w.Write([]byte(`{"items":[]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	if _, err := capture(t, func() error { return cmdCart([]string{"set", "23597", "1", "--max", "1"}) }); err == nil || !strings.Contains(err.Error(), "BUDGET EXCEEDED") {
+		t.Fatalf("cart set error = %v, want resulting line over limit", err)
+	}
+	if got := writes.Load(); got != 0 {
+		t.Fatalf("cart set sent %d writes despite resulting line exceeding the limit", got)
+	}
+}
+
+func TestCartSetRejectsInvalidLimitBeforeReadingCart(t *testing.T) {
+	var cartReads, writes atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/products/"):
+			w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case r.URL.Path == "/api/cart/v1/carts/active":
+			cartReads.Add(1)
+			w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":2}]}`))
+		case strings.Contains(r.URL.Path, "/apply-quantity"):
+			writes.Add(1)
+			w.Write([]byte(`{"items":[]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	if _, err := capture(t, func() error { return cmdCart([]string{"set", "23597", "1", "--max", "NaN"}) }); err == nil || !strings.Contains(err.Error(), "invalid --max") {
+		t.Fatalf("cart set error = %v, want invalid limit error", err)
+	}
+	if got := cartReads.Load(); got != 0 {
+		t.Fatalf("cart set read the cart %d times despite an invalid limit", got)
+	}
+	if got := writes.Load(); got != 0 {
+		t.Fatalf("cart set sent %d writes despite an invalid limit", got)
 	}
 }
 
