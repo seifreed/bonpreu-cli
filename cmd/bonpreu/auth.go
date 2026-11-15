@@ -50,6 +50,9 @@ func cmdSetCookie(args []string) error {
 	parseFlags(fs, args)
 	var cookie string
 	if *stdin {
+		if fs.NArg() != 0 {
+			return fmt.Errorf("usage: bonpreu set-cookie --stdin")
+		}
 		b, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			return err

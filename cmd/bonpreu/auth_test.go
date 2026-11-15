@@ -86,6 +86,40 @@ func TestSetCookieSilentOnAuthedCookie(t *testing.T) {
 	}
 }
 
+func TestSetCookieStdinRejectsUnexpectedArgumentsWithoutReplacingSession(t *testing.T) {
+	privateTestConfigDir(t)
+	previous := client.Session{Cookie: "previous=session"}
+	if err := client.SaveSession(previous); err != nil {
+		t.Fatal(err)
+	}
+	input, err := os.CreateTemp(t.TempDir(), "cookie-stdin-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := input.WriteString("global_sid=new; aws-waf-token=new-token"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := input.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	oldStdin := os.Stdin
+	os.Stdin = input
+	t.Cleanup(func() {
+		os.Stdin = oldStdin
+		if err := input.Close(); err != nil {
+			t.Errorf("close stdin fixture: %v", err)
+		}
+	})
+
+	if err := cmdSetCookie([]string{"--stdin", "unexpected"}); err == nil {
+		t.Fatal("set-cookie --stdin must reject positional arguments")
+	}
+	got, err := client.LoadSession()
+	if err != nil || got != previous {
+		t.Fatalf("session after invalid args = %+v, %v; want unchanged %+v", got, err, previous)
+	}
+}
+
 func TestSetCookieSaveEventDoesNotExposeCookie(t *testing.T) {
 	privateTestConfigDir(t)
 	const secret = "global_sid=private-session-value"
