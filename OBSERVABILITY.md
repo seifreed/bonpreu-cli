@@ -63,11 +63,11 @@ There were no structured fields, environment level/format controls, or stable
 event names. `APIError.Error()` included up to 300 characters of remote response
 body.
 
-At the current audit revision, the measured total is 98.9% statements:
+At the current audit revision, the measured total is 99.2% statements:
 
 | Package | Coverage |
 |---|---:|
-| `cmd/bonpreu` | 98.3% |
+| `cmd/bonpreu` | 98.7% |
 | `internal/client` | 99.8% |
 | `internal/config` | 97.4% |
 | `internal/branddata` | no executable statements |
