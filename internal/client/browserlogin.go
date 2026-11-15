@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -188,7 +187,7 @@ func readBonpreuCookies(ctx context.Context, url string) (string, error) {
 	val := map[string]string{}
 	var order []string
 	for _, c := range cks {
-		if c == nil || c.Name == "" || c.Value == "" || !strings.Contains(c.Domain, cookieDomain) {
+		if c == nil || c.Name == "" || c.Value == "" || !isBonpreuCookieDomain(c.Domain) {
 			continue
 		}
 		if _, ok := val[c.Name]; !ok {

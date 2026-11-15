@@ -95,6 +95,7 @@ func TestLoginViaBrowserCapturesBonpreuCookies(t *testing.T) {
 		{Name: "global_sid", Value: "old", Domain: ".bonpreuesclat.cat"},
 		{Name: "aws-waf-token", Value: "waf", Domain: "www.bonpreuesclat.cat"},
 		{Name: "global_sid", Value: "session", Domain: ".bonpreuesclat.cat"},
+		{Name: "global_sid", Value: "spoof", Domain: "evilbonpreuesclat.cat"},
 	}}
 	useBrowserLoginFakes(t, executor)
 	session, err := LoginViaBrowser("https://www.bonpreuesclat.cat/")
