@@ -26,6 +26,23 @@ func TestParseHAR(t *testing.T) {
 	}
 }
 
+func TestParseHARKeepsRegionFromAuthenticatedRequest(t *testing.T) {
+	har := `{"log":{"entries":[
+ {"request":{"url":"https://www.compraonline.bonpreuesclat.cat/api/cart/v1/carts/active?regionId=logged-in-region","headers":[
+   {"name":"cookie","value":"global_sid=SID123; aws-waf-token=WAF456"}]}},
+ {"request":{"url":"https://www.compraonline.bonpreuesclat.cat/api/product-pages/search?regionId=anonymous-region","headers":[
+   {"name":"cookie","value":"VISITORID=abc"}]}}
+]}}`
+
+	s, err := ParseHAR([]byte(har))
+	if err != nil {
+		t.Fatalf("ParseHAR: %v", err)
+	}
+	if s.RegionID != "logged-in-region" {
+		t.Errorf("region = %q; want region from the authenticated request", s.RegionID)
+	}
+}
+
 func TestParseHARNoSession(t *testing.T) {
 	anon := `{"log":{"entries":[{"request":{"url":"https://www.compraonline.bonpreuesclat.cat/","headers":[{"name":"Cookie","value":"VISITORID=abc"}]}}]}}`
 	if _, err := ParseHAR([]byte(anon)); err == nil {

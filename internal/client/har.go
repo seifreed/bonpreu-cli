@@ -38,7 +38,7 @@ func isBonpreuHost(host string) bool {
 }
 
 // ParseHAR scans a HAR for the freshest authenticated Bonpreu request: its Cookie
-// header (login + WAF clearance) and the regionId the session was using.
+// header (login + WAF clearance) and, when present, the regionId it was using.
 func ParseHAR(data []byte) (HARSession, error) {
 	var har struct {
 		Log struct {
@@ -68,11 +68,13 @@ func ParseHAR(data []byte) (HARSession, error) {
 			continue
 		}
 		sawBonpreuReq = true
+		var requestRegion string
 		for k, vs := range u.Query() {
 			if regionIDRE.MatchString(k) && len(vs) > 0 && vs[0] != "" {
-				s.RegionID = vs[0]
+				requestRegion = vs[0]
 			}
 		}
+		requestAuthed := false
 		for _, h := range e.Request.Headers {
 			if !strings.EqualFold(h.Name, "cookie") {
 				continue
@@ -80,7 +82,11 @@ func ParseHAR(data []byte) (HARSession, error) {
 			sawCookieHeader = true
 			if CookieLooksAuthed(h.Value) {
 				s.Cookie = h.Value // last (freshest) authed request wins
+				requestAuthed = true
 			}
+		}
+		if requestAuthed && requestRegion != "" {
+			s.RegionID = requestRegion
 		}
 	}
 
