@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func loadAuthResult(t *testing.T, writeSession []byte) (bool, error, string) {
+func loadAuthResult(t *testing.T, writeSession []byte) (bool, string, error) {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("BONPREU_CONFIG_DIR", dir)
@@ -20,11 +20,11 @@ func loadAuthResult(t *testing.T, writeSession []byte) (bool, error, string) {
 	var logs bytes.Buffer
 	c := &Client{Logger: testLogger(&logs)}
 	loaded, err := c.LoadAuth()
-	return loaded, err, logs.String()
+	return loaded, logs.String(), err
 }
 
 func TestLoadAuthReturnsCorruptSessionError(t *testing.T) {
-	loaded, err, logs := loadAuthResult(t, []byte("{ not valid json"))
+	loaded, logs, err := loadAuthResult(t, []byte("{ not valid json"))
 	if loaded || err == nil || !strings.Contains(err.Error(), "read cached session") {
 		t.Fatalf("LoadAuth = %v, %v; want corrupt-session error", loaded, err)
 	}
@@ -50,7 +50,7 @@ func TestLoadAuthReturnsMalformedConfigError(t *testing.T) {
 }
 
 func TestLoadAuthSilentWhenNoSession(t *testing.T) {
-	loaded, err, logs := loadAuthResult(t, nil)
+	loaded, logs, err := loadAuthResult(t, nil)
 	if loaded || err != nil || logs != "" {
 		t.Errorf("missing session should be a normal unauthenticated state: %v, %v, logs=%q", loaded, err, logs)
 	}
@@ -67,9 +67,7 @@ func TestLoadAuthWarnsOnForeignBaseURL(t *testing.T) {
 	if _, err := c.LoadAuth(); err != nil { // BaseURL stays foreign; cookie already set → must warn
 		t.Fatal(err)
 	}
-	var warned bool
-	warned = strings.Contains(logs.String(), "security.cookie_external_host")
-	if !warned {
+	if !strings.Contains(logs.String(), "security.cookie_external_host") {
 		t.Errorf("expected a foreign-host cookie warning, got %q", logs.String())
 	}
 

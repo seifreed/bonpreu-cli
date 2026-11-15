@@ -15,7 +15,7 @@ type failedLogWriter struct{}
 
 func (failedLogWriter) Write([]byte) (int, error) { return 0, errors.New("sink unavailable") }
 
-func TestLoggerSinkFailureDoesNotPanic(t *testing.T) {
+func TestLoggerSinkFailureDoesNotPanic(_ *testing.T) {
 	newLogger(failedLogWriter{}).Error("diagnostic event")
 }
 

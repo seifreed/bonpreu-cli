@@ -66,15 +66,12 @@ func cmdBrands(args []string) error {
 // comma, or newline — so a brand like `Say "Cheese", Inc.` survives a round-trip.
 func writeBrandsCSV(out io.Writer, ranked []brandCount) error {
 	w := csv.NewWriter(out)
-	// The constant header fits the CSV buffer; Flush below reports sink errors.
-	w.Write([]string{"brand", "count"})
+	records := make([][]string, 0, len(ranked)+1)
+	records = append(records, []string{"brand", "count"})
 	for _, b := range ranked {
-		if err := w.Write([]string{b.Brand, strconv.Itoa(b.Count)}); err != nil {
-			return err
-		}
+		records = append(records, []string{b.Brand, strconv.Itoa(b.Count)})
 	}
-	w.Flush()
-	return w.Error()
+	return w.WriteAll(records)
 }
 
 // crawlBrands walks the category tree to depth and aggregates distinct product
