@@ -19,6 +19,9 @@ func TestClassifyOffer(t *testing.T) {
 	if k, _ := classifyOffer(nil); k != "" {
 		t.Errorf("no promos → empty, got %q", k)
 	}
+	if k, _ := classifyOffer([]client.Promotion{{}, {Description: "Abans 5,99€"}}); k != "price" {
+		t.Errorf("empty promo should be skipped, got %q", k)
+	}
 
 	// multibuy wins over a co-listed price drop, and its label is returned.
 	k, label := classifyOffer([]client.Promotion{{Description: "Abans 5,99€"}, {Description: "2a unitat 50% de descompte"}})

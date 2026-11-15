@@ -2,9 +2,36 @@ package main
 
 import (
 	"bytes"
+	"io"
+	"os"
 	"strings"
 	"testing"
 )
+
+func TestCLIInfoAndWarningEventsAreStructured(t *testing.T) {
+	t.Setenv("BONPREU_LOG_FORMAT", "json")
+	t.Setenv("BONPREU_LOG_LEVEL", "debug")
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stderr
+	os.Stderr = w
+	stderrInfo("test.info", "started", "operation", "test")
+	stderrWarn("test.warning", "recovered")
+	_ = w.Close()
+	os.Stderr = old
+	data, err := io.ReadAll(r)
+	_ = r.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{`"level":"INFO"`, `"event_name":"test.info"`, `"operation":"test"`, `"level":"WARN"`, `"event_name":"test.warning"`} {
+		if !strings.Contains(string(data), field) {
+			t.Errorf("CLI log output missing %s: %s", field, data)
+		}
+	}
+}
 
 func TestDiagnosticLoggerJSONAndLevel(t *testing.T) {
 	t.Setenv("BONPREU_LOG_FORMAT", "json")

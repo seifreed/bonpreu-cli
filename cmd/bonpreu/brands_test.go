@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/seifreed/bonpreu-cli/internal/branddata"
 	"github.com/seifreed/bonpreu-cli/internal/client"
 )
 
@@ -81,6 +82,15 @@ func TestCmdBrandsSnapshotAndUpdate(t *testing.T) {
 	}
 }
 
+func TestCmdBrandsRejectsCorruptSnapshot(t *testing.T) {
+	original := branddata.JSON
+	branddata.JSON = []byte("{")
+	defer func() { branddata.JSON = original }()
+	if err := cmdBrands(nil); err == nil || !strings.Contains(err.Error(), "read shipped brand snapshot") {
+		t.Fatalf("cmdBrands with corrupt snapshot error = %v", err)
+	}
+}
+
 func TestCrawlBrandsEmptyCategoryTree(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`[{"name":"missing id"}]`))
@@ -89,6 +99,17 @@ func TestCrawlBrandsEmptyCategoryTree(t *testing.T) {
 	_, err := crawlBrands(testCartClient(srv), 1, 10)
 	if err == nil || !strings.Contains(err.Error(), "no categories found") {
 		t.Fatalf("crawlBrands error = %v, want empty-category error", err)
+	}
+}
+
+func TestCmdBrandsUpdateReturnsCategoryError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "unavailable", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+	if err := cmdBrands([]string{"--update"}); err == nil || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("cmdBrands --update error = %v, want category request error", err)
 	}
 }
 

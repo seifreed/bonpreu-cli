@@ -94,6 +94,14 @@ func TestRankByUnitSkipsSponsored(t *testing.T) {
 	}
 }
 
+func TestRankByUnitKeepsUncomparableOrder(t *testing.T) {
+	prods := []client.Product{{RetailerProductID: "first"}, {RetailerProductID: "second"}}
+	sorted, _ := rankByUnit(prods)
+	if got := ids(sorted); !reflect.DeepEqual(got, []string{"first", "second"}) {
+		t.Fatalf("non-comparable products reordered: %v", got)
+	}
+}
+
 func ids(ps []client.Product) []string {
 	out := make([]string, len(ps))
 	for i, p := range ps {
@@ -125,6 +133,30 @@ func TestSearchLimitTruncation(t *testing.T) {
 	}
 }
 
+func TestSearchCheapest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","price":{"amount":"1.00"},"unitPrice":{"price":{"amount":"1.00"},"unit":"fop.price.per.kg"}},{"retailerProductId":"2","name":"B","price":{"amount":"2.00"}}]}]}`))
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+	out, err := capture(t, func() error { return cmdSearch([]string{"--cheapest", "x"}) })
+	if err != nil || !strings.Contains(out, "★") {
+		t.Fatalf("search --cheapest output = %q, err %v", out, err)
+	}
+}
+
+func TestCategoriesCheapest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","price":{"amount":"1.00"},"unitPrice":{"price":{"amount":"1.00"},"unit":"fop.price.per.kg"}}]}]}`))
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+	out, err := capture(t, func() error { return cmdCategories([]string{"--id", "0301", "--cheapest"}) })
+	if err != nil || !strings.Contains(out, "★") {
+		t.Fatalf("categories --cheapest output = %q, err %v", out, err)
+	}
+}
+
 func TestBatchBadFileAndEmpty(t *testing.T) {
 	if err := cmdBatch([]string{"-f", filepath.Join(t.TempDir(), "nope")}); err == nil {
 		t.Error("batch with a missing file should error")
@@ -137,6 +169,18 @@ func TestBatchBadFileAndEmpty(t *testing.T) {
 	useServer(t, srv, false)
 	if _, err := capture(t, func() error { return cmdBatch([]string{"zzz"}) }); err == nil {
 		t.Error("batch where a term has no product should report it")
+	}
+}
+
+func TestBatchWarnsForMissingBrandAndMultibuy(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"productGroups":[{"decoratedProducts":[{"retailerProductId":"1","name":"A","brand":"Other","price":{"amount":"1.00"},"promotions":[{"description":"2x1"}]}]}]}`))
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+	out, err := capture(t, func() error { return cmdBatch([]string{"--brand", "Preferred", "x"}) })
+	if err != nil || !strings.Contains(out, "marca preferida no disponible") || !strings.Contains(out, "oferta: aprofitable per quantitat") {
+		t.Fatalf("batch diagnostic output = %q, err %v", out, err)
 	}
 }
 
