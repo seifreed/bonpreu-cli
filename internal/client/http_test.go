@@ -64,6 +64,22 @@ func TestAPIErrorOnNon2xx(t *testing.T) {
 	}
 }
 
+func TestAPIErrorBodyRemainsCapped(t *testing.T) {
+	body := strings.Repeat("x", maxBodyBytes+1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, body)
+	}))
+	defer srv.Close()
+	var ae *APIError
+	if err := testClient(srv).DoJSON("GET", srv.URL+"/oversized", nil, nil); !errors.As(err, &ae) {
+		t.Fatalf("DoJSON error = %v; want APIError", err)
+	}
+	if len(ae.Body) != maxBodyBytes {
+		t.Fatalf("APIError body length = %d; want capped at %d", len(ae.Body), maxBodyBytes)
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
@@ -469,6 +485,17 @@ func TestGetTextNon2xx(t *testing.T) {
 	defer srv.Close()
 	if _, err := testClient(srv).GetText(srv.URL + "/x"); err == nil {
 		t.Error("expected error on 500")
+	}
+}
+
+func TestGetTextRejectsBodyOverLimit(t *testing.T) {
+	body := strings.Repeat("x", maxBodyBytes+1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, body)
+	}))
+	defer srv.Close()
+	if got, err := testClient(srv).GetText(srv.URL + "/oversized"); err == nil || got != "" {
+		t.Fatalf("GetText returned %d bytes, error %v; want size-limit error and no partial body", len(got), err)
 	}
 }
 

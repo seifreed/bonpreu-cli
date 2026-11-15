@@ -238,8 +238,11 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	data, readErr := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
+	data, readErr := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if len(data) > maxBodyBytes {
+			data = data[:maxBodyBytes]
+		}
 		// On a non-2xx, surface whatever body we managed to read as error context
 		// (best effort) — the status is the actionable signal, not the read error.
 		apiErr := &APIError{
@@ -249,6 +252,12 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 		}
 		c.logHTTPResult(req, resp.StatusCode, len(data), started, apiErr)
 		return nil, apiErr
+	}
+	if len(data) > maxBodyBytes {
+		err := fmt.Errorf("response body exceeds %d-byte limit", maxBodyBytes)
+		err = errors.Join(err, readErr)
+		c.logHTTPResult(req, resp.StatusCode, len(data), started, err)
+		return nil, err
 	}
 	// A 2xx whose body read failed mid-stream must not pass as success: the JSON
 	// decoders would mostly catch the truncation, but GetText (HTML scrape) has no
