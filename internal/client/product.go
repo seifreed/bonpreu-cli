@@ -6,6 +6,7 @@ import (
 	"html"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -113,18 +114,19 @@ func findProductNode(blobs []any, id string) map[string]any {
 // collectDetails gathers {title, content} blocks from state containing the selected
 // product, skipping nested data for other products. These hold ingredients / nutrition / allergens.
 func collectDetails(blobs []any, productID string) []Detail {
-	var out []Detail
-	seen := map[string]bool{}
+	byTitle := map[string]string{}
 	appendDetail := func(m map[string]any) {
 		t, okT := m["title"].(string)
 		ct, okC := m["content"].(string)
 		if t == "brand" { // already shown as the product's marca
 			return
 		}
-		if okT && okC && t != "" && !seen[t] {
+		if okT && okC && t != "" {
 			if content := stripHTML(ct); content != "" { // skip blocks that strip to nothing
-				seen[t] = true
-				out = append(out, Detail{Title: t, Content: content})
+				current, exists := byTitle[t]
+				if !exists || len(content) > len(current) || len(content) == len(current) && content < current {
+					byTitle[t] = content
+				}
 			}
 		}
 	}
@@ -138,6 +140,15 @@ func collectDetails(blobs []any, productID string) []Detail {
 		if containsProduct {
 			walkProductTree(blob, productID, appendDetail)
 		}
+	}
+	titles := make([]string, 0, len(byTitle))
+	for title := range byTitle {
+		titles = append(titles, title)
+	}
+	sort.Strings(titles)
+	out := make([]Detail, 0, len(titles))
+	for _, title := range titles {
+		out = append(out, Detail{Title: title, Content: byTitle[title]})
 	}
 	return out
 }

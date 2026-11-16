@@ -269,6 +269,22 @@ func TestProductDetailsAreScopedToRequestedProduct(t *testing.T) {
 	}
 }
 
+func TestProductDetailsAreDeterministicAcrossDuplicateState(t *testing.T) {
+	blob := map[string]any{
+		"retailerProductId": "5",
+		"a":                 map[string]any{"title": "ingredients", "content": "llet"},
+		"b":                 map[string]any{"title": "nutrition", "content": "Energy 1 kJ"},
+		"c":                 map[string]any{"title": "ingredients", "content": "llet i aigua"},
+	}
+	for range 100 {
+		details := collectDetails([]any{blob}, "5")
+		if len(details) != 2 || details[0] != (Detail{Title: "ingredients", Content: "llet i aigua"}) ||
+			details[1] != (Detail{Title: "nutrition", Content: "Energy 1 kJ"}) {
+			t.Fatalf("product details = %+v; want longest duplicate content in title order", details)
+		}
+	}
+}
+
 func TestProductScrapeAndErrors(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/products/")
