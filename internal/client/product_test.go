@@ -190,12 +190,21 @@ func TestEmbeddedStatesHonorsCombinedScanBudget(t *testing.T) {
 	html := `window.__INITIAL_STATE__={` + strings.Repeat("x", 40) +
 		`window.__INITIAL_STATE__={"retailerProductId":"1","name":"x"}`
 	got, err := embeddedStatesWithinBudget(html, 16)
-	if err != nil || len(got) != 0 {
-		t.Fatalf("states with exhausted scan budget = %d; want no additional scans", len(got))
+	if err == nil || !strings.Contains(err.Error(), "scan budget exceeded") || len(got) != 0 {
+		t.Fatalf("states with exhausted scan budget = %d, err %v; want explicit budget error", len(got), err)
 	}
 	got, err = embeddedStatesWithinBudget(html, len(html)*2)
 	if err == nil || len(got) != 1 {
 		t.Fatalf("states with sufficient scan budget = %d; want the valid later state", len(got))
+	}
+}
+
+func TestEmbeddedStatesReportsBudgetExhaustionAfterParsedBlob(t *testing.T) {
+	first := `{"unrelated":true}`
+	html := `window.__INITIAL_STATE__=` + first + `; window.__URQL_DATA__={"retailerProductId":"1","name":"x"}`
+	got, err := embeddedStatesWithinBudget(html, len(first))
+	if err == nil || !strings.Contains(err.Error(), "scan budget exceeded") || len(got) != 1 {
+		t.Fatalf("states = %d, err %v; want parsed first state and explicit budget error", len(got), err)
 	}
 }
 

@@ -153,13 +153,22 @@ func embeddedStatesWithinBudget(html string, scanBudget int) ([]any, error) {
 	var parseErr error
 	for _, loc := range stateVarRE.FindAllStringIndex(html, -1) {
 		if scanBudget <= 0 {
+			if parseErr == nil {
+				parseErr = fmt.Errorf("embedded state scan budget exceeded")
+			}
 			break
 		}
+		remainingBudget := scanBudget
 		obj, ok, scanned := braceObjectWithinBudget(html, loc[1], scanBudget)
 		scanBudget -= scanned
 		if !ok {
-			if parseErr == nil && scanned == len(html)-loc[1] {
-				parseErr = fmt.Errorf("unterminated state object at byte %d", loc[1])
+			if parseErr == nil {
+				switch {
+				case scanned == len(html)-loc[1]:
+					parseErr = fmt.Errorf("unterminated state object at byte %d", loc[1])
+				case scanned == remainingBudget && remainingBudget < len(html)-loc[1]:
+					parseErr = fmt.Errorf("embedded state scan budget exceeded at byte %d", loc[1]+scanned)
+				}
 			}
 			continue
 		}
