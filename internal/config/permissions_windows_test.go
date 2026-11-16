@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,7 +57,12 @@ func TestSecureConfigDirProtectsExistingFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(fileACL, user.User.Sid.String()) {
+	userACE, err := windows.SecurityDescriptorFromString(fmt.Sprintf("D:(A;ID;FA;;;%s)", user.User.Sid.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	userACEString := strings.TrimPrefix(userACE.String(), "D:")
+	if !strings.Contains(fileACL, userACEString) {
 		t.Fatalf("existing session file is missing the current user's inherited access: %s", fileACL)
 	}
 }
