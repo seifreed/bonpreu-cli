@@ -76,21 +76,30 @@ func productFromNode(node map[string]any, retailerProductID string) (Product, er
 var stateVarRE = regexp.MustCompile(`window\.(__URQL_DATA__|__INITIAL_STATE__|__QUERY_INITIAL_STATE__)\s*=\s*`)
 
 // findProductNode walks every embedded state blob (and the double-encoded `data`
-// strings inside URQL) for the richest object whose retailerProductId matches.
+// strings inside URQL) for the most useful decodable object whose retailerProductId matches.
 func findProductNode(blobs []any, id string) map[string]any {
 	var best map[string]any
-	bestValid := false
+	bestQuality := -2
 	bestLen := -1
 	bestRepresentation := ""
 	consider := func(m map[string]any) {
 		if v, _ := m["retailerProductId"].(string); v == id {
 			if _, ok := m["name"]; ok {
-				_, validErr := productFromNode(m, id)
-				valid := validErr == nil
+				product, err := productFromNode(m, id)
+				quality := -1
+				if err == nil {
+					quality = 0
+					if product.ProductID != "" {
+						quality++
+					}
+					if product.Price.Amount != "" {
+						quality++
+					}
+				}
 				// Map traversal is unordered, so use stable text to break equal-size ties.
 				representation := fmt.Sprint(m)
-				if n := len(representation); valid && !bestValid || valid == bestValid && (n > bestLen || n == bestLen && representation < bestRepresentation) {
-					best, bestValid, bestLen, bestRepresentation = m, valid, n, representation
+				if n := len(representation); quality > bestQuality || quality == bestQuality && (n > bestLen || n == bestLen && representation < bestRepresentation) {
+					best, bestQuality, bestLen, bestRepresentation = m, quality, n, representation
 				}
 			}
 		}

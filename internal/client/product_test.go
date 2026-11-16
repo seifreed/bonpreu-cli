@@ -235,6 +235,25 @@ func TestFindProductNodePrefersDecodableDuplicate(t *testing.T) {
 	}
 }
 
+func TestFindProductNodePrefersCartReadyDuplicate(t *testing.T) {
+	html := `<script>window.__INITIAL_STATE__={"incomplete":{"retailerProductId":"duplicate","name":"Water","description":"` + strings.Repeat("extra ", 100) + `"},"complete":{"retailerProductId":"duplicate","productId":"uuid-1","name":"Water","price":{"amount":"1.00"}}}</script>`
+	blobs, err := embeddedStatesWithinBudget(html, 2*maxBodyBytes)
+	if err != nil {
+		t.Fatalf("embeddedStatesWithinBudget: %v", err)
+	}
+	node := findProductNode(blobs, "duplicate")
+	if node == nil {
+		t.Fatal("duplicate product node not found")
+	}
+	product, err := productFromNode(node, "duplicate")
+	if err != nil {
+		t.Fatalf("selected product node is not decodable: %v", err)
+	}
+	if product.ProductID != "uuid-1" || product.Price.Amount != "1.00" {
+		t.Fatalf("selected product lacks cart fields: productId=%q price=%q", product.ProductID, product.Price.Amount)
+	}
+}
+
 func TestProductDetailsAreScopedToRequestedProduct(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`<html><script>window.__INITIAL_STATE__={"product":{"retailerProductId":"5","name":"Iogurt","details":[{"title":"ingredients","content":"llet"}]},"recommendations":[{"retailerProductId":"6","name":"Cereals","details":[{"title":"nutrition","content":"unrelated data"}]}]}</script></html>`))
