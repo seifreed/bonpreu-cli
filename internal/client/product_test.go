@@ -15,6 +15,16 @@ func TestProductFromNodeReturnsMarshalError(t *testing.T) {
 	}
 }
 
+func TestProductRejectsEmptyIDBeforeRequest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("Product made a request for an empty ID")
+	}))
+	defer srv.Close()
+	if _, err := testClient(srv).Product(" \t"); err == nil || err.Error() != "product id is required" {
+		t.Fatalf("Product with empty ID error = %v; want product id is required", err)
+	}
+}
+
 // A miniature of the real product page: the node lives in __QUERY_INITIAL_STATE__
 // under queries[].state.data.product, with titled info blocks alongside it.
 const fixturePage = `<!doctype html><html><head></head><body>

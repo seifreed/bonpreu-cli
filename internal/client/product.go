@@ -30,6 +30,9 @@ type ProductDetail struct {
 // and pulls the embedded product node (and any info blocks) out of it — which
 // works anonymously, the same uTLS path as the rest of the read core.
 func (c *Client) Product(retailerProductID string) (*ProductDetail, error) {
+	if strings.TrimSpace(retailerProductID) == "" {
+		return nil, fmt.Errorf("product id is required")
+	}
 	// PathEscape the user-supplied id: it's the user's own request to the same host
 	// (Go rejects CRLF, so no header smuggling), but escaping keeps a stray /, ?, or
 	// # from reshaping the path/query — consistent with the escaped query params elsewhere.
