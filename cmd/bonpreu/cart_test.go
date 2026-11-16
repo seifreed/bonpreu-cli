@@ -244,7 +244,7 @@ func TestCartAddSurfacesOutputFailureAfterCartWrite(t *testing.T) {
 }
 
 func TestCartAddReportsServerQuantityLimit(t *testing.T) {
-	var cartWrites atomic.Int32
+	var cartReads, cartWrites atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/products/23597":
@@ -252,6 +252,7 @@ func TestCartAddReportsServerQuantityLimit(t *testing.T) {
 		case "/":
 			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
 		case "/api/cart/v1/carts/active":
+			cartReads.Add(1)
 			_, _ = w.Write([]byte(`{"items":[]}`))
 		case "/api/cart/v1/carts/active/apply-quantity":
 			cartWrites.Add(1)
@@ -264,7 +265,7 @@ func TestCartAddReportsServerQuantityLimit(t *testing.T) {
 	useServer(t, srv, true)
 
 	out, err := capture(t, func() error {
-		return cmdCart([]string{"add", "23597", "2"})
+		return cmdCart([]string{"add", "23597", "2", "--max", "50"})
 	})
 	if err == nil || !strings.Contains(err.Error(), "EXCEEDED_MAX_QUANTITY_SINGLE") {
 		t.Fatalf("cart add error = %v, want quantity-limit failure", err)
@@ -274,6 +275,9 @@ func TestCartAddReportsServerQuantityLimit(t *testing.T) {
 	}
 	if got := cartWrites.Load(); got != 1 {
 		t.Fatalf("cart writes = %d, want one cart update", got)
+	}
+	if got := cartReads.Load(); got != 2 {
+		t.Fatalf("cart reads = %d, want preflight and post-write limit verification", got)
 	}
 	out, err = capture(t, func() error {
 		return cmdCart([]string{"add", "23597", "2", "--json"})
