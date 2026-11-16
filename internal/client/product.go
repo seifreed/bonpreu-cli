@@ -185,7 +185,8 @@ func embeddedStatesWithinBudget(html string, scanBudget int) ([]any, error) {
 	var extra []any
 	for _, b := range blobs {
 		walkMaps(b, func(m map[string]any) {
-			if s, ok := m["data"].(string); ok && strings.HasPrefix(s, "{") {
+			if s, ok := m["data"].(string); ok && strings.HasPrefix(strings.TrimSpace(s), "{") {
+				s = strings.TrimSpace(s)
 				var nested any
 				if err := json.Unmarshal([]byte(s), &nested); err != nil {
 					if parseErr == nil {

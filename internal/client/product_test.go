@@ -211,7 +211,7 @@ func TestEmbeddedStatesReportsBudgetExhaustionAfterParsedBlob(t *testing.T) {
 // Product also resolves nodes from URQL's nested double-encoded `data` strings.
 func TestProductFromNestedData(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`<html>window.__URQL_DATA__ = {"q":{"data":"{\"retailerProductId\":\"5\",\"name\":\"Iogurt\",\"price\":{\"amount\":\"0.99\"}}"}}</html>`))
+		w.Write([]byte(`<html>window.__URQL_DATA__ = {"q":{"data":"  {\"retailerProductId\":\"5\",\"name\":\"Iogurt\",\"price\":{\"amount\":\"0.99\"}}  "}}</html>`))
 	}))
 	defer srv.Close()
 	pd, err := testClient(srv).Product("5")
