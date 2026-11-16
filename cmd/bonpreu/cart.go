@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"math"
@@ -177,38 +178,40 @@ func cartWrite(args []string, set bool) error {
 		return err
 	}
 	limitErr := cartUpdateLimitError(cart.Raw, pd.ProductID)
-	if limitErr == nil {
+	if limitErr == nil || limit > 0 {
 		updatedCart, err := cl.GetCart()
 		if err != nil {
-			return fmt.Errorf("cart %s was accepted but the result could not be verified; inspect the cart before retrying: %w", verb, err)
+			return errors.Join(limitErr, fmt.Errorf("cart %s was accepted but the result could not be verified; inspect the cart before retrying: %w", verb, err))
 		}
 		actualExact, err := decimalQtySumExact(updatedCart.Lines, pd.ProductID)
 		if err != nil {
-			return fmt.Errorf("cart %s was accepted but the result could not be verified; inspect the cart before retrying: %w", verb, err)
+			return errors.Join(limitErr, fmt.Errorf("cart %s was accepted but the result could not be verified; inspect the cart before retrying: %w", verb, err))
 		}
 		expectedExact := new(big.Rat).Add(currentExact, deltaExact)
 		actual, err := quantityFloat64(actualExact, pd.ProductID)
 		if err != nil {
-			return fmt.Errorf("cart %s was accepted but the result could not be verified; inspect the cart before retrying: %w", verb, err)
+			return errors.Join(limitErr, fmt.Errorf("cart %s was accepted but the result could not be verified; inspect the cart before retrying: %w", verb, err))
 		}
-		if set && actualExact.Cmp(expectedExact) != 0 {
-			return fmt.Errorf("cart set was accepted but resulting quantity is %s, not requested %s; inspect the cart before retrying", fmtQty(actual), fmtQty(qty))
-		}
-		if !set && actualExact.Cmp(expectedExact) < 0 {
-			expected, _ := expectedExact.Float64()
-			return fmt.Errorf("cart add was accepted but resulting quantity is %s, below the requested increase to %s; inspect the cart before retrying", fmtQty(actual), fmtQty(expected))
+		if limitErr == nil {
+			if set && actualExact.Cmp(expectedExact) != 0 {
+				return fmt.Errorf("cart set was accepted but resulting quantity is %s, not requested %s; inspect the cart before retrying", fmtQty(actual), fmtQty(qty))
+			}
+			if !set && actualExact.Cmp(expectedExact) < 0 {
+				expected, _ := expectedExact.Float64()
+				return fmt.Errorf("cart add was accepted but resulting quantity is %s, below the requested increase to %s; inspect the cart before retrying", fmtQty(actual), fmtQty(expected))
+			}
 		}
 		if limit > 0 {
 			actualLineCents := int64(0)
 			if actual > 0 {
 				actualLineCents, err = cartLineTotalCents(updatedCart.Lines, pd.ProductID)
 				if err != nil {
-					return fmt.Errorf("cart %s was accepted but the spending limit could not be checked after the write; inspect the cart before retrying: %w", verb, err)
+					return errors.Join(limitErr, fmt.Errorf("cart %s was accepted but the spending limit could not be checked after the write; inspect the cart before retrying: %w", verb, err))
 				}
 			}
 			lineEUR := float64(actualLineCents) / 100
 			if lineEUR > limit {
-				return fmt.Errorf("cart %s was accepted but the resulting line exceeds --max: %.2f€ > %.2f€; inspect the cart before retrying", verb, lineEUR, limit)
+				return errors.Join(limitErr, fmt.Errorf("cart %s was accepted but the resulting line exceeds --max: %.2f€ > %.2f€; inspect the cart before retrying", verb, lineEUR, limit))
 			}
 		}
 		if !set && actualExact.Cmp(expectedExact) > 0 {

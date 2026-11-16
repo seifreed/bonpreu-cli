@@ -286,6 +286,42 @@ func TestCartAddReportsServerQuantityLimit(t *testing.T) {
 	}
 }
 
+func TestCartAddChecksMaxAfterServerQuantityLimit(t *testing.T) {
+	var cartReads, cartWrites atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/products/23597":
+			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case "/":
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active":
+			if cartReads.Add(1) == 1 {
+				_, _ = w.Write([]byte(`{"items":[]}`))
+			} else {
+				_, _ = w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":1,"totalPrices":{"finalPrice":{"amount":"6.00"}}}]}`))
+			}
+		case "/api/cart/v1/carts/active/apply-quantity":
+			cartWrites.Add(1)
+			_, _ = w.Write([]byte(`{"limitedItems":[{"productId":"uuid-23597","reason":"EXCEEDED_MAX_QUANTITY_SINGLE","expectedAmount":2,"actualAmount":1}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	_, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "2", "--max", "5"}) })
+	if err == nil || !strings.Contains(err.Error(), "resulting line exceeds --max") || !strings.Contains(err.Error(), "EXCEEDED_MAX_QUANTITY_SINGLE") {
+		t.Fatalf("cart add error = %v, want both the server limit and actual line price reported", err)
+	}
+	if got := cartWrites.Load(); got != 1 {
+		t.Fatalf("cart quantity writes = %d, want 1", got)
+	}
+	if got := cartReads.Load(); got != 2 {
+		t.Fatalf("cart reads = %d, want preflight and post-write budget verification", got)
+	}
+}
+
 func TestCartUpdateLimitErrorHandlesMalformedResponse(t *testing.T) {
 	for _, raw := range []string{`not-json`, `null`, `{}`, `{"other":true}`, `{"items":"bad"}`, `{"items":null}`, `{"limitedItems":{"productId":"uuid-23597"}}`} {
 		err := cartUpdateLimitError(json.RawMessage(raw), "uuid-23597")
