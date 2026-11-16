@@ -85,6 +85,12 @@ func validateProductPage(pp *ProductPage) error {
 		if group.DecoratedProducts == nil {
 			return fmt.Errorf("decode product page response: missing or null decoratedProducts in group %d", i)
 		}
+		for j, product := range group.DecoratedProducts {
+			if strings.TrimSpace(product.ProductID) == "" && strings.TrimSpace(product.RetailerProductID) == "" &&
+				strings.TrimSpace(product.Name) == "" && strings.TrimSpace(product.Brand) == "" {
+				return fmt.Errorf("decode product page response: empty product in group %d item %d", i, j)
+			}
+		}
 	}
 	return nil
 }

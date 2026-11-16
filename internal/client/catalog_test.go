@@ -155,6 +155,32 @@ func TestCatalogMethodsRejectGroupsWithoutDecoratedProducts(t *testing.T) {
 	}
 }
 
+func TestCatalogMethodsRejectNullOrEmptyProducts(t *testing.T) {
+	for _, body := range []string{
+		`{"productGroups":[{"decoratedProducts":[null]}]}`,
+		`{"productGroups":[{"decoratedProducts":[{}]}]}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer srv.Close()
+			cl := testClient(srv)
+			for _, endpoint := range []struct {
+				name string
+				call func() error
+			}{
+				{"search", func() error { _, err := cl.Search("milk", 0); return err }},
+				{"category", func() error { _, err := cl.CategoryProducts("0301", 0); return err }},
+			} {
+				if err := endpoint.call(); err == nil || !strings.Contains(err.Error(), "empty product") {
+					t.Errorf("%s response %s error = %v; want invalid-product shape error", endpoint.name, body, err)
+				}
+			}
+		})
+	}
+}
+
 func TestCatalogMethodsAcceptEmptyProductGroups(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"productGroups":[]}`))
