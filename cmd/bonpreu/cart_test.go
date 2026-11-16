@@ -1344,19 +1344,20 @@ func TestCartWriteBranches(t *testing.T) {
 	stderrInfo = func(event, _ string, _ ...any) { events = append(events, event) }
 	defer func() { stderrInfo = oldInfo }()
 
-	// `set` to the quantity already in the cart (2) → "already at target", no write.
-	if out, err := capture(t, func() error { return cmdCart([]string{"set", "23597", "2"}) }); err != nil {
-		t.Fatalf("set same qty: %v", err)
-	} else {
-		_ = out
+	// `set` to the quantity already in the cart (2) → report the no-op in both formats, with no write.
+	if out, err := capture(t, func() error { return cmdCart([]string{"set", "23597", "2"}) }); err != nil || !strings.Contains(out, "sense canvis") {
+		t.Fatalf("set same qty output=%q error=%v; want a human no-change confirmation", out, err)
 	}
-	if len(events) != 1 || events[0] != "cart.quantity.no_change" {
+	if out, err := capture(t, func() error { return cmdCart([]string{"set", "23597", "2", "--json"}) }); err != nil || !strings.Contains(out, `"items"`) {
+		t.Fatalf("set same qty JSON output=%q error=%v; want the current cart", out, err)
+	}
+	if len(events) != 2 || events[0] != "cart.quantity.no_change" || events[1] != "cart.quantity.no_change" {
 		t.Fatalf("no-change event = %v", events)
 	}
 	if _, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1"}) }); err != nil {
 		t.Fatalf("add with no limit: %v", err)
 	}
-	if len(events) != 2 || events[1] != "cart.quantity.changed" {
+	if len(events) != 3 || events[2] != "cart.quantity.changed" {
 		t.Fatalf("cart write events = %v", events)
 	}
 	t.Setenv("BONPREU_MAX_EUR", "0.10")

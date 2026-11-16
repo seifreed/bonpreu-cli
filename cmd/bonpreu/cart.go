@@ -146,14 +146,18 @@ func cartWrite(args []string, set bool) error {
 		return err
 	}
 	if set {
-		currentExact, err = currentQtyExact(cl, pd.ProductID)
+		var currentCart *client.Cart
+		currentCart, currentExact, err = currentCartQtyExact(cl, pd.ProductID)
 		if err != nil {
 			return fmt.Errorf("read current cart quantity: %w", err)
 		}
 		deltaExact.Sub(deltaExact, currentExact)
 		if deltaExact.Sign() == 0 {
 			stderrInfo("cart.quantity.no_change", "cart line is already at target quantity", "operation", "cart write")
-			return nil
+			if done, err := emitStructured(cf, currentCart.Raw); done {
+				return err
+			}
+			return writeStdout("ok — cart set [%s] %s (sense canvis) — %s\n", terminalText(retailerID), fmtQty(qty), terminalText(pd.Name))
 		}
 		delta, _ = deltaExact.Float64()
 	} else if delta > 0 {
@@ -378,18 +382,23 @@ func currentQty(cl *client.Client, productID string) (float64, error) {
 }
 
 func currentQtyExact(cl *client.Client, productID string) (*big.Rat, error) {
+	_, quantity, err := currentCartQtyExact(cl, productID)
+	return quantity, err
+}
+
+func currentCartQtyExact(cl *client.Client, productID string) (*client.Cart, *big.Rat, error) {
 	cart, err := cl.GetCart()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	quantity, err := decimalQtySumExact(cart.Lines, productID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if _, err := quantityFloat64(quantity, productID); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return quantity, nil
+	return cart, quantity, nil
 }
 
 func decimalQtySum(lines []client.CartLine, productID string) (float64, error) {
