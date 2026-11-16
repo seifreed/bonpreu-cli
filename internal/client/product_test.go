@@ -220,6 +220,21 @@ func TestProductFromNestedData(t *testing.T) {
 	}
 }
 
+func TestFindProductNodePrefersDecodableDuplicate(t *testing.T) {
+	html := `<script>window.__INITIAL_STATE__={"broken":{"retailerProductId":"duplicate","name":"Water","price":"invalid","description":"longer malformed representation"},"valid":{"retailerProductId":"duplicate","name":"Water","price":{"amount":"1.00"}}}</script>`
+	blobs, err := embeddedStatesWithinBudget(html, 2*maxBodyBytes)
+	if err != nil {
+		t.Fatalf("embeddedStatesWithinBudget: %v", err)
+	}
+	node := findProductNode(blobs, "duplicate")
+	if node == nil {
+		t.Fatal("duplicate product node not found")
+	}
+	if _, err := productFromNode(node, "duplicate"); err != nil {
+		t.Fatalf("selected product node is not decodable: %v", err)
+	}
+}
+
 func TestProductDetailsAreScopedToRequestedProduct(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`<html><script>window.__INITIAL_STATE__={"product":{"retailerProductId":"5","name":"Iogurt","details":[{"title":"ingredients","content":"llet"}]},"recommendations":[{"retailerProductId":"6","name":"Cereals","details":[{"title":"nutrition","content":"unrelated data"}]}]}</script></html>`))

@@ -79,15 +79,18 @@ var stateVarRE = regexp.MustCompile(`window\.(__URQL_DATA__|__INITIAL_STATE__|__
 // strings inside URQL) for the richest object whose retailerProductId matches.
 func findProductNode(blobs []any, id string) map[string]any {
 	var best map[string]any
+	bestValid := false
 	bestLen := -1
 	bestRepresentation := ""
 	consider := func(m map[string]any) {
 		if v, _ := m["retailerProductId"].(string); v == id {
 			if _, ok := m["name"]; ok {
+				_, validErr := productFromNode(m, id)
+				valid := validErr == nil
 				// Map traversal is unordered, so use stable text to break equal-size ties.
 				representation := fmt.Sprint(m)
-				if n := len(representation); n > bestLen || n == bestLen && representation < bestRepresentation {
-					best, bestLen, bestRepresentation = m, n, representation
+				if n := len(representation); valid && !bestValid || valid == bestValid && (n > bestLen || n == bestLen && representation < bestRepresentation) {
+					best, bestValid, bestLen, bestRepresentation = m, valid, n, representation
 				}
 			}
 		}
