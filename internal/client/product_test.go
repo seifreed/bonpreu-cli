@@ -275,6 +275,7 @@ func TestProductDetailsAreDeterministicAcrossDuplicateState(t *testing.T) {
 		"a":                 map[string]any{"title": "ingredients", "content": "llet"},
 		"b":                 map[string]any{"title": "nutrition", "content": "Energy 1 kJ"},
 		"c":                 map[string]any{"title": "ingredients", "content": "llet i aigua"},
+		"d":                 map[string]any{"title": "nutrition", "content": "Energy 1 mJ"},
 	}
 	for range 100 {
 		details := collectDetails([]any{blob}, "5")
