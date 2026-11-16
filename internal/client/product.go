@@ -39,8 +39,12 @@ func (c *Client) Product(retailerProductID string) (*ProductDetail, error) {
 		}
 		return nil, err
 	}
-	node := findProductNode(html, retailerProductID)
+	blobs, stateErr := embeddedStatesWithinBudget(html, 2*maxBodyBytes)
+	node := findProductNode(blobs, retailerProductID)
 	if node == nil {
+		if stateErr != nil {
+			return nil, fmt.Errorf("product %s: parse embedded state: %w", retailerProductID, stateErr)
+		}
 		return nil, fmt.Errorf("product %s: not found in page (id may be invalid or out of catalog)", retailerProductID)
 	}
 	product, err := productFromNode(node, retailerProductID)
@@ -48,7 +52,12 @@ func (c *Client) Product(retailerProductID string) (*ProductDetail, error) {
 		return nil, err
 	}
 	pd := &ProductDetail{Product: product}
-	pd.Details = collectDetails(html, retailerProductID)
+	pd.Details = collectDetails(blobs, retailerProductID)
+	if stateErr != nil && c.Logger != nil {
+		c.Logger.Warn("product page contained malformed embedded data",
+			"component", "client", "event_name", "product.state_parse_failed",
+			"operation", "product", "product_id", retailerProductID, "error", stateErr)
+	}
 	return pd, nil
 }
 
@@ -68,7 +77,7 @@ var stateVarRE = regexp.MustCompile(`window\.(__URQL_DATA__|__INITIAL_STATE__|__
 
 // findProductNode walks every embedded state blob (and the double-encoded `data`
 // strings inside URQL) for the richest object whose retailerProductId matches.
-func findProductNode(html, id string) map[string]any {
+func findProductNode(blobs []any, id string) map[string]any {
 	var best map[string]any
 	bestLen := -1
 	bestRepresentation := ""
@@ -83,7 +92,7 @@ func findProductNode(html, id string) map[string]any {
 			}
 		}
 	}
-	for _, blob := range embeddedStates(html) {
+	for _, blob := range blobs {
 		walkMaps(blob, consider)
 	}
 	return best
@@ -91,7 +100,7 @@ func findProductNode(html, id string) map[string]any {
 
 // collectDetails gathers {title, content} blocks from state containing the selected
 // product, skipping nested data for other products. These hold ingredients / nutrition / allergens.
-func collectDetails(html, productID string) []Detail {
+func collectDetails(blobs []any, productID string) []Detail {
 	var out []Detail
 	seen := map[string]bool{}
 	appendDetail := func(m map[string]any) {
@@ -107,7 +116,7 @@ func collectDetails(html, productID string) []Detail {
 			}
 		}
 	}
-	for _, blob := range embeddedStates(html) {
+	for _, blob := range blobs {
 		containsProduct := false
 		walkMaps(blob, func(m map[string]any) {
 			if id, _ := m["retailerProductId"].(string); id == productID {
@@ -138,45 +147,48 @@ func walkProductTree(v any, productID string, fn func(map[string]any)) {
 	}
 }
 
-// appendJSON parses s and appends the decoded value to dst, skipping s when it
-// is not valid JSON (the embedded blobs are best-effort).
-func appendJSON(dst []any, s string) []any {
-	var v any
-	if json.Unmarshal([]byte(s), &v) == nil {
-		return append(dst, v)
-	}
-	return dst
-}
-
-// embeddedStates returns each window.__…__ JSON blob, plus the JSON decoded from
-// any nested double-encoded `data` strings (URQL stores query results that way).
-func embeddedStates(html string) []any {
-	// shortcut: cap aggregate state rescans at 2× body size; raise if real product pages require more.
-	return embeddedStatesWithinBudget(html, 2*maxBodyBytes)
-}
-
-func embeddedStatesWithinBudget(html string, scanBudget int) []any {
+// embeddedStatesWithinBudget returns valid state blobs and the first parse failure.
+func embeddedStatesWithinBudget(html string, scanBudget int) ([]any, error) {
 	var blobs []any
+	var parseErr error
 	for _, loc := range stateVarRE.FindAllStringIndex(html, -1) {
 		if scanBudget <= 0 {
 			break
 		}
 		obj, ok, scanned := braceObjectWithinBudget(html, loc[1], scanBudget)
 		scanBudget -= scanned
-		if ok {
-			blobs = appendJSON(blobs, obj)
+		if !ok {
+			if parseErr == nil && scanned == len(html)-loc[1] {
+				parseErr = fmt.Errorf("unterminated state object at byte %d", loc[1])
+			}
+			continue
 		}
+		var blob any
+		if err := json.Unmarshal([]byte(obj), &blob); err != nil {
+			if parseErr == nil {
+				parseErr = fmt.Errorf("invalid state object at byte %d: %w", loc[1], err)
+			}
+			continue
+		}
+		blobs = append(blobs, blob)
 	}
 	// Expand nested `data` JSON strings one level (URQL's dehydrated results).
 	var extra []any
 	for _, b := range blobs {
 		walkMaps(b, func(m map[string]any) {
 			if s, ok := m["data"].(string); ok && strings.HasPrefix(s, "{") {
-				extra = appendJSON(extra, s)
+				var nested any
+				if err := json.Unmarshal([]byte(s), &nested); err != nil {
+					if parseErr == nil {
+						parseErr = fmt.Errorf("invalid nested state data: %w", err)
+					}
+					return
+				}
+				extra = append(extra, nested)
 			}
 		})
 	}
-	return append(blobs, extra...)
+	return append(blobs, extra...), parseErr
 }
 
 // braceObject extracts a balanced {...} starting at i, respecting strings/escapes.

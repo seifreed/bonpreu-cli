@@ -35,7 +35,8 @@ func FuzzScrapePipeline(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(_ *testing.T, html string) {
-		_ = collectDetails(html, "1")
+		blobs, _ := embeddedStatesWithinBudget(html, 2*maxBodyBytes)
+		_ = collectDetails(blobs, "1")
 	})
 }
 

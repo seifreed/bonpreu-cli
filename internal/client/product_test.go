@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,22 +27,30 @@ const fixturePage = `<!doctype html><html><head></head><body>
 </body></html>`
 
 func TestFindProductNode(t *testing.T) {
-	node := findProductNode(fixturePage, "49637")
+	blobs, err := embeddedStatesWithinBudget(fixturePage, 2*maxBodyBytes)
+	if err != nil {
+		t.Fatalf("embeddedStatesWithinBudget: %v", err)
+	}
+	node := findProductNode(blobs, "49637")
 	if node == nil {
 		t.Fatal("node not found")
 	}
 	if node["name"] != "Cafè" {
 		t.Fatalf("name = %v, want Cafè", node["name"])
 	}
-	if findProductNode(fixturePage, "00000") != nil {
+	if unknown := findProductNode(blobs, "00000"); unknown != nil {
 		t.Fatal("expected nil for unknown id")
 	}
 }
 
 func TestFindProductNodeBreaksEqualRichnessTiesDeterministically(t *testing.T) {
 	html := `<script>window.__INITIAL_STATE__={"one":{"retailerProductId":"duplicate","name":"Water","price":{"amount":"1.00"}},"two":{"retailerProductId":"duplicate","name":"Water","price":{"amount":"2.00"}}}</script>`
+	blobs, err := embeddedStatesWithinBudget(html, 2*maxBodyBytes)
+	if err != nil {
+		t.Fatalf("embeddedStatesWithinBudget: %v", err)
+	}
 	for range 100 {
-		node := findProductNode(html, "duplicate")
+		node := findProductNode(blobs, "duplicate")
 		if node == nil {
 			t.Fatal("duplicate product node not found")
 		}
@@ -52,8 +61,80 @@ func TestFindProductNodeBreaksEqualRichnessTiesDeterministically(t *testing.T) {
 	}
 }
 
+func TestProductReportsMalformedEmbeddedState(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		page string
+		want string
+	}{
+		{"invalid JSON", `<html>window.__INITIAL_STATE__={broken}</html>`, "invalid state object"},
+		{"truncated object", `<html>window.__INITIAL_STATE__={"product":`, "unterminated state object"},
+		{"invalid nested data", `<html>window.__URQL_DATA__={"data":"{broken}"}</html>`, "invalid nested state data"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(tc.page))
+			}))
+			defer srv.Close()
+
+			product, err := testClient(srv).Product("17")
+			if product != nil || err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Product = %+v, err %v; want %s", product, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestFindProductNodeIgnoresMalformedUnrelatedState(t *testing.T) {
+	html := `<script>window.__INITIAL_STATE__={broken}</script>` + fixturePage
+	blobs, err := embeddedStatesWithinBudget(html, 2*maxBodyBytes)
+	if err == nil {
+		t.Fatal("expected malformed unrelated state to remain observable")
+	}
+	if node := findProductNode(blobs, "49637"); node == nil {
+		t.Fatal("matching product missing despite unrelated malformed state")
+	}
+}
+
+func TestProductLogsMalformedUnrelatedState(t *testing.T) {
+	page := `<script>window.__INITIAL_STATE__={broken}</script>` + fixturePage
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(page))
+	}))
+	defer srv.Close()
+
+	var logs bytes.Buffer
+	cl := testClient(srv)
+	cl.Logger = testLogger(&logs)
+	product, err := cl.Product("49637")
+	if err != nil || product == nil {
+		t.Fatalf("Product = %+v, err %v; want parsed product", product, err)
+	}
+	if !strings.Contains(logs.String(), "event_name=product.state_parse_failed") {
+		t.Fatalf("partial state parse failure was not logged: %s", logs.String())
+	}
+}
+
+func TestProductPreservesFirstEmbeddedStateError(t *testing.T) {
+	page := `<html>window.__INITIAL_STATE__={broken};` +
+		`window.__QUERY_INITIAL_STATE__={alsoBroken};` +
+		`window.__URQL_DATA__={"data":"{broken}"}</html>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(page))
+	}))
+	defer srv.Close()
+
+	if _, err := testClient(srv).Product("17"); err == nil || !strings.Contains(err.Error(), "invalid state object") {
+		t.Fatalf("Product error = %v; want the first embedded-state parse error", err)
+	}
+}
+
 func TestCollectDetails(t *testing.T) {
-	ds := collectDetails(fixturePage, "49637")
+	blobs, err := embeddedStatesWithinBudget(fixturePage, 2*maxBodyBytes)
+	if err != nil {
+		t.Fatalf("embeddedStatesWithinBudget: %v", err)
+	}
+	ds := collectDetails(blobs, "49637")
 	if len(ds) != 1 {
 		t.Fatalf("got %d details, want 1 (brand dropped)", len(ds))
 	}
@@ -96,28 +177,24 @@ func TestBraceObjectBalances(t *testing.T) {
 	}
 }
 
-func TestBraceObjectAndAppendJSONEdges(t *testing.T) {
+func TestBraceObjectEdges(t *testing.T) {
 	if _, ok := braceObject("{unclosed", 0); ok {
 		t.Error("unbalanced braces → ok=false")
 	}
 	if _, ok := braceObject("no brace here", 0); ok {
 		t.Error("no '{' at index → ok=false")
 	}
-	if got := appendJSON(nil, "not json"); got != nil {
-		t.Error("invalid JSON must not be appended")
-	}
-	if got := appendJSON(nil, `{"a":1}`); len(got) != 1 {
-		t.Error("valid JSON must be appended")
-	}
 }
 
 func TestEmbeddedStatesHonorsCombinedScanBudget(t *testing.T) {
 	html := `window.__INITIAL_STATE__={` + strings.Repeat("x", 40) +
 		`window.__INITIAL_STATE__={"retailerProductId":"1","name":"x"}`
-	if got := embeddedStatesWithinBudget(html, 16); len(got) != 0 {
+	got, err := embeddedStatesWithinBudget(html, 16)
+	if err != nil || len(got) != 0 {
 		t.Fatalf("states with exhausted scan budget = %d; want no additional scans", len(got))
 	}
-	if got := embeddedStatesWithinBudget(html, len(html)*2); len(got) != 1 {
+	got, err = embeddedStatesWithinBudget(html, len(html)*2)
+	if err == nil || len(got) != 1 {
 		t.Fatalf("states with sufficient scan budget = %d; want the valid later state", len(got))
 	}
 }
