@@ -197,6 +197,9 @@ func cmdBatch(args []string) error {
 	if mode := cfg.Brands.Mode; mode != "" && mode != "cheapest_among" && mode != "strict_priority" {
 		return fmt.Errorf("invalid [brands].mode %q (want cheapest_among or strict_priority)", mode)
 	}
+	if policy := cfg.Brands.OnMissing; policy != "" && policy != "ask" && policy != "cheapest" {
+		return fmt.Errorf("invalid [brands].on_missing %q (want ask or cheapest)", policy)
+	}
 	override := splitBrands(*brand)
 	offersMode, err := resolveOffersMode(*offers, cfg.Offers.Mode)
 	if err != nil {
@@ -234,7 +237,7 @@ func cmdBatch(args []string) error {
 		missPolicy := ""
 		if match == "none" {
 			missPolicy = cfg.Brands.OnMissing
-			if missPolicy != "cheapest" {
+			if missPolicy == "" {
 				missPolicy = "ask"
 			}
 		}

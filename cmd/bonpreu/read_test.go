@@ -414,7 +414,6 @@ func TestBatchReportsMissingBrandPolicy(t *testing.T) {
 	}{
 		{name: "default asks", wantPolicy: "ask"},
 		{name: "configured fallback", config: "[brands]\non_missing = \"cheapest\"\n", wantPolicy: "cheapest"},
-		{name: "invalid policy defaults to ask", config: "[brands]\non_missing = \"unknown\"\n", wantPolicy: "ask"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := useServer(t, srv, false)
@@ -428,6 +427,25 @@ func TestBatchReportsMissingBrandPolicy(t *testing.T) {
 				t.Fatalf("batch missing-brand policy output = %q, err %v", out, err)
 			}
 		})
+	}
+}
+
+func TestBatchRejectsInvalidMissingBrandPolicyBeforeSearching(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte(`{"productGroups":[]}`))
+	}))
+	defer srv.Close()
+	dir := useServer(t, srv, false)
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("[brands]\non_missing = \"cheepest\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := capture(t, func() error { return cmdBatch([]string{"--json", "x"}) }); err == nil || !strings.Contains(err.Error(), "invalid [brands].on_missing") {
+		t.Fatalf("batch with invalid missing-brand policy error = %v", err)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("invalid missing-brand policy made %d network request(s) before failing", got)
 	}
 }
 
