@@ -126,8 +126,11 @@ func ensureDir() error {
 	if err != nil {
 		return err
 	}
-	// Windows ACLs are not represented by Go's permission bits.
-	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
+	if runtime.GOOS == "windows" {
+		if err := secureConfigDir(dir); err != nil {
+			return fmt.Errorf("secure config directory: %w", err)
+		}
+	} else if info.Mode().Perm()&0o077 != 0 {
 		return fmt.Errorf("config directory %q must have mode 0700 (currently %04o); restrict its permissions before continuing", dir, info.Mode().Perm())
 	}
 	return nil
