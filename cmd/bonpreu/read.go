@@ -219,12 +219,12 @@ func cmdBatch(args []string) error {
 	}
 	out := make([]hit, 0, len(terms))
 	missing := 0
-	var searchErrors []error
+	var termErrors []error
 	for _, t := range terms {
 		pp, serr := cl.Search(t, 0)
 		if serr != nil {
 			out = append(out, hit{Term: t, Error: serr.Error()})
-			searchErrors = append(searchErrors, serr)
+			termErrors = append(termErrors, serr)
 			continue
 		}
 		prods := availableProducts(filterFresh(pp.Products(), *fresh))
@@ -234,6 +234,12 @@ func cmdBatch(args []string) error {
 			continue
 		}
 		p, match, considered := resolveBrandHit(prods, t, cfg.Brands, override, *noBrands)
+		if _, err := exactPriceAmount(p.Price.Amount); err != nil {
+			selectionErr := fmt.Errorf("term %q: selected product has an invalid price: %w", t, err)
+			out = append(out, hit{Term: t, Error: selectionErr.Error()})
+			termErrors = append(termErrors, selectionErr)
+			continue
+		}
 		missPolicy := ""
 		if match == "none" {
 			missPolicy = cfg.Brands.OnMissing
@@ -284,8 +290,8 @@ func cmdBatch(args []string) error {
 			}
 		}
 	}
-	if len(searchErrors) > 0 {
-		return fmt.Errorf("%d of %d term searches failed: %w", len(searchErrors), len(terms), errors.Join(searchErrors...))
+	if len(termErrors) > 0 {
+		return fmt.Errorf("%d of %d terms failed: %w", len(termErrors), len(terms), errors.Join(termErrors...))
 	}
 	if missing > 0 {
 		return fmt.Errorf("%d of %d terms returned no eligible product", missing, len(terms))

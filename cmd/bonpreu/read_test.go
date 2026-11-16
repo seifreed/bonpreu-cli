@@ -449,6 +449,23 @@ func TestBatchRejectsInvalidMissingBrandPolicyBeforeSearching(t *testing.T) {
 	}
 }
 
+func TestBatchRejectsUnparseableSelectedPrice(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"productGroups":[{"decoratedProducts":[` +
+			`{"retailerProductId":"first","name":"First","available":true,"price":{"amount":"unknown"}},` +
+			`{"retailerProductId":"second","name":"Second","available":true,"price":{"amount":"not-a-price"}}]}]}`))
+	}))
+	defer srv.Close()
+	useServer(t, srv, false)
+	out, err := capture(t, func() error { return cmdBatch([]string{"--json", "x"}) })
+	if err == nil || !strings.Contains(err.Error(), "selected product has an invalid price") {
+		t.Fatalf("batch with unparseable candidate prices error = %v", err)
+	}
+	if !strings.Contains(out, `"error"`) || strings.Contains(out, `"retailerProductId":"first"`) || strings.Contains(out, `"retailerProductId":"second"`) {
+		t.Fatalf("batch emitted an unpriced recommendation: %s", out)
+	}
+}
+
 func TestBatchRejectsInvalidBrandModeBeforeSearching(t *testing.T) {
 	var requests atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
