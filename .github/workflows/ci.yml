@@ -51,3 +51,14 @@ jobs:
           cache: true
       - run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
       - run: make vulncheck
+
+  windows-config-acl:
+    name: Windows config ACL
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test ./internal/config -run '^TestSecureConfigDirProtectsExistingFiles$' -count=1
