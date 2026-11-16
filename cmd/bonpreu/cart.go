@@ -134,9 +134,6 @@ func cartWrite(args []string, set bool) error {
 		if err != nil {
 			return err
 		}
-		if err := guardResultingLine(limit, pd, qty); err != nil {
-			return err
-		}
 	}
 
 	delta := qty
@@ -174,6 +171,11 @@ func cartWrite(args []string, set bool) error {
 			if err := guardResultingLine(limit, pd, lineQty); err != nil {
 				return err
 			}
+		}
+	}
+	if set {
+		if err := guardResultingLine(limit, pd, qty); err != nil {
+			return err
 		}
 	}
 
