@@ -133,6 +133,36 @@ func TestCookiesFromStoresPreservesTraversalAndCloseErrors(t *testing.T) {
 	}
 }
 
+func TestCookiesFromStoresDoesNotReturnSessionAfterSelectedStoreError(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		traverseErr error
+		closeErr    error
+	}{
+		{name: "traversal", traverseErr: errors.New("selected store read failed")},
+		{name: "close", closeErr: errors.New("selected store close failed")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &testCookieStore{browser: "chrome", closeErr: tc.closeErr, cookies: cookieSequence(
+				cookieItem{nil, tc.traverseErr},
+				cookieItem{browserCookie("chrome", "global_sid", "session"), nil},
+				cookieItem{browserCookie("chrome", "aws-waf-token", "token"), nil},
+			)}
+			stores := kooky.CookieStoreSeq(func(yield func(kooky.CookieStore, error) bool) {
+				yield(store, nil)
+			})
+			got, err := cookiesFromSequence("chrome", cookiesFromStores("chrome", stores))
+			wantErr := tc.traverseErr
+			if wantErr == nil {
+				wantErr = tc.closeErr
+			}
+			if !errors.Is(err, wantErr) || got.Cookie != "" {
+				t.Fatalf("session = %+v, error = %v; want store failure %v and no session", got, err, wantErr)
+			}
+		})
+	}
+}
+
 func TestCookiesFromStoresPreservesUnattributedDiscoveryErrors(t *testing.T) {
 	discoveryErr := errors.New("browser profile discovery failed")
 	stores := kooky.CookieStoreSeq(func(yield func(kooky.CookieStore, error) bool) {

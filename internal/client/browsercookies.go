@@ -19,6 +19,16 @@ const cookieTargetHost = "www.compraonline.bonpreuesclat.cat"
 
 type nameVal struct{ name, val string }
 
+type browserStoreError struct {
+	browser string
+	err     error
+}
+
+func (e *browserStoreError) Error() string {
+	return fmt.Sprintf("%s cookie store: %v", e.browser, e.err)
+}
+func (e *browserStoreError) Unwrap() error { return e.err }
+
 // CookiesFromBrowser reads the Bonpreu session straight out of a browser's
 // cookie store — the easy path: the user stays logged in in their everyday
 // browser and the CLI lifts the cookie (HttpOnly included, since this reads the
@@ -44,10 +54,13 @@ func cookiesFromStores(browser string, stores kooky.CookieStoreSeq) kooky.Cookie
 			continue
 		}
 		for cookie, err := range store.TraverseCookies(kooky.DomainContains(cookieDomain)) {
+			if err != nil {
+				err = &browserStoreError{browser: store.Browser(), err: err}
+			}
 			items = append(items, item{cookie: cookie, err: err})
 		}
 		if err := store.Close(); err != nil {
-			items = append(items, item{err: fmt.Errorf("close %s cookie store: %w", store.Browser(), err)})
+			items = append(items, item{err: &browserStoreError{browser: store.Browser(), err: fmt.Errorf("close: %w", err)}})
 		}
 	}
 	return func(yield func(*kooky.Cookie, error) bool) {
@@ -76,12 +89,17 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 	stores := map[storeKey]*store{}
 	var storeOrder []storeKey
 	var storeErrors []error
+	var selectedStoreErrors []error
 	unsupportedStoreCount := 0
 	now := time.Now()
 	for c, err := range cookies {
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				continue
+			}
+			var storeErr *browserStoreError
+			if errors.As(err, &storeErr) && (browser == "" || strings.EqualFold(strings.TrimSpace(storeErr.browser), browser)) {
+				selectedStoreErrors = append(selectedStoreErrors, err)
 			}
 			if isUnsupportedCookieStoreError(err) {
 				unsupportedStoreCount++
@@ -155,6 +173,9 @@ func cookiesFromSequence(browser string, cookies kooky.CookieSeq) (Session, erro
 		return Session{}, fmt.Errorf("conflicting Bonpreu authentication cookies apply to the shop home page in %s; remove duplicate sessions and retry", where)
 	}
 	if authenticatedCookie != "" {
+		if len(selectedStoreErrors) > 0 {
+			return Session{}, fmt.Errorf("could not completely read browser cookie stores: %w", errors.Join(selectedStoreErrors...))
+		}
 		return Session{Cookie: authenticatedCookie}, nil
 	}
 
