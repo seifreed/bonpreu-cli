@@ -211,6 +211,10 @@ func cartWrite(args []string, set bool) error {
 				return fmt.Errorf("cart %s was accepted but the resulting line exceeds --max: %.2f€ > %.2f€; inspect the cart before retrying", verb, lineEUR, limit)
 			}
 		}
+		if !set && actualExact.Cmp(expectedExact) > 0 {
+			expected, _ := expectedExact.Float64()
+			return fmt.Errorf("cart add was accepted but resulting quantity is %s, above the requested increase to %s; inspect the cart before retrying", fmtQty(actual), fmtQty(expected))
+		}
 	}
 	if limitErr == nil {
 		stderrInfo("cart.quantity.changed", "cart line quantity updated", "operation", cf.operation, "quantity_delta", delta)

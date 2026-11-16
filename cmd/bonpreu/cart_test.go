@@ -356,6 +356,39 @@ func TestCartAddVerifiesServerAppliedQuantityWithoutBudget(t *testing.T) {
 	}
 }
 
+func TestCartAddRejectsServerOverAppliedQuantity(t *testing.T) {
+	var cartReads, cartWrites atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/products/23597":
+			_, _ = w.Write([]byte(`<html>window.__URQL_DATA__ = {"p":{"retailerProductId":"23597","productId":"uuid-23597","name":"Llet","price":{"amount":"1.69"}}}</html>`))
+		case "/":
+			_, _ = w.Write([]byte(`"csrf":{"token":"abcdef12-3456-7890-abcd-ef1234567890"}`))
+		case "/api/cart/v1/carts/active":
+			if cartReads.Add(1) == 1 {
+				_, _ = w.Write([]byte(`{"items":[]}`))
+			} else {
+				_, _ = w.Write([]byte(`{"items":[{"productId":"uuid-23597","quantity":2}]}`))
+			}
+		case "/api/cart/v1/carts/active/apply-quantity":
+			cartWrites.Add(1)
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	useServer(t, srv, true)
+
+	out, err := capture(t, func() error { return cmdCart([]string{"add", "23597", "1"}) })
+	if err == nil || !strings.Contains(err.Error(), "above the requested increase") || strings.Contains(out, "ok — add") {
+		t.Fatalf("cart add output=%q error=%v; want server over-application to be reported", out, err)
+	}
+	if got := cartWrites.Load(); got != 1 {
+		t.Fatalf("cart writes = %d, want one cart-only mutation", got)
+	}
+}
+
 func TestCartAddAcceptsExactFractionalReadback(t *testing.T) {
 	var cartReads, cartWrites atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
